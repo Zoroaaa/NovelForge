@@ -52,9 +52,10 @@ export interface Chapter {
   sortOrder: number
   content: string | null
   wordCount: number
-  status: 'draft' | 'generated' | 'revised'
+  status: 'draft' | 'generated' | 'revised' | 'published'
   summary: string | null
   summaryAt: number | null
+  summaryModel: string | null
   modelUsed: string | null
   promptTokens: number | null
   completionTokens: number | null
@@ -81,7 +82,7 @@ export interface ModelConfig {
   id: string
   novelId: string | null
   scope: 'global' | 'novel'
-  stage: 'context' | 'generation' | 'summary'
+  stage: 'outline_gen' | 'chapter_gen' | 'summary_gen' | 'embedding' | 'vision'
   provider: string
   modelId: string
   apiBase: string | null
@@ -135,7 +136,7 @@ export interface VectorIndexRecord {
 export type NovelInput = Pick<Novel, 'title'> & Partial<Pick<Novel, 'description' | 'genre'>>
 export type OutlineInput = Omit<Outline, 'id' | 'sortOrder' | 'createdAt' | 'updatedAt' | 'deletedAt'> & { sortOrder?: number }
 export type VolumeInput = Omit<Volume, 'id' | 'wordCount' | 'status' | 'summary' | 'createdAt' | 'updatedAt' | 'deletedAt'>
-export type ChapterInput = Omit<Chapter, 'id' | 'wordCount' | 'status' | 'summary' | 'summaryAt' | 'modelUsed' | 'promptTokens' | 'completionTokens' | 'createdAt' | 'updatedAt' | 'deletedAt'>
+export type ChapterInput = Omit<Chapter, 'id' | 'wordCount' | 'status' | 'summary' | 'summaryAt' | 'summaryModel' | 'modelUsed' | 'promptTokens' | 'completionTokens' | 'createdAt' | 'updatedAt' | 'deletedAt'>
 export type CharacterInput = Omit<Character, 'id' | 'imageR2Key' | 'createdAt' | 'updatedAt' | 'deletedAt'>
 export type SortItem = { id: string; sortOrder: number; parentId?: string | null }
 

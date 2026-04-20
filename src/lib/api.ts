@@ -37,6 +37,7 @@ export const api = {
     create: (body: ChapterInput)  => req<Chapter>('/api/chapters', { method: 'POST', body: j(body) }),
     update: (id: string, body: Partial<ChapterInput>) =>
                                      req<Chapter>(`/api/chapters/${id}`, { method: 'PATCH', body: j(body) }),
+    delete: (id: string)          => req(`/api/chapters/${id}`, { method: 'DELETE' }),
   },
   volumes: {
     list:   (novelId: string)     => req<Volume[]>(`/api/volumes?novelId=${novelId}`),

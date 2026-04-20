@@ -3,19 +3,18 @@ import { useParams } from 'react-router-dom'
 import { useState } from 'react'
 import { api } from '@/lib/api'
 import { AppLayout } from '@/components/layout/AppLayout'
+import { WorkspaceHeader } from '@/components/layout/WorkspaceHeader'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { ChapterEditor } from '@/components/chapter/ChapterEditor'
 import { GeneratePanel } from '@/components/generate/GeneratePanel'
-import { ModelConfig } from '@/components/settings/ModelConfig'
 import { ExportDialog } from '@/components/export/ExportDialog'
-import type { Chapter, Novel } from '@/lib/types'
+import type { Novel } from '@/lib/types'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Settings2, PenLine, BookOpen } from 'lucide-react'
+import { PenLine, Sparkles, FileDown } from 'lucide-react'
 
 export default function WorkspacePage() {
   const { id } = useParams<{ id: string }>()
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null)
-  const [rightTab, setRightTab] = useState<'generate' | 'settings'>('generate')
   const [injectedContent, setInjectedContent] = useState<string | null>(null)
 
   const { data: novel, isLoading: novelLoading } = useQuery({
@@ -49,66 +48,88 @@ export default function WorkspacePage() {
   }
 
   return (
-    <AppLayout
-      left={<Sidebar novelId={id!} onChapterSelect={setActiveChapterId} />}
-      center={
-        activeChapter ? (
-          <ChapterEditor
-            chapter={activeChapter}
-            injectedContent={injectedContent ?? undefined}
-            onContentInserted={() => setInjectedContent(null)}
-          />
-        ) : (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-center text-muted-foreground space-y-4">
-              <BookOpen className="h-16 w-16 mx-auto opacity-20" />
-              <div>
-                <p className="text-lg font-medium">选择一个章节开始编辑</p>
-                <p className="text-sm mt-1">或从左侧面板创建新章节</p>
+    <div className="h-screen flex flex-col bg-background">
+      {/* 顶部导航栏 */}
+      <WorkspaceHeader novel={novel} />
+
+      {/* 主工作区 */}
+      <div className="flex-1 overflow-hidden">
+        <AppLayout
+          left={<Sidebar novelId={id!} onChapterSelect={setActiveChapterId} />}
+          center={
+            activeChapter ? (
+              <ChapterEditor
+                chapter={activeChapter}
+                injectedContent={injectedContent ?? undefined}
+                onContentInserted={() => setInjectedContent(null)}
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center text-muted-foreground space-y-4">
+                  <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                    <Sparkles className="h-10 w-10 text-primary/60" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-medium">选择一个章节开始编辑</p>
+                    <p className="text-sm mt-1">或从左侧面板创建新章节</p>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        )
-      }
-      right={
-        activeChapter ? (
-          <div className="h-full flex flex-col">
-            {/* 导出按钮 */}
-            <div className="flex items-center justify-between px-3 py-2 border-b">
-              <ExportDialog novelId={id!} novelTitle={novel.title} />
-            </div>
+            )
+          }
+          right={
+            activeChapter ? (
+              <div className="h-full flex flex-col bg-muted/30">
+                {/* 章节信息 */}
+                <div className="px-4 py-3 border-b bg-background">
+                  <h3 className="font-medium text-sm truncate">{activeChapter.title}</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {activeChapter.wordCount > 0 ? `${activeChapter.wordCount} 字` : '未开始'}
+                  </p>
+                </div>
 
-            <Tabs value={rightTab} onValueChange={(v) => setRightTab(v as any)} className="flex-1 flex flex-col">
-              <TabsList className="grid w-full grid-cols-2 m-2">
-                <TabsTrigger value="generate" className="gap-1 text-xs">
-                  <PenLine className="h-3 w-3" />
-                  AI 生成
-                </TabsTrigger>
-                <TabsTrigger value="settings" className="gap-1 text-xs">
-                  <Settings2 className="h-3 w-3" />
-                  模型配置
-                </TabsTrigger>
-              </TabsList>
+                <Tabs defaultValue="generate" className="flex-1 flex flex-col">
+                  <TabsList className="grid w-full grid-cols-2 rounded-none border-b bg-transparent h-10">
+                    <TabsTrigger value="generate" className="gap-1.5 text-xs rounded-none data-[state=active]:bg-background">
+                      <PenLine className="h-3.5 w-3.5" />
+                      AI 生成
+                    </TabsTrigger>
+                    <TabsTrigger value="export" className="gap-1.5 text-xs rounded-none data-[state=active]:bg-background">
+                      <FileDown className="h-3.5 w-3.5" />
+                      导出
+                    </TabsTrigger>
+                  </TabsList>
 
-              <TabsContent value="generate" className="flex-1 overflow-y-auto mt-0 px-2">
-                <GeneratePanel
-                  novelId={id!}
-                  chapterId={activeChapter.id}
-                  chapterTitle={activeChapter.title}
-                  onInsertContent={(content) => {
-                    setInjectedContent(content)
-                    setRightTab('generate')
-                  }}
-                />
-              </TabsContent>
+                  <TabsContent value="generate" className="flex-1 overflow-y-auto mt-0 p-3">
+                    <GeneratePanel
+                      novelId={id!}
+                      chapterId={activeChapter.id}
+                      chapterTitle={activeChapter.title}
+                      onInsertContent={(content) => {
+                        setInjectedContent(content)
+                      }}
+                    />
+                  </TabsContent>
 
-              <TabsContent value="settings" className="flex-1 overflow-y-auto mt-0 px-2">
-                <ModelConfig novelId={id!} />
-              </TabsContent>
-            </Tabs>
-          </div>
-        ) : undefined
-      }
-    />
+                  <TabsContent value="export" className="flex-1 overflow-y-auto mt-0 p-3">
+                    <div className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        导出当前小说为各种格式
+                      </p>
+                      <ExportDialog novelId={id!} novelTitle={novel.title} />
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </div>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center p-4 text-center text-muted-foreground">
+                <FileDown className="h-12 w-12 mb-3 opacity-20" />
+                <p className="text-sm">选择章节后<br />可导出小说</p>
+              </div>
+            )
+          }
+        />
+      </div>
+    </div>
   )
 }

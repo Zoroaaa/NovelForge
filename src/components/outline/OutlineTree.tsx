@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Outline, OutlineInput } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Plus, ChevronRight, ChevronDown, FileText, Pencil, Trash2 } from 'lucide-react'
+import { Plus, ChevronRight, ChevronDown, FileText, Pencil, Trash2, FolderPlus } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -138,6 +138,11 @@ export function OutlineTree({ novelId }: OutlineTreeProps) {
     })
   }
 
+  const handleAddChild = (parentId: string) => {
+    setParentId(parentId)
+    setDialogOpen(true)
+  }
+
   const renderNode = (node: OutlineNode, level: number = 0) => {
     const hasChildren = node.children.length > 0
     const isExpanded = expandedIds.has(node.id)
@@ -167,6 +172,16 @@ export function OutlineTree({ novelId }: OutlineTreeProps) {
               variant="ghost"
               size="icon"
               className="h-6 w-6"
+              title="添加子节点"
+              onClick={(e) => { e.stopPropagation(); handleAddChild(node.id) }}
+            >
+              <FolderPlus className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              title="编辑"
               onClick={(e) => { e.stopPropagation(); handleEdit(node) }}
             >
               <Pencil className="h-3 w-3" />
@@ -175,6 +190,7 @@ export function OutlineTree({ novelId }: OutlineTreeProps) {
               variant="ghost"
               size="icon"
               className="h-6 w-6 text-destructive"
+              title="删除"
               onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(node.id) }}
             >
               <Trash2 className="h-3 w-3" />

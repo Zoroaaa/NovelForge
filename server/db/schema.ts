@@ -62,6 +62,7 @@ export const chapters = sqliteTable('chapters', {
   completionTokens: integer('completion_tokens'),
   generationTime: integer('generation_time'),
   summary: text('summary'),
+  summaryModel: text('summary_model'),
   summaryAt: integer('summary_at'),
   vectorId: text('vector_id'),
   indexedAt: integer('indexed_at'),

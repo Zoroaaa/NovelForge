@@ -278,7 +278,7 @@ async function triggerAutoSummary(
         .set({
           summary: summaryText,
           summaryAt: Math.floor(Date.now() / 1000),
-          modelUsed: summaryConfig.modelId,
+          summaryModel: summaryConfig.modelId,
           promptTokens: generationUsage.prompt_tokens,
           completionTokens: generationUsage.completion_tokens,
         })

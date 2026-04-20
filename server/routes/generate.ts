@@ -44,7 +44,7 @@ router.post('/chapter', async (c) => {
   const writer = writable.getWriter()
   const encoder = new TextEncoder()
   const startTime = Date.now()
-  let modelId = 'unknown'
+  const modelId = 'unknown'
 
   // 启动异步生成流程
   generateChapter(

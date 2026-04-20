@@ -76,6 +76,7 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
     'outline_gen': '大纲生成',
     'chapter_gen': '章节生成',
     'summary_gen': '摘要生成',
+    'embedding': '文本嵌入',
     'vision': '视觉理解',
   }
 

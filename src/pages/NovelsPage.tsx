@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus, Search, Filter, BookOpen, Sparkles } from 'lucide-react'
+import { Search, Filter, BookOpen, Sparkles } from 'lucide-react'
 import { api } from '@/lib/api'
 import { NovelCard } from '@/components/novel/NovelCard'
 import { CreateNovelDialog } from '@/components/novel/CreateNovelDialog'

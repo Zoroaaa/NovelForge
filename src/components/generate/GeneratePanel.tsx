@@ -23,7 +23,7 @@ export function GeneratePanel({
   onInsertContent,
   onContextUpdate,
 }: GeneratePanelProps) {
-  const { output, status, generate, stop, contextInfo, setContextInfo } = useGenerate()
+  const { output, status, generate, stop, contextInfo } = useGenerate()
 
   const handleInsert = () => {
     if (output) {

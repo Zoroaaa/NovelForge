@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { PanelRightClose, PanelRightOpen, Menu, X } from 'lucide-react'
+import { PanelRightClose, PanelRightOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 
@@ -17,9 +17,12 @@ export function AppLayout({ left, center, right }: AppLayoutProps) {
   // 检测屏幕尺寸
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024)
-      if (window.innerWidth < 1024) {
+      const mobile = window.innerWidth < 1024
+      setIsMobile(mobile)
+      if (mobile) {
         setRightOpen(false)
+      } else {
+        setRightOpen(true)
       }
     }
     checkMobile()
@@ -28,25 +31,23 @@ export function AppLayout({ left, center, right }: AppLayoutProps) {
   }, [])
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-full overflow-hidden bg-background">
       {/* 移动端左侧抽屉 */}
       {isMobile ? (
-        <>
-          <Sheet open={leftOpen} onOpenChange={setLeftOpen}>
-            <SheetTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="fixed top-4 left-4 z-50 lg:hidden"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-72 p-0">
-              {left}
-            </SheetContent>
-          </Sheet>
-        </>
+        <Sheet open={leftOpen} onOpenChange={setLeftOpen}>
+          <SheetTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="fixed bottom-4 left-4 z-50 lg:hidden shadow-lg"
+            >
+              目录
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-72 p-0">
+            {left}
+          </SheetContent>
+        </Sheet>
       ) : (
         /* 桌面端左侧边栏 */
         <aside className="w-64 shrink-0 border-r overflow-y-auto hidden lg:block">
@@ -79,11 +80,11 @@ export function AppLayout({ left, center, right }: AppLayoutProps) {
         <Sheet>
           <SheetTrigger asChild>
             <Button
-              variant="ghost"
-              size="icon"
-              className="fixed top-4 right-4 z-50"
+              variant="outline"
+              size="sm"
+              className="fixed bottom-4 right-4 z-50 shadow-lg"
             >
-              <PanelRightOpen className="h-5 w-5" />
+              AI
             </Button>
           </SheetTrigger>
           <SheetContent side="right" className="w-80 p-0">
@@ -95,12 +96,13 @@ export function AppLayout({ left, center, right }: AppLayoutProps) {
       {/* 重新打开右侧面板按钮 - 桌面端 */}
       {!isMobile && !rightOpen && right && (
         <Button
-          variant="ghost"
-          size="icon"
-          className="fixed top-4 right-4 z-10"
+          variant="outline"
+          size="sm"
+          className="absolute top-2 right-2 z-10 gap-1"
           onClick={() => setRightOpen(true)}
         >
           <PanelRightOpen className="h-4 w-4" />
+          AI面板
         </Button>
       )}
     </div>

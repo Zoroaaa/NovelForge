@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { drizzle } from 'drizzle-orm/d1'
 import { modelConfigs as t } from '../db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 
 const router = new Hono<{ Bindings: Env }>()
@@ -21,15 +21,39 @@ const CreateSchema = z.object({
 
 router.get('/', async (c) => {
   const novelId = c.req.query('novelId')
+  const stage = c.req.query('stage')
   const db = drizzle(c.env.DB)
-  let rows
-  if (novelId) {
-    rows = await db.select().from(t)
-      .where(eq(t.novelId, novelId))
-  } else {
-    rows = await db.select().from(t).where(eq(t.scope, 'global'))
+
+  // 构建查询条件
+  const query = db.select().from(t)
+
+  if (stage) {
+    // 如果指定了 stage，按优先级返回：novel级 > global级
+    const conditions = [eq(t.stage, stage), eq(t.isActive, 1)]
+    if (novelId) {
+      // 优先查 novel 级配置
+      const novelConfig = await db
+        .select()
+        .from(t)
+        .where(and(...conditions, eq(t.novelId, novelId)))
+        .limit(1)
+        .get()
+      if (novelConfig) return c.json([novelConfig])
+    }
+    // 回退到 global 配置
+    const globalConfig = await db
+      .select()
+      .from(t)
+      .where(and(...conditions, eq(t.scope, 'global')))
+      .all()
+    return c.json(globalConfig)
   }
-  return c.json(rows)
+
+  // 无 stage 参数，返回所有匹配配置
+  if (novelId) {
+    return c.json(await query.where(eq(t.novelId, novelId)))
+  }
+  return c.json(await query.where(eq(t.scope, 'global')))
 })
 
 router.post('/', zValidator('json', CreateSchema), async (c) => {

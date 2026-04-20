@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Chapter, ChapterInput } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Plus, FileText, BookOpen } from 'lucide-react'
+import { Plus, FileText, BookOpen, Trash2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -40,6 +40,15 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
       setDialogOpen(false)
       setTitle('')
       onChapterSelect?.(newChapter.id)
+    },
+    onError: (error) => toast.error(error.message),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.chapters.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chapters', novelId] })
+      toast.success('章节已删除')
     },
     onError: (error) => toast.error(error.message),
   })
@@ -108,17 +117,32 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
             >
               <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
               <span className="flex-1 text-sm truncate">{chapter.title}</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  navigate(`/novels/${novelId}/read/${chapter.id}`)
-                }}
-              >
-                <BookOpen className="h-3 w-3" />
-              </Button>
+              <div className="flex items-center gap-0 opacity-0 group-hover:opacity-100">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    navigate(`/novels/${novelId}/read/${chapter.id}`)
+                  }}
+                >
+                  <BookOpen className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-destructive shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (confirm('确定要删除这个章节吗？')) {
+                      deleteMutation.mutate(chapter.id)
+                    }
+                  }}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
             </div>
           ))
         ) : (
