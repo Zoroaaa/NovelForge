@@ -67,7 +67,7 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
     const p = PROVIDERS.find(p => p.id === v)
     if (p) {
       setApiBase(p.apiBase || '')
-      setModelId(p.models.length > 0 ? p.models[0] : '')
+      setModelId(p.models.length > 0 && p.models[0] ? p.models[0] : '')
     } else {
       setApiBase('')
       setModelId('')

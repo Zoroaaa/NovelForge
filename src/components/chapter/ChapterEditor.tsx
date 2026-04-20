@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { EditorRoot, EditorContent, type EditorInstance } from 'novel'
+import StarterKit from '@tiptap/starter-kit'
 import { useDebouncedCallback } from 'use-debounce'
 import type { Chapter } from '@/lib/types'
 import { api } from '@/lib/api'
@@ -80,6 +81,7 @@ export function ChapterEditor({ chapter, injectedContent, onContentInserted }: C
 
       <EditorRoot>
         <EditorContent
+          extensions={[StarterKit]}
           ref={editorRef as any}
           initialContent={chapter.content || '<p></p>'}
           onUpdate={({ editor }: any) => {
