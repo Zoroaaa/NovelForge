@@ -94,6 +94,7 @@ export const modelConfigs = sqliteTable('model_configs', {
   modelId: text('model_id').notNull(),
   apiBase: text('api_base'),
   apiKeyEnv: text('api_key_env'),
+  apiKey: text('api_key'),
   params: text('params'),
   isActive: integer('is_active').notNull().default(1),
   ...timestamps,

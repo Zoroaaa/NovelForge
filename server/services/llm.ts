@@ -90,7 +90,7 @@ export async function resolveConfig(
       provider: novelConfig.provider as 'volcengine' | 'anthropic' | 'openai',
       modelId: novelConfig.modelId,
       apiBase: novelConfig.apiBase || getDefaultBase(novelConfig.provider),
-      apiKey: '',
+      apiKey: novelConfig.apiKey || '',
       params: novelConfig.params ? JSON.parse(novelConfig.params) : undefined,
       apiKeyEnv: novelConfig.apiKeyEnv,
     }
@@ -116,7 +116,7 @@ export async function resolveConfig(
       provider: globalConfig.provider as 'volcengine' | 'anthropic' | 'openai',
       modelId: globalConfig.modelId,
       apiBase: globalConfig.apiBase || getDefaultBase(globalConfig.provider),
-      apiKey: '',
+      apiKey: globalConfig.apiKey || '',
       params: globalConfig.params ? JSON.parse(globalConfig.params) : undefined,
       apiKeyEnv: globalConfig.apiKeyEnv,
     }

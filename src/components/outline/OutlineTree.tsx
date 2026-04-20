@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Outline, OutlineInput } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Plus, ChevronRight, ChevronDown, FileText, Pencil, Trash2, FolderPlus } from 'lucide-react'
+import { Plus, ChevronRight, ChevronDown, FileText, Pencil, Trash2, FolderPlus, Sparkles, Loader2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -56,6 +56,7 @@ export function OutlineTree({ novelId }: OutlineTreeProps) {
   const [content, setContent] = useState('')
   const [type, setType] = useState('chapter_outline')
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  const [aiGenerating, setAiGenerating] = useState(false)
 
   const { data: outlines, isLoading } = useQuery({
     queryKey: ['outlines', novelId],
@@ -127,6 +128,32 @@ export function OutlineTree({ novelId }: OutlineTreeProps) {
         content: content.trim() || null,
       },
     })
+  }
+
+  const handleAiGenerate = async () => {
+    if (!title.trim()) {
+      toast.error('请先输入标题')
+      return
+    }
+    setAiGenerating(true)
+    try {
+      const parentTitle = parentId
+        ? outlines?.find(o => o.id === parentId)?.title
+        : undefined
+      const result = await api.generate.outline({
+        novelId,
+        title: title.trim(),
+        type,
+        parentTitle,
+        context: content || undefined,
+      })
+      setContent(result.content)
+      toast.success('AI 生成完成，可继续编辑后保存')
+    } catch (error) {
+      toast.error('AI 生成失败: ' + (error as Error).message)
+    } finally {
+      setAiGenerating(false)
+    }
   }
 
   const toggleExpand = (id: string) => {
@@ -240,13 +267,35 @@ export function OutlineTree({ novelId }: OutlineTreeProps) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="outline-content">内容</Label>
-              <Textarea
-                id="outline-content"
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="输入详细内容（选填）"
-                rows={4}
-              />
+              <div className="relative">
+                <Textarea
+                  id="outline-content"
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="输入详细内容（选填），也可点击 AI 生成自动填充"
+                  rows={6}
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="absolute bottom-2 right-2 gap-1.5 h-7 text-xs"
+                  onClick={handleAiGenerate}
+                  disabled={aiGenerating || !title.trim()}
+                >
+                  {aiGenerating ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      生成中...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3.5 w-3.5" />
+                      AI 生成
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>取消</Button>

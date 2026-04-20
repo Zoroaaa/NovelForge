@@ -56,6 +56,8 @@ export const api = {
         method: 'POST',
         body: j({ chapterId, characterIds }),
       }),
+    outline: (body: { novelId: string; title: string; type: string; parentTitle?: string; context?: string }) =>
+      req<{ content: string }>('/api/generate/outline', { method: 'POST', body: j(body) }),
   },
   settings: {
     list:   (novelId?: string)    => novelId

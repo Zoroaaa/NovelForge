@@ -87,7 +87,7 @@ export async function generateChapter(
     let llmConfig
     try {
       llmConfig = await resolveConfig(db, 'chapter_gen', novelId)
-      llmConfig.apiKey = (env as any)[llmConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
+      llmConfig.apiKey = llmConfig.apiKey || (env as any)[llmConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
     } catch (error) {
       console.warn('No model config found, using fallback')
       llmConfig = {
@@ -451,7 +451,7 @@ export async function triggerAutoSummary(
     try {
       summaryConfig = await resolveConfig(db, 'summary_gen', novelId)
       summaryConfig.apiKey =
-        (env as any)[summaryConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
+        summaryConfig.apiKey || (env as any)[summaryConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
     } catch {
       // 使用默认配置
       summaryConfig = {

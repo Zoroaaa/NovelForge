@@ -214,14 +214,14 @@ ${chapter.content.slice(0, 10000)}
   let summaryConfig
   try {
     summaryConfig = await resolveConfig(db, 'summary_gen', chapter.novelId)
-    summaryConfig.apiKey = (c.env as any)[summaryConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
+    summaryConfig.apiKey = summaryConfig.apiKey || (c.env as any)[summaryConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
   } catch {
     summaryConfig = {
       provider: 'volcengine',
       modelId: 'doubao-lite-32k',
       apiBase: 'https://ark.cn-beijing.volces.com/api/v3',
       apiKey: (c.env as any).VOLCENGINE_API_KEY || '',
-      params: { temperature: 0.3, max__tokens: 1000 },
+      params: { temperature: 0.3, max_tokens: 1000 },
     }
   }
 
@@ -255,6 +255,103 @@ ${chapter.content.slice(0, 10000)}
     return c.json(parsed)
   } catch {
     return c.json({ conflicts: [], warnings: ['解析失败'], raw: content })
+  }
+})
+
+/**
+ * POST /api/generate/outline
+ *
+ * AI 生成大纲内容（非流式，大纲内容短）
+ */
+router.post('/outline', zValidator('json', z.object({
+  novelId: z.string().min(1),
+  title: z.string().min(1),
+  type: z.string(),
+  parentTitle: z.string().optional(),
+  context: z.string().optional(),
+})), async (c) => {
+  const { novelId, title, type, parentTitle, context } = c.req.valid('json')
+  const db = drizzle(c.env.DB)
+
+  let llmConfig
+  try {
+    llmConfig = await resolveConfig(db, 'outline_gen', novelId)
+    llmConfig.apiKey = llmConfig.apiKey || (c.env as any)[llmConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
+  } catch {
+    try {
+      llmConfig = await resolveConfig(db, 'chapter_gen', novelId)
+      llmConfig.apiKey = llmConfig.apiKey || (c.env as any)[llmConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
+    } catch {
+      llmConfig = {
+        provider: 'volcengine',
+        modelId: 'doubao-seed-2-pro',
+        apiBase: 'https://ark.cn-beijing.volces.com/api/v3',
+        apiKey: (c.env as any).VOLCENGINE_API_KEY || '',
+        params: { temperature: 0.85, max_tokens: 4096 },
+      }
+    }
+  }
+
+  const typeLabels: Record<string, string> = {
+    world_setting: '世界观设定',
+    volume: '卷纲',
+    chapter_outline: '章节大纲',
+    arc: '故事线',
+    custom: '自定义大纲',
+  }
+
+  const typeLabel = typeLabels[type] || '大纲'
+
+  const outlinePrompt = `请为小说生成${typeLabel}内容。
+
+【标题】：${title}
+【类型】：${typeLabel}
+${parentTitle ? `【上级节点】：${parentTitle}` : ''}
+${context ? `【补充上下文】：\n${context}` : ''}
+
+要求：
+1. 内容详细、结构清晰
+2. 符合${typeLabel}的定位和作用
+3. 如果是章节大纲，包含情节走向、关键冲突、人物动态
+4. 如果是卷纲，包含本卷主线、重要转折点、人物成长
+5. 如果是世界观设定，包含地理、势力、修炼体系、历史背景
+6. 使用 Markdown 格式
+7. 字数 800-2000 字`
+
+  try {
+    const base = llmConfig.apiBase || 'https://ark.cn-beijing.volces.com/api/v3'
+    const resp = await fetch(`${base}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${llmConfig.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: llmConfig.modelId,
+        messages: [
+          { role: 'system', content: '你是一个专业的小说大纲助手，擅长构建世界观、卷纲和章节大纲。' },
+          { role: 'user', content: outlinePrompt },
+        ],
+        stream: false,
+        temperature: 0.85,
+        max_tokens: 4096,
+      }),
+    })
+
+    if (!resp.ok) {
+      const errorText = await resp.text()
+      return c.json({ error: '生成失败', details: `${resp.status} ${errorText}` }, 500)
+    }
+
+    const result = await resp.json()
+    const content = result.choices?.[0]?.message?.content || ''
+
+    return c.json({ content })
+  } catch (error) {
+    return c.json(
+      { error: '生成异常', details: (error as Error).message },
+      500
+    )
   }
 })
 

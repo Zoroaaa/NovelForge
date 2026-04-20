@@ -15,6 +15,13 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 interface ChapterListProps {
   novelId: string
@@ -26,11 +33,27 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [title, setTitle] = useState('')
+  const [outlineId, setOutlineId] = useState('')
+  const [volumeId, setVolumeId] = useState('')
 
   const { data: chapters, isLoading } = useQuery({
     queryKey: ['chapters', novelId],
     queryFn: () => api.chapters.list(novelId),
   })
+
+  const { data: outlines } = useQuery({
+    queryKey: ['outlines', novelId],
+    queryFn: () => api.outlines.list(novelId),
+    enabled: dialogOpen,
+  })
+
+  const { data: volumes } = useQuery({
+    queryKey: ['volumes', novelId],
+    queryFn: () => api.volumes.list(novelId),
+    enabled: dialogOpen,
+  })
+
+  const chapterOutlines = outlines?.filter(o => o.type === 'chapter_outline') || []
 
   const createMutation = useMutation({
     mutationFn: (data: ChapterInput) => api.chapters.create(data),
@@ -39,6 +62,8 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
       toast.success('章节已创建')
       setDialogOpen(false)
       setTitle('')
+      setOutlineId('')
+      setVolumeId('')
       onChapterSelect?.(newChapter.id)
     },
     onError: (error) => toast.error(error.message),
@@ -66,8 +91,8 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
       title: title.trim(),
       sortOrder: maxOrder + 1,
       content: null,
-      volumeId: null,
-      outlineId: null,
+      volumeId: volumeId || null,
+      outlineId: outlineId || null,
     })
   }
 
@@ -98,6 +123,30 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
                 placeholder="输入章节标题"
                 autoFocus
               />
+            </div>
+            <div className="space-y-2">
+              <Label>关联大纲（可选）</Label>
+              <Select value={outlineId} onValueChange={setOutlineId}>
+                <SelectTrigger><SelectValue placeholder="选择章节大纲" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">无</SelectItem>
+                  {chapterOutlines.map(o => (
+                    <SelectItem key={o.id} value={o.id}>{o.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>所属卷（可选）</Label>
+              <Select value={volumeId} onValueChange={setVolumeId}>
+                <SelectTrigger><SelectValue placeholder="选择所属卷" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">无</SelectItem>
+                  {volumes?.map(v => (
+                    <SelectItem key={v.id} value={v.id}>{v.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>取消</Button>

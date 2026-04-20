@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS chapters (
   title           TEXT NOT NULL,
   sort_order      INTEGER NOT NULL DEFAULT 0,
   content         TEXT,          -- 章节正文 Markdown
+  snapshot_keys   TEXT,          -- 章节快照
   word_count      INTEGER NOT NULL DEFAULT 0,
   status          TEXT NOT NULL DEFAULT 'draft', -- draft | generated | revised | published
   -- AI 生成元数据
@@ -140,6 +141,7 @@ CREATE TABLE IF NOT EXISTS model_configs (
   model_id    TEXT NOT NULL,  -- doubao-seed-2-pro / claude-sonnet-4-20250514 / ...
   api_base    TEXT,           -- 自定义 OpenAI 兼容接口 base URL
   api_key_env TEXT,           -- 引用 Workers secret 名称（不存明文）
+  api_key     TEXT,           -- 明文 API Key（本地开发用）
   params      TEXT,           -- JSON: { temperature, max_tokens, top_p, ... }
   is_active   INTEGER NOT NULL DEFAULT 1,
   created_at  INTEGER NOT NULL DEFAULT (unixepoch()),

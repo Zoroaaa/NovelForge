@@ -23,6 +23,15 @@ const CreateSchema = z.object({
 /**
  * 异步触发向量化（不阻塞主流程）
  */
+async function safeWaitUntil(c: any, fn: Promise<void> | void) {
+  const ctx = (c as any).executionContext
+  if (ctx?.waitUntil) {
+    ctx.waitUntil(Promise.resolve(fn).catch((e) => console.warn('Async task failed:', e)))
+  } else {
+    Promise.resolve(fn).catch((e) => console.warn('Async task failed:', e))
+  }
+}
+
 async function triggerVectorization(
   env: Env,
   sourceType: 'outline' | 'chapter' | 'character' | 'summary',
@@ -64,16 +73,14 @@ router.post('/', zValidator('json', CreateSchema), async (c) => {
   const [row] = await db.insert(t).values(body).returning()
 
   // 异步触发向量化（如果有内容）
-  c.executionContext.waitUntil(
-    triggerVectorization(
-      c.env,
-      'chapter',
-      row.id,
-      row.novelId,
-      row.title,
-      row.content
-    )
-  )
+  safeWaitUntil(c, triggerVectorization(
+    c.env,
+    'chapter',
+    row.id,
+    row.novelId,
+    row.title,
+    row.content
+  ))
 
   return c.json(row, 201)
 })
@@ -104,34 +111,28 @@ router.patch(
 
     // 异步重新索引（内容更新时）
     if (body.content !== undefined && row) {
-      c.executionContext.waitUntil(
-        triggerVectorization(
-          c.env,
-          'chapter',
-          row.id,
-          row.novelId,
-          row.title,
-          body.content
-        )
-      )
+      safeWaitUntil(c, triggerVectorization(
+        c.env,
+        'chapter',
+        row.id,
+        row.novelId,
+        row.title,
+        body.content
+      ))
 
-      c.executionContext.waitUntil(
-        saveSnapshot(c.env, row.novelId, row.id, body.content).catch(e => console.warn('Snapshot save failed:', e))
-      )
+      safeWaitUntil(c, saveSnapshot(c.env, row.novelId, row.id, body.content).catch(e => console.warn('Snapshot save failed:', e)))
     }
 
     // 如果生成了摘要，也索引摘要
     if (body.summary !== undefined && row) {
-      c.executionContext.waitUntil(
-        triggerVectorization(
-          c.env,
-          'summary',
-          row.id,
-          row.novelId,
-          `${row.title} 摘要`,
-          body.summary
-        )
-      )
+      safeWaitUntil(c, triggerVectorization(
+        c.env,
+        'summary',
+        row.id,
+        row.novelId,
+        `${row.title} 摘要`,
+        body.summary
+      ))
     }
 
     return c.json(row)
@@ -144,12 +145,10 @@ router.delete('/:id', async (c) => {
 
   // 删除向量索引（章节+摘要）
   if (c.env.VECTORIZE) {
-    c.executionContext.waitUntil(
-      Promise.all([
-        deindexContent(c.env, 'chapter', id),
-        deindexContent(c.env, 'summary', id),
-      ]).catch((err) => console.warn('Deindex failed:', err))
-    )
+    safeWaitUntil(c, Promise.all([
+      deindexContent(c.env, 'chapter', id),
+      deindexContent(c.env, 'summary', id),
+    ]).catch((err) => console.warn('Deindex failed:', err)))
   }
 
   await db

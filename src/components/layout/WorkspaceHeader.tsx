@@ -59,7 +59,7 @@ export function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
       <div className="flex items-center gap-2 shrink-0">
         <Dialog>
           <DialogTrigger asChild>
-            <Button variant="ghost" size="sm" className="gap-2 hidden sm:flex">
+            <Button variant="ghost" size="sm" className="gap-2 hidden sm:flex" data-settings-trigger>
               <Settings2 className="h-4 w-4" />
               模型配置
             </Button>

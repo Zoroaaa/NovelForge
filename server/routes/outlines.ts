@@ -18,9 +18,15 @@ const CreateSchema = z.object({
   sortOrder: z.number().optional(),
 })
 
-/**
- * 异步触发向量化（不阻塞主流程）
- */
+async function safeWaitUntil(c: any, fn: Promise<void> | void) {
+  const ctx = (c as any).executionContext
+  if (ctx?.waitUntil) {
+    ctx.waitUntil(Promise.resolve(fn).catch((e) => console.warn('Async task failed:', e)))
+  } else {
+    Promise.resolve(fn).catch((e) => console.warn('Async task failed:', e))
+  }
+}
+
 async function triggerVectorization(
   env: Env,
   sourceType: 'outline' | 'chapter' | 'character' | 'summary',
@@ -56,54 +62,6 @@ router.get('/:id', async (c) => {
   return c.json(row)
 })
 
-router.post('/', zValidator('json', CreateSchema), async (c) => {
-  const db = drizzle(c.env.DB)
-  const body = c.req.valid('json')
-  const [row] = await db.insert(t).values(body).returning()
-
-  // 异步触发向量化
-  c.executionContext.waitUntil(
-    triggerVectorization(
-      c.env,
-      'outline',
-      row.id,
-      row.novelId,
-      row.title,
-      row.content
-    )
-  )
-
-  return c.json(row, 201)
-})
-
-router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
-  const db = drizzle(c.env.DB)
-  const id = c.req.param('id')
-  const body = c.req.valid('json')
-
-  const [row] = await db
-    .update(t)
-    .set({ ...body, updatedAt: sql`(unixepoch())` })
-    .where(eq(t.id, id))
-    .returning()
-
-  // 异步重新索引（内容更新时）
-  if (body.content !== undefined && row) {
-    c.executionContext.waitUntil(
-      triggerVectorization(
-        c.env,
-        'outline',
-        row.id,
-        row.novelId,
-        row.title,
-        body.content
-      )
-    )
-  }
-
-  return c.json(row)
-})
-
 router.patch('/sort', zValidator('json', z.array(z.object({
   id: z.string(),
   sortOrder: z.number(),
@@ -120,17 +78,56 @@ router.patch('/sort', zValidator('json', z.array(z.object({
   return c.json({ ok: true })
 })
 
+router.post('/', zValidator('json', CreateSchema), async (c) => {
+  const db = drizzle(c.env.DB)
+  const body = c.req.valid('json')
+  const [row] = await db.insert(t).values(body).returning()
+
+  safeWaitUntil(c, triggerVectorization(
+    c.env,
+    'outline',
+    row.id,
+    row.novelId,
+    row.title,
+    row.content
+  ))
+
+  return c.json(row, 201)
+})
+
+router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
+  const db = drizzle(c.env.DB)
+  const id = c.req.param('id')
+  const body = c.req.valid('json')
+
+  const [row] = await db
+    .update(t)
+    .set({ ...body, updatedAt: sql`(unixepoch())` })
+    .where(eq(t.id, id))
+    .returning()
+
+  if (body.content !== undefined && row) {
+    safeWaitUntil(c, triggerVectorization(
+      c.env,
+      'outline',
+      row.id,
+      row.novelId,
+      row.title,
+      body.content
+    ))
+  }
+
+  return c.json(row)
+})
+
 router.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB)
   const id = c.req.param('id')
 
-  // 先删除向量索引
   if (c.env.VECTORIZE) {
-    c.executionContext.waitUntil(
-      deindexContent(c.env, 'outline', id).catch((err) =>
-        console.warn('Deindex failed:', err)
-      )
-    )
+    safeWaitUntil(c, deindexContent(c.env, 'outline', id).catch((err) =>
+      console.warn('Deindex failed:', err)
+    ))
   }
 
   await db

@@ -88,6 +88,7 @@ export interface ModelConfig {
   modelId: string
   apiBase: string | null
   apiKeyEnv: string | null
+  apiKey: string | null
   params: string | null
   isActive: number
   createdAt: number

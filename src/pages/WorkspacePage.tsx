@@ -10,7 +10,8 @@ import { GeneratePanel } from '@/components/generate/GeneratePanel'
 import { ExportDialog } from '@/components/export/ExportDialog'
 import type { Novel } from '@/lib/types'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { PenLine, Sparkles, FileDown } from 'lucide-react'
+import { PenLine, Sparkles, FileDown, AlertTriangle, Settings2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 export default function WorkspacePage() {
   const { id } = useParams<{ id: string }>()
@@ -28,6 +29,14 @@ export default function WorkspacePage() {
     queryFn: () => api.chapters.list(id!),
     enabled: !!id,
   })
+
+  const { data: modelConfigs } = useQuery({
+    queryKey: ['model-configs', id],
+    queryFn: () => api.settings.list(id),
+    enabled: !!id,
+  })
+
+  const showModelWarning = modelConfigs && modelConfigs.length === 0
 
   const activeChapter = chapters?.find(c => c.id === activeChapterId)
 
@@ -49,10 +58,27 @@ export default function WorkspacePage() {
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      {/* 顶部导航栏 */}
       <WorkspaceHeader novel={novel} />
 
-      {/* 主工作区 */}
+      {showModelWarning && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-amber-700 dark:text-amber-400">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span className="text-sm flex-1">尚未配置 AI 模型，章节和大纲的 AI 生成功能无法使用。</span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 h-7 text-xs bg-transparent"
+            onClick={() => {
+              const settingsBtn = document.querySelector('[data-settings-trigger]') as HTMLElement
+              settingsBtn?.click()
+            }}
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+            前往配置
+          </Button>
+        </div>
+      )}
+
       <div className="flex-1 overflow-hidden">
         <AppLayout
           left={<Sidebar novelId={id!} onChapterSelect={setActiveChapterId} />}
@@ -80,7 +106,6 @@ export default function WorkspacePage() {
           right={
             activeChapter ? (
               <div className="h-full flex flex-col bg-muted/30">
-                {/* 章节信息 */}
                 <div className="px-4 py-3 border-b bg-background">
                   <h3 className="font-medium text-sm truncate">{activeChapter.title}</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
