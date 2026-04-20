@@ -6,11 +6,20 @@ import { volumes as t } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 
+async function safeWaitUntil(c: any, fn: Promise<void> | void) {
+  const ctx = (c as any).executionContext
+  if (ctx?.waitUntil) {
+    ctx.waitUntil(Promise.resolve(fn).catch((e) => console.warn('Async task failed:', e)))
+  } else {
+    Promise.resolve(fn).catch((e) => console.warn('Async task failed:', e))
+  }
+}
+
 const router = new Hono<{ Bindings: Env }>()
 
 const CreateSchema = z.object({
   novelId: z.string(),
-  outlineId: z.string().optional(),
+  outlineId: z.string().optional().nullable(),
   title: z.string(),
   sortOrder: z.number().optional(),
 })

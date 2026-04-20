@@ -11,6 +11,15 @@ import {
 } from '../services/vision'
 import { indexContent, deindexContent } from '../services/embedding'
 
+async function safeWaitUntil(c: any, fn: Promise<void> | void) {
+  const ctx = (c as any).executionContext
+  if (ctx?.waitUntil) {
+    ctx.waitUntil(Promise.resolve(fn).catch((e) => console.warn('Async task failed:', e)))
+  } else {
+    Promise.resolve(fn).catch((e) => console.warn('Async task failed:', e))
+  }
+}
+
 const router = new Hono<{ Bindings: Env }>()
 
 const CreateSchema = z.object({
@@ -55,16 +64,14 @@ router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
     .returning()
 
   if (body.description !== undefined && row && c.env.VECTORIZE) {
-    c.executionContext.waitUntil(
-      indexContent(
-        c.env,
-        'character',
-        row.id,
-        row.novelId,
-        row.name,
-        body.description
-      ).catch((err) => console.warn('Character vectorization failed:', err))
-    )
+    safeWaitUntil(c, indexContent(
+      c.env,
+      'character',
+      row.id,
+      row.novelId,
+      row.name,
+      body.description
+    ).catch((err) => console.warn('Character vectorization failed:', err)))
   }
 
   return c.json(row)

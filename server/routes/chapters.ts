@@ -13,11 +13,11 @@ const MAX_SNAPSHOTS = 10
 
 const CreateSchema = z.object({
   novelId: z.string(),
-  volumeId: z.string().optional(),
-  outlineId: z.string().optional(),
+  volumeId: z.string().optional().nullable(),
+  outlineId: z.string().optional().nullable(),
   title: z.string(),
   sortOrder: z.number().optional(),
-  content: z.string().optional(),
+  content: z.string().optional().nullable(),
 })
 
 /**

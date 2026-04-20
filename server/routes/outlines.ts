@@ -14,7 +14,7 @@ const CreateSchema = z.object({
   parentId: z.string().nullable().optional(),
   type: z.string(),
   title: z.string(),
-  content: z.string().optional(),
+  content: z.string().optional().nullable(),
   sortOrder: z.number().optional(),
 })
 
