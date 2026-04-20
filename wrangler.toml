@@ -1,0 +1,17 @@
+name = "novelforge"
+pages_build_output_dir = "dist"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "novelforge"
+database_id = "替换为你的-database-id"
+
+[[r2_buckets]]
+binding = "STORAGE"
+bucket_name = "novelforge-storage"
+preview_bucket_name = "novelforge-storage-dev"
+
+[ai]
+binding = "AI"
