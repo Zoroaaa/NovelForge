@@ -7,6 +7,8 @@ import { chapters } from './routes/chapters'
 import { characters } from './routes/characters'
 import { generate } from './routes/generate'
 import { settings } from './routes/settings'
+import { vectorize } from './routes/vectorize'
+import * as exportModule from './routes/export'
 
 export const app = new Hono<{ Bindings: Env }>().basePath('/api')
 
@@ -17,5 +19,7 @@ app.route('/chapters', chapters)
 app.route('/characters', characters)
 app.route('/generate', generate)
 app.route('/settings', settings)
+app.route('/vectorize', vectorize)
+app.route('/export', exportModule.export)
 
-app.get('/health', (c) => c.json({ ok: true, ts: Date.now() }))
+app.get('/health', (c) => c.json({ ok: true, ts: Date.now(), phase: 3 }))

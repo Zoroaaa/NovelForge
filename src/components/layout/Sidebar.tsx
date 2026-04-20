@@ -1,13 +1,15 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { OutlineTree } from '@/components/outline/OutlineTree'
 import { ChapterList } from '@/components/chapter/ChapterList'
+import { CharacterList } from '@/components/character/CharacterList'
 import { useNovelStore } from '@/store/novelStore'
 
 interface SidebarProps {
   novelId: string
+  onChapterSelect?: (chapterId: string) => void
 }
 
-export function Sidebar({ novelId }: SidebarProps) {
+export function Sidebar({ novelId, onChapterSelect }: SidebarProps) {
   const { sidebarTab, setSidebarTab } = useNovelStore()
 
   return (
@@ -24,13 +26,11 @@ export function Sidebar({ novelId }: SidebarProps) {
         </TabsContent>
 
         <TabsContent value="chapters" className="flex-1 overflow-y-auto mt-0">
-          <ChapterList novelId={novelId} />
+          <ChapterList novelId={novelId} onChapterSelect={onChapterSelect} />
         </TabsContent>
 
         <TabsContent value="characters" className="flex-1 overflow-y-auto mt-0">
-          <div className="text-center text-muted-foreground py-8">
-            <p>角色管理功能开发中...</p>
-          </div>
+          <CharacterList novelId={novelId} />
         </TabsContent>
       </Tabs>
     </div>

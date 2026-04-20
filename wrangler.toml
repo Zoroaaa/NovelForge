@@ -14,3 +14,9 @@ bucket_name = "novelforge-storage"
 
 [ai]
 binding = "AI"
+
+# Vectorize 向量索引（Phase 2 RAG 功能）
+# 需要先运行: wrangler vectorize create novelforge-index --dimensions=768 --metric=cosine
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "novelforge-index"

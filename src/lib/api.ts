@@ -1,4 +1,4 @@
-import type { Novel, Outline, Volume, Chapter, SortItem, NovelInput, OutlineInput, ChapterInput, VolumeInput, ModelConfig } from './types'
+import type { Novel, Outline, Volume, Chapter, Character, SortItem, NovelInput, OutlineInput, ChapterInput, VolumeInput, ModelConfig } from './types'
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -43,6 +43,11 @@ export const api = {
     create: (body: VolumeInput)   => req<Volume>('/api/volumes', { method: 'POST', body: j(body) }),
     update: (id: string, body: Partial<VolumeInput>) =>
                                      req<Volume>(`/api/volumes/${id}`, { method: 'PATCH', body: j(body) }),
+  },
+  characters: {
+    list:   (novelId: string)     => req<Character[]>(`/api/characters?novelId=${novelId}`),
+    create: (body: any)           => req<Character>('/api/characters', { method: 'POST', body: j(body) }),
+    delete: (id: string)          => req(`/api/characters/${id}`, { method: 'DELETE' }),
   },
   settings: {
     list:   (novelId?: string)    => novelId

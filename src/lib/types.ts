@@ -51,6 +51,7 @@ export interface Character {
   role: string | null
   description: string | null
   attributes: string | null
+  imageUrl: string | null
 }
 
 export interface ModelConfig {

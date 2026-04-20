@@ -3,8 +3,9 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { drizzle } from 'drizzle-orm/d1'
 import { outlines as t } from '../db/schema'
-import { eq, and, isNull } from 'drizzle-orm'
+import { eq, and, isNull, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
+import { indexContent, deindexContent } from '../services/embedding'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -16,6 +17,27 @@ const CreateSchema = z.object({
   content: z.string().optional(),
   sortOrder: z.number().optional(),
 })
+
+/**
+ * 异步触发向量化（不阻塞主流程）
+ */
+async function triggerVectorization(
+  env: Env,
+  sourceType: 'outline' | 'chapter' | 'character' | 'summary',
+  sourceId: string,
+  novelId: string,
+  title: string,
+  content: string | null | undefined
+) {
+  if (!env.VECTORIZE || !content) return
+
+  try {
+    await indexContent(env, sourceType, sourceId, novelId, title, content)
+    console.log(`✅ Auto-indexed ${sourceType}:${sourceId}`)
+  } catch (error) {
+    console.warn(`⚠️ Auto-vectorization failed for ${sourceId}:`, error)
+  }
+}
 
 router.get('/', async (c) => {
   const novelId = c.req.query('novelId')
@@ -36,16 +58,49 @@ router.get('/:id', async (c) => {
 
 router.post('/', zValidator('json', CreateSchema), async (c) => {
   const db = drizzle(c.env.DB)
-  const [row] = await db.insert(t).values(c.req.valid('json')).returning()
+  const body = c.req.valid('json')
+  const [row] = await db.insert(t).values(body).returning()
+
+  // 异步触发向量化
+  ctx.executionContext.waitUntil(
+    triggerVectorization(
+      c.env,
+      'outline',
+      row.id,
+      row.novelId,
+      row.title,
+      row.content
+    )
+  )
+
   return c.json(row, 201)
 })
 
 router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
   const db = drizzle(c.env.DB)
-  const [row] = await db.update(t)
-    .set(c.req.valid('json'))
-    .where(eq(t.id, c.req.param('id')))
+  const id = c.req.param('id')
+  const body = c.req.valid('json')
+
+  const [row] = await db
+    .update(t)
+    .set({ ...body, updatedAt: sql`(unixepoch())` })
+    .where(eq(t.id, id))
     .returning()
+
+  // 异步重新索引（内容更新时）
+  if (body.content !== undefined && row) {
+    ctx.executionContext.waitUntil(
+      triggerVectorization(
+        c.env,
+        'outline',
+        row.id,
+        row.novelId,
+        row.title,
+        body.content
+      )
+    )
+  }
+
   return c.json(row)
 })
 
@@ -67,9 +122,22 @@ router.patch('/sort', zValidator('json', z.array(z.object({
 
 router.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB)
-  await db.update(t)
+  const id = c.req.param('id')
+
+  // 先删除向量索引
+  if (c.env.VECTORIZE) {
+    ctx.executionContext.waitUntil(
+      deindexContent(c.env, 'outline', id, 1).catch((err) =>
+        console.warn('Deindex failed:', err)
+      )
+    )
+  }
+
+  await db
+    .update(t)
     .set({ deletedAt: new Date().getTime() })
-    .where(eq(t.id, c.req.param('id')))
+    .where(eq(t.id, id))
+
   return c.json({ ok: true })
 })
 
