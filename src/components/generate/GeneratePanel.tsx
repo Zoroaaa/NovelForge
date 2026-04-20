@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Square, PenLine, Brain, Shield } from 'lucide-react'
+import { Square, PenLine, Brain, Shield, RefreshCw, Play } from 'lucide-react'
 import { useGenerate } from '@/hooks/useGenerate'
 import { StreamOutput } from './StreamOutput'
 import {
@@ -15,7 +15,10 @@ interface GeneratePanelProps {
   chapterTitle: string
   onInsertContent: (content: string) => void
   onContextUpdate?: (context: ContextBundle | null) => void
+  existingContent?: string  // Phase 1.6: 当前编辑器中的已有内容
 }
+
+type GenerationMode = 'generate' | 'continue' | 'rewrite'
 
 export function GeneratePanel({
   novelId,
@@ -23,9 +26,14 @@ export function GeneratePanel({
   chapterTitle,
   onInsertContent,
   onContextUpdate,
+  existingContent = '',
 }: GeneratePanelProps) {
   const { output, status, generate, stop, contextInfo, toolCalls } = useGenerate()
   const [showConsistencyCheck, setShowConsistencyCheck] = useState(false)
+  
+  // Phase 1.6: 生成模式状态
+  const [mode, setMode] = useState<GenerationMode>('generate')
+  const [selectedText, setSelectedText] = useState<string>('')  // 重写模式的选中文本
 
   const handleInsert = () => {
     if (output) {
@@ -36,6 +44,47 @@ export function GeneratePanel({
   // 当上下文信息更新时通知父组件
   if (onContextUpdate && contextInfo) {
     onContextUpdate(contextInfo)
+  }
+
+  // Phase 1.6: 处理生成请求
+  const handleGenerate = () => {
+    let options: any = { mode }
+    
+    if (mode === 'continue' && existingContent) {
+      options.existingContent = existingContent
+    }
+    
+    if (mode === 'rewrite' && selectedText) {
+      options.existingContent = selectedText
+    } else if (mode === 'rewrite' && existingContent) {
+      options.existingContent = existingContent
+    }
+
+    generate(chapterId, novelId, options)
+  }
+
+  // Phase 1.6: 获取当前模式的描述文本
+  const getModeDescription = (): string => {
+    switch (mode) {
+      case 'continue':
+        return '基于当前章节末尾内容继续创作，保持文风和情节连贯'
+      case 'rewrite':
+        return selectedText ? '对选中文本进行改写优化' : '对当前内容进行改写，提升文笔质量'
+      default:
+        return '基于大纲和上下文从零开始创作本章内容'
+    }
+  }
+
+  // Phase 1.6: 获取当前模式的按钮文本
+  const getButtonText = (): string => {
+    switch (mode) {
+      case 'continue':
+        return '续写内容'
+      case 'rewrite':
+        return '重写内容'
+      default:
+        return '智能生成内容'
+    }
   }
 
   return (
@@ -54,6 +103,54 @@ export function GeneratePanel({
         </div>
         <p className="text-xs text-muted-foreground">当前章节：{chapterTitle}</p>
       </div>
+
+      {/* Phase 1.6: 模式切换 Tab */}
+      <div className="flex gap-1 bg-muted rounded-lg p-1">
+        <button
+          onClick={() => setMode('generate')}
+          className={`flex-1 px-3 py-1.5 text-xs rounded-md transition-colors ${
+            mode === 'generate'
+              ? 'bg-background shadow-sm font-medium'
+              : 'hover:bg-background/50'
+          }`}
+        >
+          <PenLine className="h-3 w-3 inline mr-1" />
+          全新生成
+        </button>
+        <button
+          onClick={() => setMode('continue')}
+          disabled={!existingContent}
+          className={`flex-1 px-3 py-1.5 text-xs rounded-md transition-colors ${
+            mode === 'continue'
+              ? 'bg-background shadow-sm font-medium'
+              : !existingContent
+              ? 'opacity-50 cursor-not-allowed'
+              : 'hover:bg-background/50'
+          }`}
+        >
+          <Play className="h-3 w-3 inline mr-1" />
+          续写
+        </button>
+        <button
+          onClick={() => setMode('rewrite')}
+          disabled={!existingContent && !selectedText}
+          className={`flex-1 px-3 py-1.5 text-xs rounded-md transition-colors ${
+            mode === 'rewrite'
+              ? 'bg-background shadow-sm font-medium'
+              : !existingContent && !selectedText
+              ? 'opacity-50 cursor-not-allowed'
+              : 'hover:bg-background/50'
+          }`}
+        >
+          <RefreshCw className="h-3 w-3 inline mr-1" />
+          重写
+        </button>
+      </div>
+
+      {/* Phase 1.6: 模式描述 */}
+      <p className="text-[11px] text-muted-foreground italic">
+        {getModeDescription()}
+      </p>
 
       {/* Phase 2 Context Preview */}
       <ContextPreview
@@ -77,10 +174,15 @@ export function GeneratePanel({
           <Button
             size="sm"
             className="gap-2 flex-1"
-            onClick={() => generate(chapterId, novelId)}
+            onClick={handleGenerate}
+            disabled={
+              (mode === 'continue' || mode === 'rewrite') && 
+              !existingContent && 
+              !selectedText
+            }
           >
             <PenLine className="h-4 w-4" />
-            智能生成内容
+            {getButtonText()}
           </Button>
         )}
       </div>
@@ -118,9 +220,39 @@ export function GeneratePanel({
           {contextInfo?.debug && (
             <div className="text-[10px] text-center text-muted-foreground p-2 bg-green-50 dark:bg-green-950 rounded border border-green-200 dark:border-green-800">
               ✓ 自动摘要已生成 · 使用了 {contextInfo.debug.ragHitsCount} 条 RAG 资料
+              {contextInfo.debug.summaryChainLength !== undefined && (
+                <> · 摘要链长度: {contextInfo.debug.summaryChainLength}</>
+              )}
               ({contextInfo.debug.buildTimeMs}ms)
             </div>
           )}
+        </div>
+      )}
+
+      {/* Phase 1.6: 工具调用过程展示 */}
+      {toolCalls && toolCalls.length > 0 && status === 'generating' && (
+        <div className="space-y-1 mt-2">
+          <p className="text-[11px] font-medium text-muted-foreground mb-1">工具执行过程：</p>
+          {toolCalls.map((toolCall, index) => (
+            <div
+              key={index}
+              className={`text-[10px] p-1.5 rounded border ${
+                toolCall.status === 'running'
+                  ? 'bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-800 animate-pulse'
+                  : 'bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800'
+              }`}
+            >
+              <span className="font-medium">{toolCall.name}</span>
+              <span className="ml-1 opacity-70">
+                {toolCall.status === 'running' ? '⏳ 执行中...' : '✓ 完成'}
+              </span>
+              {toolCall.result && (
+                <div className="mt-0.5 opacity-60 truncate">
+                  {toolCall.result}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

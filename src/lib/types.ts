@@ -18,18 +18,7 @@ export interface Novel {
   deletedAt: number | null
 }
 
-export interface Outline {
-  id: string
-  novelId: string
-  parentId: string | null
-  type: 'world_setting' | 'volume' | 'chapter_outline' | 'custom'
-  title: string
-  content: string | null
-  sortOrder: number
-  createdAt: number
-  updatedAt: number
-  deletedAt: number | null
-}
+// v2.0: Outline 接口已废弃，使用 MasterOutline / Volume / NovelSetting 替代
 
 export interface Volume {
   id: string
@@ -136,7 +125,9 @@ export interface VectorIndexRecord {
 
 // Input types
 export type NovelInput = Pick<Novel, 'title'> & Partial<Pick<Novel, 'description' | 'genre'>>
-export type OutlineInput = Omit<Outline, 'id' | 'sortOrder' | 'createdAt' | 'updatedAt' | 'deletedAt'> & { sortOrder?: number }
+
+// v2.0: OutlineInput 已废弃，使用 MasterOutline / NovelSetting / VolumeInput 替代
+
 export type VolumeInput = Omit<Volume, 'id' | 'wordCount' | 'status' | 'summary' | 'createdAt' | 'updatedAt' | 'deletedAt'>
 export type ChapterInput = Omit<Chapter, 'id' | 'wordCount' | 'status' | 'summary' | 'summaryAt' | 'summaryModel' | 'modelUsed' | 'promptTokens' | 'completionTokens' | 'createdAt' | 'updatedAt' | 'deletedAt'>
 export type CharacterInput = Omit<Character, 'id' | 'imageR2Key' | 'createdAt' | 'updatedAt' | 'deletedAt'>
@@ -160,6 +151,8 @@ export interface PaginatedResponse<T> {
 export interface GenerateOptions {
   chapterId: string
   novelId: string
+  mode?: 'generate' | 'continue' | 'rewrite'  // Phase 1.6: 生成模式
+  existingContent?: string                     // Phase 1.6: 已有内容（续写/重写用）
   options?: {
     enableRAG?: boolean
     enableAutoSummary?: boolean
@@ -225,4 +218,139 @@ export interface ModelParams {
   top_p?: number
   frequency_penalty?: number
   presence_penalty?: number
+}
+
+// ============================================================
+// v2.0 新增类型定义（与后端 schema v2.0 对齐）
+// ============================================================
+
+/**
+ * 总纲表 (master_outline)
+ */
+export interface MasterOutline {
+  id: string
+  novelId: string
+  title: string
+  content: string | null
+  version: number
+  summary: string | null
+  wordCount: number
+  vectorId: string | null
+  indexedAt: number | null
+  createdAt: number
+  updatedAt: number
+  deletedAt: number | null
+}
+
+/**
+ * 创作规则表 (writing_rules)
+ */
+export interface WritingRule {
+  id: string
+  novelId: string
+  category: 'style' | 'pacing' | 'character' | 'plot' | 'world' | 'taboo' | 'custom'
+  title: string
+  content: string
+  priority: number       // 1=最高, 5=最低
+  isActive: number        // 0 or 1
+  sortOrder: number
+  createdAt: number
+  updatedAt: number
+  deletedAt: number | null
+}
+
+/**
+ * 小说设定表 (novel_settings)
+ * 统一管理世界观/境界体系/势力组织/地理/宝物功法杂录等
+ */
+export interface NovelSetting {
+  id: string
+  novelId: string
+  type: 'worldview' | 'power_system' | 'faction' | 'geography' | 'item_skill' | 'misc'
+  category: string | null    // 子分类
+  name: string               // 设定名称
+  content: string            // 详细描述 (Markdown)
+  attributes: string | null  // JSON: 额外结构化数据
+  parentId: string | null    // 支持层级
+  importance: 'high' | 'normal' | 'low'
+  relatedIds: string | null  // JSON array: 关联 ID
+  vectorId: string | null
+  indexedAt: number | null
+  sortOrder: number
+  createdAt: number
+  updatedAt: number
+  deletedAt: number | null
+}
+
+/**
+ * 卷表增强版 (volumes v2.0)
+ * 添加了 outline/blueprint/notes/targetWordCount/chapterCount 等字段
+ */
+export interface VolumeV2 extends Volume {
+  outlineId?: string | null
+  outline?: string | null         // 卷大纲 (Markdown)
+  blueprint?: string | null       // 卷蓝图 (JSON)
+  targetWordCount?: number | null // 目标字数
+  notes?: string | null           // 作者笔记
+  chapterCount?: number           // 章节计数
+}
+
+/**
+ * 角色增强版 (characters v2.0)
+ * 添加了 powerLevel 字段
+ */
+export interface CharacterV2 extends Character {
+  powerLevel?: string | null      // JSON: 境界信息
+}
+
+/**
+ * 伏笔追踪表 (foreshadowing)
+ */
+export interface ForeshadowingItem {
+  id: string
+  novelId: string
+  chapterId: string | null
+  title: string
+  description: string | null
+  status: 'open' | 'resolved' | 'abandoned'
+  resolvedChapterId: string | null
+  importance: 'high' | 'normal' | 'low'
+  createdAt: number
+  updatedAt: number
+  deletedAt: number | null
+}
+
+/**
+ * 总索引节点 (entity_index)
+ * 用于构建前端树形结构
+ */
+export interface EntityIndexNode {
+  id: string
+  entityType: 'novel' | 'volume' | 'chapter' | 'character' | 'setting' | 'rule' | 'foreshadowing'
+  entityId: string
+  novelId: string
+  parentId: string | null
+  title: string
+  sortOrder: number
+  depth: number
+  meta: string | null          // JSON: 元数据
+  createdAt: number
+  updatedAt: number
+}
+
+/**
+ * 树形结构响应
+ */
+export interface EntityTreeResponse {
+  tree: Array<{
+    id: string
+    type: string
+    entityId: string
+    title: string
+    depth: number
+    meta: any
+    children: any[]
+  }>
+  stats: Record<string, number>
+  totalNodes: number
 }

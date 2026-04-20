@@ -35,6 +35,7 @@ export interface ContextDebugInfo {
   ragHitsCount: number
   skippedByBudget: number
   buildTimeMs: number
+  summaryChainLength?: number  // Phase 1.1: 摘要链长度
 }
 
 export interface RagChunk {
@@ -50,6 +51,9 @@ export interface ContextBundle {
     prevChapterSummary: string
     volumeSummary: string
     protagonistCards: string[]
+    recentChainSummaries?: string[]  // Phase 1.1
+    openForeshadowing?: string[]     // Phase 1.2
+    powerLevelInfo?: string          // Phase 1.3
   }
   ragChunks: RagChunk[]
   debug: ContextDebugInfo
@@ -59,6 +63,7 @@ export interface ToolCallEvent {
   name: string
   args: Record<string, any>
   result: string
+  status?: 'running' | 'done'  // Phase 1.4: 工具调用状态
 }
 
 const TOOL_LABELS: Record<string, string> = {

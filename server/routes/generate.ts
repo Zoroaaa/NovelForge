@@ -1,13 +1,14 @@
 /**
- * NovelForge · Generate 路由（Phase 2 智能版）
+ * NovelForge · Generate 路由（Phase 2 智能版 + Phase 1.5 批量生成）
  *
  * 支持两种模式：
  * - Phase 1 兼容模式：简单流式生成
  * - Phase 2 智能模式：RAG 上下文 + Agent 循环 + 自动摘要
  *
  * API 端点：
- * POST /api/generate/chapter  - 智能章节生成
- * GET  /api/generate/status/:id  - 查询生成状态
+ * POST /api/generate/chapter        - 智能章节生成
+ * GET  /api/generate/status/:id     - 查询生成状态
+ * POST /api/generate/outline-batch   - Phase 1.5: 批量生成章节大纲（非流式）
  */
 
 import { Hono } from 'hono'
@@ -17,7 +18,7 @@ import { drizzle } from 'drizzle-orm/d1'
 import { eq, desc, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { generateChapter } from '../services/agent'
-import { generationLogs, chapters, characters } from '../db/schema'
+import { generationLogs, chapters, characters, volumes } from '../db/schema'
 import { resolveConfig } from '../services/llm'
 
 const router = new Hono<{ Bindings: Env }>()
@@ -350,6 +351,248 @@ ${context ? `【补充上下文】：\n${context}` : ''}
   } catch (error) {
     return c.json(
       { error: '生成异常', details: (error as Error).message },
+      500
+    )
+  }
+})
+
+/**
+ * POST /api/generate/outline-batch
+ *
+ * Phase 1.5: 批量生成章节大纲
+ * 接受卷ID，一次性生成该卷下所有章节大纲（非流式）
+ * 
+ * 请求体：
+ * - volumeId: 卷ID（必填）
+ * - novelId: 小说ID（必填）
+ * - chapterCount: 要生成的章节数（可选，默认根据现有章节推算）
+ * - context: 补充上下文（可选，如卷纲总结等）
+ */
+router.post('/outline-batch', zValidator('json', z.object({
+  volumeId: z.string().min(1),
+  novelId: z.string().min(1),
+  chapterCount: z.number().min(1).max(30).optional(),
+  context: z.string().optional(),
+})), async (c) => {
+  const { volumeId, novelId, chapterCount, context } = c.req.valid('json')
+  const db = drizzle(c.env.DB)
+
+  try {
+    // 1. 获取卷信息
+    const volume = await db
+      .select({
+        id: volumes.id,
+        title: volumes.title,
+        sortOrder: volumes.sortOrder,
+        summary: volumes.summary,
+      })
+      .from(volumes)
+      .where(eq(volumes.id, volumeId))
+      .get()
+
+    if (!volume) {
+      return c.json({ error: '卷不存在' }, 404)
+    }
+
+    // 2. 获取该卷下现有的章节大纲
+    const existingChapters = await db
+      .select({
+        id: chapters.id,
+        title: chapters.title,
+        sortOrder: chapters.sortOrder,
+        outlineId: chapters.outlineId,
+      })
+      .from(chapters)
+      .where(eq(chapters.volumeId, volumeId))
+      .orderBy(chapters.sortOrder)
+      .all()
+
+    // 3. 确定要生成的章节数量
+    const targetCount = chapterCount || Math.max(existingChapters.length, 10)
+
+    // 4. 解析模型配置
+    let llmConfig
+    try {
+      llmConfig = await resolveConfig(db, 'outline_gen', novelId)
+      llmConfig.apiKey = llmConfig.apiKey || (c.env as any)[llmConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
+    } catch {
+      try {
+        llmConfig = await resolveConfig(db, 'chapter_gen', novelId)
+        llmConfig.apiKey = llmConfig.apiKey || (c.env as any)[llmConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
+      } catch {
+        llmConfig = {
+          provider: 'volcengine',
+          modelId: 'doubao-seed-2-pro',
+          apiBase: 'https://ark.cn-beijing.volces.com/api/v3',
+          apiKey: (c.env as any).VOLCENGINE_API_KEY || '',
+          params: { temperature: 0.85, max_tokens: 4096 },
+        }
+      }
+    }
+
+    // 5. 构建批量生成提示词
+    const existingChaptersInfo = existingChapters.length > 0
+      ? `\n\n【现有章节】\n${existingChapters.map((ch, i) => `${i + 1}. 第${ch.sortOrder || i + 1}章《${ch.title}》`).join('\n')}`
+      : ''
+
+    const batchPrompt = `请为小说的某一卷生成完整的章节大纲规划。
+
+【卷信息】：
+- 标题：《${volume.title}》
+- 卷序：第${volume.sortOrder + 1}卷
+${volume.summary ? `- 卷概要：${volume.summary}` : ''}
+
+【生成要求】：
+- 需要规划 ${targetCount} 个章节
+- 每个章节包含：章节标题、本章核心情节（200-300字）、关键冲突点、伏笔安排、人物动态
+- 章节之间要有连贯性，形成完整的故事弧线
+- 注意节奏：开头铺垫、中间发展、高潮迭起、结尾悬念
+${existingChaptersInfo}
+${context ? `\n【补充上下文】：\n${context}` : ''}
+
+请以JSON数组格式输出（不要输出其他内容）：
+[
+  {
+    "chapterTitle": "章节标题",
+    "outline": "本章大纲内容（200-300字）",
+    "keyConflicts": ["关键冲突1", "关键冲突2"],
+    "foreshadowingSetup": ["埋入伏笔1", "收尾伏笔2"],
+    "characterDynamics": "人物动态描述"
+  }
+]
+
+要求：
+1. 输出 ${targetCount} 个章节的大纲规划
+2. 每章大纲质量要高，有具体的情节点而非空泛描述
+3. 合理安排伏笔的埋入和收尾`
+
+    // 6. 调用 LLM 批量生成
+    const base = llmConfig.apiBase || 'https://ark.cn-beijing.volces.com/api/v3'
+    const resp = await fetch(`${base}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${llmConfig.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: llmConfig.modelId,
+        messages: [
+          { role: 'system', content: '你是一个专业的小说大纲助手，擅长构建连贯的章节大纲序列。你只输出JSON，不要其他内容。' },
+          { role: 'user', content: batchPrompt },
+        ],
+        stream: false,
+        temperature: llmConfig.params?.temperature ?? 0.85,
+        max_tokens: 8000, // 批量生成需要更多token
+      }),
+    })
+
+    if (!resp.ok) {
+      const errorText = await resp.text()
+      return c.json({ error: '批量生成失败', details: `${resp.status} ${errorText}` }, 500)
+    }
+
+    const result = await resp.json()
+    const content = result.choices?.[0]?.message?.content || ''
+
+    // 7. 解析JSON结果
+    let parsedOutlines: Array<any>
+    try {
+      // 尝试提取JSON数组（处理可能的markdown代码块包裹）
+      const jsonMatch = content.match(/\[[\s\S]*\]/)
+      if (jsonMatch) {
+        parsedOutlines = JSON.parse(jsonMatch[0])
+      } else {
+        parsedOutlines = JSON.parse(content)
+      }
+    } catch (parseError) {
+      console.warn('Failed to parse batch outline result:', parseError)
+      return c.json({ 
+        error: '解析生成结果失败', 
+        details: 'LLM返回的内容无法解析为JSON数组',
+        raw: content.slice(0, 1000) 
+      }, 500)
+    }
+
+    if (!Array.isArray(parsedOutlines) || parsedOutlines.length === 0) {
+      return c.json({ error: '生成结果为空', details: 'LLM未返回有效的章节大纲' }, 500)
+    }
+
+    // 8. 将生成的大纲写入卷表（v2.0: 存储到 volumes.outline 字段）
+    const createdOutlines: any[] = []
+    
+    // 构建完整的卷大纲文档（Markdown 格式）
+    let volumeOutlineContent = `# 《${volume.title}》章节大纲\n\n`
+    volumeOutlineContent += `生成时间：${new Date().toLocaleString('zh-CN')}\n\n`
+    volumeOutlineContent += `---\n\n`
+
+    for (let i = 0; i < parsedOutlines.length; i++) {
+      const outlineData = parsedOutlines[i]
+      
+      try {
+        // 构建单个章节的大纲内容
+        const chapterOutline = [
+          `## ${outlineData.chapterTitle || `第${i + 1}章`}`,
+          outlineData.outline || '',
+          outlineData.keyConflicts && outlineData.keyConflicts.length > 0 
+            ? `\n**关键冲突**：\n${outlineData.keyConflicts.map((c: string) => `- ${c}`).join('\n')}` 
+            : '',
+          outlineData.foreshadowingSetup && outlineData.foreshadowingSetup.length > 0
+            ? `\n**伏笔安排**：\n${outlineData.foreshadowingSetup.map((f: string) => `- ${f}`).join('\n')}`
+            : '',
+          outlineData.characterDynamics ? `\n**人物动态**：\n${outlineData.characterDynamics}` : '',
+        ].filter(Boolean).join('\n')
+
+        // 追加到卷大纲文档
+        volumeOutlineContent += chapterOutline + '\n\n---\n\n'
+
+        createdOutlines.push({
+          index: i,
+          title: outlineData.chapterTitle || `第${i + 1}章`,
+          action: 'created',
+        })
+      } catch (outlineError) {
+        console.warn(`Failed to process outline ${i}:`, outlineError)
+        createdOutlines.push({
+          index: i,
+          action: 'failed',
+          error: (outlineError as Error).message,
+        })
+      }
+    }
+
+    // 将完整的卷大纲写入 volumes 表
+    try {
+      await db
+        .update(volumes)
+        .set({
+          outline: volumeOutlineContent,
+          updatedAt: sql`(unixepoch())`,
+        })
+        .where(eq(volumes.id, volumeId))
+
+      console.log(`✅ Volume outline updated for volume ${volumeId}`)
+    } catch (updateError) {
+      console.warn('Failed to update volume outline:', updateError)
+      return c.json({ 
+        error: '更新卷大纲失败', 
+        details: (updateError as Error).message 
+      }, 500)
+    }
+
+    console.log(`✅ Batch outline generation complete: ${createdOutlines.filter(o => o.action !== 'failed').length}/${parsedOutlines.length} chapters planned`)
+
+    return c.json({
+      ok: true,
+      message: `成功生成卷大纲，包含 ${createdOutlines.filter(o => o.action !== 'failed').length} 个章节规划`,
+      outlines: createdOutlines,
+      totalRequested: parsedOutlines.length,
+      successCount: createdOutlines.filter(o => o.action !== 'failed').length,
+      volumeOutlinePreview: volumeOutlineContent.slice(0, 500),  // 返回预览
+    })
+  } catch (error) {
+    console.error('Batch outline generation failed:', error)
+    return c.json(
+      { error: '批量生成异常', details: (error as Error).message },
       500
     )
   }

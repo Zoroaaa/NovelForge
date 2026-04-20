@@ -7,6 +7,7 @@ export interface ToolCallEvent {
   name: string
   args: Record<string, any>
   result: string
+  status?: 'running' | 'done'  // Phase 1.4: 工具调用状态
 }
 
 export function useGenerate() {
@@ -16,14 +17,22 @@ export function useGenerate() {
   const [toolCalls, setToolCalls] = useState<ToolCallEvent[]>([])
   const stopRef = useRef<(() => void) | null>(null)
 
-  const generate = (chapterId: string, novelId: string) => {
+  const generate = (chapterId: string, novelId: string, options?: {
+    mode?: 'generate' | 'continue' | 'rewrite'
+    existingContent?: string
+  }) => {
     setOutput('')
     setStatus('generating')
     setContextInfo(null)
     setToolCalls([])
 
     stopRef.current = streamGenerate(
-      { chapterId, novelId },
+      { 
+        chapterId, 
+        novelId,
+        mode: options?.mode || 'generate',
+        existingContent: options?.existingContent,
+      },
       // onChunk
       (chunk) => {
         try {
@@ -32,8 +41,18 @@ export function useGenerate() {
             setContextInfo(data.context)
             return
           }
+          // Phase 1.4: 处理工具调用事件（包含 status 字段）
           if (data.type === 'tool_call') {
-            setToolCalls((prev) => [...prev, { name: data.name, args: data.args, result: data.result }])
+            setToolCalls((prev) => {
+              // 如果是同一个工具的更新，替换而不是追加
+              const existingIndex = prev.findIndex(tc => tc.name === data.name && tc.status === 'running')
+              if (existingIndex >= 0 && data.status === 'done') {
+                const updated = [...prev]
+                updated[existingIndex] = { name: data.name, args: data.args, result: data.result || '' }
+                return updated
+              }
+              return [...prev, { name: data.name, args: data.args, result: data.result || '' }]
+            })
             return
           }
           if (data.content) {
