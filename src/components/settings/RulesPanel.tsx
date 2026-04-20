@@ -52,7 +52,12 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   
   // 表单状态
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    category: 'style' | 'pacing' | 'character' | 'plot' | 'world' | 'taboo' | 'custom'
+    title: string
+    content: string
+    priority: number
+  }>({
     category: 'style',
     title: '',
     content: '',
@@ -129,7 +134,7 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
   const handleEdit = (rule: WritingRule) => {
     setEditingId(rule.id)
     setFormData({
-      category: rule.category,
+      category: rule.category as 'style' | 'pacing' | 'character' | 'plot' | 'world' | 'taboo' | 'custom',
       title: rule.title,
       content: rule.content || '',
       priority: rule.priority,
@@ -187,7 +192,7 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
                   <Label>类别</Label>
                   <Select 
                     value={formData.category} 
-                    onValueChange={(v) => setFormData(prev => ({ ...prev, category: v }))}
+                    onValueChange={(v) => setFormData(prev => ({ ...prev, category: v as 'style' | 'pacing' | 'character' | 'plot' | 'world' | 'taboo' | 'custom' }))}
                   >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>

@@ -75,7 +75,7 @@ router.get('/:novelId/history', async (c) => {
     .all()
 
   return c.json({ history })
-}
+})
 
 /**
  * POST /master-outline

@@ -35,7 +35,7 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
 
   const { data: configs, isLoading } = useQuery({
     queryKey: ['model-configs', novelId],
-    queryFn: () => api.settings.list(novelId),
+    queryFn: () => novelId ? api.settings.list(novelId) : Promise.resolve({ settings: [], total: 0 }),
   })
 
   const createMutation = useMutation({
@@ -78,7 +78,6 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
     e.preventDefault()
     if (!modelId) return
     createMutation.mutate({
-      scope: novelId ? 'novel' : 'global',
       stage,
       provider,
       modelId,
@@ -86,7 +85,7 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
       apiKeyEnv: selectedProvider?.keyEnv || 'CUSTOM_API_KEY',
       apiKey: apiKey || undefined,
       ...(novelId ? { novelId } : {}),
-    })
+    } as any)
   }
 
   const handleTest = async () => {
@@ -231,8 +230,8 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
       )}
 
       <div className="space-y-2">
-        {configs && configs.length > 0 ? (
-          configs.map((config: ModelConfig) => (
+        {configs && configs.settings && configs.settings.length > 0 ? (
+          configs.settings.map((config: any) => (
             <Card key={config.id}>
               <CardContent className="py-3">
                 <div className="flex items-center justify-between">

@@ -50,12 +50,18 @@ export function SettingsPanel({ novelId }: SettingsPanelProps) {
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set())
   
   // 表单状态
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    type: 'worldview' | 'power_system' | 'faction' | 'geography' | 'item_skill' | 'misc'
+    category: string
+    name: string
+    content: string
+    importance: 'high' | 'normal' | 'low'
+  }>({
     type: 'worldview',
     category: '',
     name: '',
     content: '',
-    importance: 'normal' as 'high' | 'normal' | 'low',
+    importance: 'normal',
   })
 
   // 查询所有设定
@@ -117,7 +123,7 @@ export function SettingsPanel({ novelId }: SettingsPanelProps) {
   const handleEdit = (setting: NovelSetting) => {
     setEditingId(setting.id)
     setFormData({
-      type: setting.type,
+      type: setting.type as 'worldview' | 'power_system' | 'faction' | 'geography' | 'item_skill' | 'misc',
       category: setting.category || '',
       name: setting.name,
       content: setting.content || '',
@@ -185,7 +191,7 @@ export function SettingsPanel({ novelId }: SettingsPanelProps) {
                   <Label>类型</Label>
                   <Select 
                     value={formData.type} 
-                    onValueChange={(v) => setFormData(prev => ({ ...prev, type: v }))}
+                    onValueChange={(v) => setFormData(prev => ({ ...prev, type: v as 'worldview' | 'power_system' | 'faction' | 'geography' | 'item_skill' | 'misc' }))}
                   >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>

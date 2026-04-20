@@ -32,11 +32,11 @@ export default function WorkspacePage() {
 
   const { data: modelConfigs } = useQuery({
     queryKey: ['model-configs', id],
-    queryFn: () => api.settings.list(id),
+    queryFn: () => id ? api.settings.list(id) : Promise.resolve({ settings: [], total: 0 }),
     enabled: !!id,
   })
 
-  const showModelWarning = modelConfigs && modelConfigs.length === 0
+  const showModelWarning = modelConfigs && modelConfigs.settings && modelConfigs.settings.length === 0
 
   const activeChapter = chapters?.find(c => c.id === activeChapterId)
 

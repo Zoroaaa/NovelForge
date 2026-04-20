@@ -83,7 +83,7 @@ export function ChapterEditor({ chapter, injectedContent, onContentInserted }: C
         <EditorContent
           extensions={[StarterKit]}
           ref={editorRef as any}
-          initialContent={chapter.content || '<p></p>'}
+          initialContent={chapter.content || '<p></p>' as any}
           onUpdate={({ editor }: any) => {
             editorRef.current = editor
             const html = editor.getHTML()
