@@ -91,8 +91,8 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
       title: title.trim(),
       sortOrder: maxOrder + 1,
       content: null,
-      volumeId: volumeId || null,
-      outlineId: outlineId || null,
+      volumeId: volumeId === 'none' ? null : volumeId || null,
+      outlineId: outlineId === 'none' ? null : outlineId || null,
     })
   }
 
@@ -129,7 +129,7 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
               <Select value={outlineId} onValueChange={setOutlineId}>
                 <SelectTrigger><SelectValue placeholder="选择章节大纲" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">无</SelectItem>
+                  <SelectItem value="none">无</SelectItem>
                   {chapterOutlines.map(o => (
                     <SelectItem key={o.id} value={o.id}>{o.title}</SelectItem>
                   ))}
@@ -141,7 +141,7 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
               <Select value={volumeId} onValueChange={setVolumeId}>
                 <SelectTrigger><SelectValue placeholder="选择所属卷" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">无</SelectItem>
+                  <SelectItem value="none">无</SelectItem>
                   {volumes?.map(v => (
                     <SelectItem key={v.id} value={v.id}>{v.title}</SelectItem>
                   ))}
