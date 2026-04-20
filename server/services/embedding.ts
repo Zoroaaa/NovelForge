@@ -5,7 +5,10 @@
  * 支持 Vectorize 索引的增删改查
  */
 
+import { drizzle } from 'drizzle-orm/d1'
+import { eq, and } from 'drizzle-orm'
 import type { Env } from '../lib/types'
+import { vectorIndex } from '../db/schema'
 
 export interface VectorMetadata {
   novelId: string
@@ -171,6 +174,20 @@ export function chunkText(
 }
 
 /**
+ * 计算内容hash（用于判断是否需要重新索引）
+ */
+function hashContent(content: string): string {
+  // 简单的hash实现
+  let hash = 0
+  for (let i = 0; i < content.length; i++) {
+    const char = content.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash
+  }
+  return hash.toString(16)
+}
+
+/**
  * 为大纲/章节等内容生成向量并索引
  */
 export async function indexContent(
@@ -185,13 +202,53 @@ export async function indexContent(
     return []
   }
 
-  const vectorIds: string[] = []
+  const db = drizzle(env.DB)
+  const contentHash = hashContent(content)
   const chunks = chunkText(content)
+  const vectorIds: string[] = []
 
+  // 检查是否已有索引且内容未变化
+  const existingIndex = await db
+    .select()
+    .from(vectorIndex)
+    .where(
+      and(
+        eq(vectorIndex.sourceType, sourceType),
+        eq(vectorIndex.sourceId, sourceId)
+      )
+    )
+    .limit(1)
+    .get()
+
+  if (existingIndex && existingIndex.contentHash === contentHash) {
+    console.log(`Content ${sourceType}:${sourceId} unchanged, skipping reindex`)
+    return []
+  }
+
+  // 删除旧索引（如果存在）
+  if (existingIndex) {
+    await db.delete(vectorIndex).where(eq(vectorIndex.sourceId, sourceId))
+    // 删除Vectorize中的旧向量
+    try {
+      const oldChunks = await db
+        .select()
+        .from(vectorIndex)
+        .where(eq(vectorIndex.sourceId, sourceId))
+        .all()
+      for (const old of oldChunks) {
+        await deleteVector(env.VECTORIZE, old.id)
+      }
+    } catch (e) {
+      console.warn('Failed to delete old vectors:', e)
+    }
+  }
+
+  // 创建新索引
   for (let i = 0; i < chunks.length; i++) {
     const vectorId = `${sourceType}_${sourceId}_${i}`
     const values = await embedText(env.AI, chunks[i])
 
+    // 插入到Vectorize
     await upsertVector(env.VECTORIZE, vectorId, values, {
       novelId,
       sourceType,
@@ -200,9 +257,20 @@ export async function indexContent(
       content: chunks[i]
     })
 
+    // 记录到vector_index表
+    await db.insert(vectorIndex).values({
+      id: vectorId,
+      novelId,
+      sourceType,
+      sourceId,
+      chunkIndex: i,
+      contentHash: i === 0 ? contentHash : null, // 只在第一个chunk记录hash
+    })
+
     vectorIds.push(vectorId)
   }
 
+  console.log(`Indexed ${vectorIds.length} vectors for ${sourceType}:${sourceId}`)
   return vectorIds
 }
 

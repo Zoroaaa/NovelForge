@@ -13,8 +13,10 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
+import { drizzle } from 'drizzle-orm/d1'
 import type { Env } from '../lib/types'
 import { generateChapter } from '../services/agent'
+import { generationLogs } from '../db/schema'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -41,6 +43,8 @@ router.post('/chapter', async (c) => {
   const { readable, writable } = new TransformStream()
   const writer = writable.getWriter()
   const encoder = new TextEncoder()
+  const startTime = Date.now()
+  let modelId = 'unknown'
 
   // 启动异步生成流程
   generateChapter(
@@ -53,13 +57,50 @@ router.post('/chapter', async (c) => {
       writer.write(encoder.encode(data))
     },
     // onDone
-    (usage) => {
+    async (usage) => {
+      const durationMs = Date.now() - startTime
+      
+      // 记录生成日志
+      try {
+        const db = drizzle(c.env.DB)
+        await db.insert(generationLogs).values({
+          novelId,
+          chapterId,
+          stage: 'chapter_gen',
+          modelId,
+          promptTokens: usage.prompt_tokens,
+          completionTokens: usage.completion_tokens,
+          durationMs,
+          status: 'success',
+        })
+      } catch (logError) {
+        console.error('Failed to write generation log:', logError)
+      }
+
       const doneData = `data: ${JSON.stringify({ type: 'done', usage })}\n\ndata: [DONE]\n\n`
       writer.write(encoder.encode(doneData))
       writer.close()
     },
     // onError
-    (error) => {
+    async (error) => {
+      const durationMs = Date.now() - startTime
+      
+      // 记录错误日志
+      try {
+        const db = drizzle(c.env.DB)
+        await db.insert(generationLogs).values({
+          novelId,
+          chapterId,
+          stage: 'chapter_gen',
+          modelId,
+          durationMs,
+          status: 'error',
+          errorMsg: error.message,
+        })
+      } catch (logError) {
+        console.error('Failed to write generation log:', logError)
+      }
+
       const errorData = `data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`
       writer.write(encoder.encode(errorData))
       writer.close()

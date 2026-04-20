@@ -34,20 +34,26 @@ import {
 interface CharacterImageUploadProps {
   characterId: string
   characterName: string
-  currentImageUrl?: string | null
-  onUploadSuccess?: (imageUrl: string) => void
+  currentImageR2Key?: string | null
+  onUploadSuccess?: () => void
   onAnalysisComplete?: (analysis: any) => void
 }
 
 export function CharacterImageUpload({
   characterId,
   characterName,
-  currentImageUrl,
+  currentImageR2Key,
   onUploadSuccess,
   onAnalysisComplete,
 }: CharacterImageUploadProps) {
   const [open, setOpen] = useState(false)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(currentImageUrl || null)
+  // 从R2 key构建公开URL
+  const getImageUrl = (r2Key: string | null) => {
+    if (!r2Key) return null
+    // 使用Cloudflare R2公开访问URL格式
+    return `https://pub-${import.meta.env.VITE_R2_ACCOUNT_ID || ''}.r2.dev/${r2Key}`
+  }
+  const [previewUrl, setPreviewUrl] = useState<string | null>(getImageUrl(currentImageR2Key || null))
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<any>(null)
@@ -72,9 +78,9 @@ export function CharacterImageUpload({
       return response.json()
     },
     onSuccess: (data) => {
-      if (data.imageUrl) {
-        setPreviewUrl(data.imageUrl)
-        onUploadSuccess?.(data.imageUrl)
+      if (data.imageR2Key) {
+        setPreviewUrl(getImageUrl(data.imageR2Key))
+        onUploadSuccess?.()
         toast.success('✅ 图片上传成功')
       }
 

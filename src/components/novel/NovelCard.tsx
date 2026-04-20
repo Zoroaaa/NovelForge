@@ -8,7 +8,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { MoreHorizontal, BookOpen, FileText, Trash2, Edit } from 'lucide-react'
+import { 
+  MoreHorizontal, 
+  BookOpen, 
+  FileText, 
+  Trash2, 
+  Edit, 
+  Clock,
+  Sparkles,
+  ChevronRight
+} from 'lucide-react'
 import type { Novel } from '@/lib/types'
 
 interface NovelCardProps {
@@ -18,34 +27,96 @@ interface NovelCardProps {
 }
 
 const genreColors: Record<string, string> = {
-  '玄幻': 'bg-purple-100 text-purple-800',
-  '仙侠': 'bg-blue-100 text-blue-800',
-  '都市': 'bg-green-100 text-green-800',
-  '科幻': 'bg-cyan-100 text-cyan-800',
-  '其他': 'bg-gray-100 text-gray-800',
+  '玄幻': 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
+  '仙侠': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+  '都市': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+  '科幻': 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300',
+  '历史': 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+  '悬疑': 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+  '其他': 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300',
+}
+
+const statusConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+  draft: { 
+    label: '草稿', 
+    color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+    icon: <Sparkles className="h-3 w-3" />
+  },
+  writing: { 
+    label: '连载中', 
+    color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+    icon: <BookOpen className="h-3 w-3" />
+  },
+  completed: { 
+    label: '已完成', 
+    color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+    icon: <FileText className="h-3 w-3" />
+  },
+  archived: { 
+    label: '已归档', 
+    color: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300',
+    icon: <Clock className="h-3 w-3" />
+  },
 }
 
 export function NovelCard({ novel, onEdit, onDelete }: NovelCardProps) {
   const navigate = useNavigate()
+  const status = statusConfig[novel.status]
+
+  // 生成渐变背景色（基于小说标题）
+  const getGradient = (title: string) => {
+    const colors = [
+      'from-purple-500/20 to-blue-500/20',
+      'from-blue-500/20 to-cyan-500/20',
+      'from-green-500/20 to-emerald-500/20',
+      'from-orange-500/20 to-red-500/20',
+      'from-pink-500/20 to-rose-500/20',
+    ]
+    const index = title.charCodeAt(0) % colors.length
+    return colors[index]
+  }
 
   return (
-    <Card className="group hover:shadow-lg transition-all duration-200 cursor-pointer">
+    <Card className="group relative overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer border-0 bg-card/50 backdrop-blur-sm">
+      {/* 顶部渐变条 */}
+      <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${getGradient(novel.title)}`} />
+      
       <CardContent className="p-6">
         <div className="flex items-start justify-between mb-4">
           <div
-            className="flex-1"
+            className="flex-1 min-w-0"
             onClick={() => navigate(`/novels/${novel.id}`)}
           >
-            <h3 className="text-lg font-semibold mb-2 line-clamp-1">{novel.title}</h3>
-            {novel.genre && (
-              <Badge variant="secondary" className={genreColors[novel.genre] || genreColors['其他']}>
-                {novel.genre}
-              </Badge>
-            )}
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="text-lg font-semibold line-clamp-1 group-hover:text-primary transition-colors">
+                {novel.title}
+              </h3>
+              <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-1" />
+            </div>
+            
+            <div className="flex items-center gap-2 flex-wrap">
+              {novel.genre && (
+                <Badge variant="secondary" className={`${genreColors[novel.genre] || genreColors['其他']} text-xs`}>
+                  {novel.genre}
+                </Badge>
+              )}
+              {status && (
+                <Badge variant="secondary" className={`${status.color} text-xs flex items-center gap-1`}>
+                  {status.icon}
+                  {status.label}
+                </Badge>
+              )}
+            </div>
           </div>
+          
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -56,7 +127,7 @@ export function NovelCard({ novel, onEdit, onDelete }: NovelCardProps) {
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onEdit(novel)}>
                 <Edit className="mr-2 h-4 w-4" />
-                编辑
+                编辑信息
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onDelete(novel.id)} className="text-destructive">
                 <Trash2 className="mr-2 h-4 w-4" />
@@ -66,19 +137,55 @@ export function NovelCard({ novel, onEdit, onDelete }: NovelCardProps) {
           </DropdownMenu>
         </div>
 
-        {novel.description && (
-          <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{novel.description}</p>
+        {novel.description ? (
+          <p className="text-sm text-muted-foreground mb-4 line-clamp-2 leading-relaxed">
+            {novel.description}
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground/50 mb-4 italic">
+            暂无描述
+          </p>
         )}
 
-        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <FileText className="h-3 w-3" />
-            {(novel.wordCount / 1000).toFixed(1)}k 字
-          </span>
-          <span>{novel.chapterCount} 章</span>
-          <span>{new Date(novel.updatedAt).toLocaleDateString()}</span>
+        {/* 统计信息 */}
+        <div className="flex items-center justify-between pt-4 border-t border-border/50">
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5" />
+              <span className="font-medium">{(novel.wordCount / 1000).toFixed(1)}k</span>
+              <span>字</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <BookOpen className="h-3.5 w-3.5" />
+              <span className="font-medium">{novel.chapterCount}</span>
+              <span>章</span>
+            </span>
+          </div>
+          
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Clock className="h-3 w-3" />
+            <span>{formatDate(novel.updatedAt)}</span>
+          </div>
         </div>
       </CardContent>
     </Card>
   )
+}
+
+// 格式化日期为相对时间
+function formatDate(timestamp: number): string {
+  const date = new Date(timestamp)
+  const now = new Date()
+  const diff = now.getTime() - date.getTime()
+  
+  const minutes = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days = Math.floor(diff / 86400000)
+  
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes}分钟前`
+  if (hours < 24) return `${hours}小时前`
+  if (days < 30) return `${days}天前`
+  
+  return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
 }

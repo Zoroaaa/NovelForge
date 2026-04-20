@@ -96,3 +96,42 @@ export const modelConfigs = sqliteTable('model_configs', {
   isActive: integer('is_active').notNull().default(1),
   ...timestamps,
 })
+
+export const generationLogs = sqliteTable('generation_logs', {
+  id: id(),
+  novelId: text('novel_id').notNull(),
+  chapterId: text('chapter_id'),
+  stage: text('stage').notNull(),
+  modelId: text('model_id').notNull(),
+  contextSnapshot: text('context_snapshot'),
+  promptTokens: integer('prompt_tokens'),
+  completionTokens: integer('completion_tokens'),
+  durationMs: integer('duration_ms'),
+  status: text('status').notNull().default('success'),
+  errorMsg: text('error_msg'),
+  createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
+})
+
+export const exports = sqliteTable('exports', {
+  id: id(),
+  novelId: text('novel_id').notNull(),
+  format: text('format').notNull(),
+  scope: text('scope').notNull(),
+  scopeMeta: text('scope_meta'),
+  r2Key: text('r2_key'),
+  fileSize: integer('file_size'),
+  status: text('status').notNull().default('pending'),
+  errorMsg: text('error_msg'),
+  createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
+  expiresAt: integer('expires_at'),
+})
+
+export const vectorIndex = sqliteTable('vector_index', {
+  id: text('id').primaryKey(),
+  novelId: text('novel_id').notNull(),
+  sourceType: text('source_type').notNull(),
+  sourceId: text('source_id').notNull(),
+  chunkIndex: integer('chunk_index').notNull().default(0),
+  contentHash: text('content_hash'),
+  createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
+})

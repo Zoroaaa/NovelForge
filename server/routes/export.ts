@@ -12,19 +12,23 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
+import { drizzle } from 'drizzle-orm/d1'
+import { eq } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import {
   exportAsMarkdown,
   exportAsTxt,
   exportAsEpub,
+  exportAsPdf,
   exportAsZip,
 } from '../services/export'
+import { exports as exportsTable } from '../db/schema'
 
 const router = new Hono<{ Bindings: Env }>()
 
 const ExportSchema = z.object({
   novelId: z.string().min(1),
-  format: z.enum(['md', 'txt', 'epub', 'zip']),
+  format: z.enum(['md', 'txt', 'epub', 'pdf', 'zip']),
   volumeIds: z.array(z.string()).optional(),
   includeTOC: z.boolean().optional(),
   includeMeta: z.boolean().optional(),
@@ -37,6 +41,18 @@ const ExportSchema = z.object({
  */
 router.post('/', zValidator('json', ExportSchema), async (c) => {
   const options = c.req.valid('json')
+  const db = drizzle(c.env.DB)
+  
+  // 创建导出记录
+  const exportRecord = await db.insert(exportsTable).values({
+    novelId: options.novelId,
+    format: options.format,
+    scope: options.volumeIds && options.volumeIds.length > 0 ? 'volume' : 'full',
+    scopeMeta: options.volumeIds ? JSON.stringify({ volumeIds: options.volumeIds }) : null,
+    status: 'processing',
+  }).returning()
+  
+  const exportId = exportRecord[0].id
 
   try {
     let blob: Blob
@@ -53,11 +69,37 @@ router.post('/', zValidator('json', ExportSchema), async (c) => {
       case 'epub':
         blob = await exportAsEpub(c.env, options)
         break
+      case 'pdf':
+        blob = await exportAsPdf(c.env, options)
+        break
       case 'zip':
         blob = await exportAsZip(c.env, options)
         break
       default:
+        // 更新记录为失败
+        await db.update(exportsTable).set({
+          status: 'error',
+          errorMsg: `Unsupported format: ${options.format}`,
+        }).where(eq(exportsTable.id, exportId))
         return c.json({ error: `Unsupported format: ${options.format}` }, 400)
+    }
+
+    // 上传到R2存储
+    let r2Key: string | null = null
+    if (c.env.STORAGE) {
+      r2Key = `exports/${options.novelId}/${exportId}.${fileExtension}`
+      await c.env.STORAGE.put(r2Key, blob, {
+        httpMetadata: {
+          contentType,
+        },
+      })
+      
+      // 更新记录为完成
+      await db.update(exportsTable).set({
+        status: 'done',
+        r2Key,
+        fileSize: blob.size,
+      }).where(eq(exportsTable.id, exportId))
     }
 
     // 获取小说标题用于文件名
@@ -68,10 +110,18 @@ router.post('/', zValidator('json', ExportSchema), async (c) => {
         'Content-Type': contentType,
         'Content-Disposition': `attachment; filename="${filename}"`,
         'Content-Length': String(blob.size),
+        'X-Export-Id': exportId,
       },
     })
   } catch (error) {
     console.error('Export failed:', error)
+    
+    // 更新记录为失败
+    await db.update(exportsTable).set({
+      status: 'error',
+      errorMsg: (error as Error).message,
+    }).where(eq(exportsTable.id, exportId))
+    
     return c.json(
       {
         error: 'Export failed',
@@ -112,6 +162,13 @@ router.get('/formats', (c) => {
         mimeType: 'application/epub+zip',
       },
       {
+        id: 'pdf',
+        name: 'PDF 文档',
+        description: 'PDF 格式，适合打印和分享（生成可打印HTML）',
+        extension: '.pdf',
+        mimeType: 'text/html',
+      },
+      {
         id: 'zip',
         name: 'ZIP 打包',
         description: '包含所有格式的压缩包（MD + TXT + EPUB）',
@@ -132,6 +189,8 @@ function getContentType(format: string): string {
       return 'text/plain; charset=utf-8'
     case 'epub':
       return 'application/epub+zip'
+    case 'pdf':
+      return 'text/html; charset=utf-8'
     case 'zip':
       return 'application/zip'
     default:
@@ -140,7 +199,9 @@ function getContentType(format: string): string {
 }
 
 function getFileExtension(format: string): string {
-  return format === 'epub' ? 'epub' : format
+  if (format === 'epub') return 'epub'
+  if (format === 'pdf') return 'html'
+  return format
 }
 
 export { router as export }

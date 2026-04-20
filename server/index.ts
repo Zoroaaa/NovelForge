@@ -9,6 +9,7 @@ import { generate } from './routes/generate'
 import { settings } from './routes/settings'
 import { vectorize } from './routes/vectorize'
 import * as exportModule from './routes/export'
+import { mcp } from './routes/mcp'
 
 export const app = new Hono<{ Bindings: Env }>().basePath('/api')
 
@@ -21,5 +22,6 @@ app.route('/generate', generate)
 app.route('/settings', settings)
 app.route('/vectorize', vectorize)
 app.route('/export', exportModule.export)
+app.route('/mcp', mcp)
 
 app.get('/health', (c) => c.json({ ok: true, ts: Date.now(), phase: 3 }))

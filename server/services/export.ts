@@ -5,6 +5,7 @@
  * - Markdown (.md)
  * - 纯文本 (.txt)
  * - EPUB 电子书 (.epub)
+ * - PDF 文档 (.pdf)
  * - ZIP 打包下载 (.zip)
  */
 
@@ -14,7 +15,7 @@ import { eq, and, isNull, asc } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 
 export interface ExportOptions {
-  format: 'md' | 'txt' | 'epub' | 'zip'
+  format: 'md' | 'txt' | 'epub' | 'pdf' | 'zip'
   novelId: string
   volumeIds?: string[]  // 按卷范围导出（可选）
   includeTOC?: boolean  // 是否包含目录
@@ -212,6 +213,155 @@ export async function exportAsEpub(env: Env, options: ExportOptions): Promise<Bl
     console.error('EPUB generation failed:', error)
     throw new Error(`EPUB生成失败: ${(error as Error).message}`)
   }
+}
+
+/**
+ * 导出为 PDF 格式（使用 HTML + CSS 生成）
+ * 
+ * 注意：此实现生成可打印的 HTML，实际 PDF 转换需要浏览器渲染
+ * 生产环境建议使用 Cloudflare Browser Rendering API
+ */
+export async function exportAsPdf(env: Env, options: ExportOptions): Promise<Blob> {
+  const db = drizzle(env.DB)
+  const data = await loadNovelData(db, options)
+
+  // 生成适合打印的 HTML
+  let html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>${escapeHtml(data.title)}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 2cm;
+    }
+    body {
+      font-family: "Noto Serif SC", "SimSun", serif;
+      font-size: 12pt;
+      line-height: 1.8;
+      color: #333;
+    }
+    .title-page {
+      text-align: center;
+      padding-top: 30%;
+      page-break-after: always;
+    }
+    .title-page h1 {
+      font-size: 28pt;
+      margin-bottom: 2em;
+    }
+    .title-page .meta {
+      font-size: 12pt;
+      color: #666;
+    }
+    .toc {
+      page-break-after: always;
+    }
+    .toc h2 {
+      text-align: center;
+      margin-bottom: 2em;
+    }
+    .toc ul {
+      list-style: none;
+      padding: 0;
+    }
+    .toc li {
+      margin: 0.5em 0;
+      border-bottom: 1px dotted #ccc;
+    }
+    .chapter {
+      page-break-before: always;
+    }
+    .chapter h2 {
+      text-align: center;
+      font-size: 18pt;
+      margin-bottom: 2em;
+    }
+    .chapter-content {
+      text-indent: 2em;
+    }
+    .chapter-content p {
+      margin: 0.5em 0;
+    }
+  </style>
+</head>
+<body>
+`
+
+  // 标题页
+  if (options.includeMeta !== false) {
+    html += `
+  <div class="title-page">
+    <h1>${escapeHtml(data.title)}</h1>
+    <div class="meta">
+      ${data.author ? `<p>作者：${escapeHtml(data.author)}</p>` : ''}
+      ${data.description ? `<p>${escapeHtml(data.description)}</p>` : ''}
+      ${data.genre ? `<p>类型：${escapeHtml(data.genre)}</p>` : ''}
+    </div>
+  </div>
+`
+  }
+
+  // 目录
+  if (options.includeTOC !== false && data.chapters.length > 0) {
+    html += `
+  <div class="toc">
+    <h2>目录</h2>
+    <ul>
+${data.chapters.map((ch, idx) => `      <li>第 ${idx + 1} 章 ${escapeHtml(ch.title)}</li>`).join('\n')}
+    </ul>
+  </div>
+`
+  }
+
+  // 正文
+  data.chapters.forEach((ch) => {
+    html += `
+  <div class="chapter">
+    <h2>${escapeHtml(ch.title)}</h2>
+    <div class="chapter-content">
+${ch.content ? htmlToPdfContent(ch.content) : '<p>（暂无内容）</p>'}
+    </div>
+  </div>
+`
+  })
+
+  html += `
+</body>
+</html>`
+
+  // 返回 HTML Blob（客户端可调用 window.print() 或 puppeteer 转换为 PDF）
+  return new Blob([html], { type: 'text/html; charset=utf-8' })
+}
+
+/**
+ * 将 HTML 内容转换为适合 PDF 的格式
+ */
+function htmlToPdfContent(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '</p><p>')
+    .replace(/<\/p>/gi, '</p>\n')
+    .replace(/<p[^>]*>/gi, '<p>')
+    .replace(/<\/p>/gi, '</p>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+}
+
+/**
+ * HTML 转义
+ */
+function escapeHtml(text: string): string {
+  const div = { toString: () => '' }
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
 }
 
 /**

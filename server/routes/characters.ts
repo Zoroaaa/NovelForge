@@ -124,10 +124,10 @@ router.post('/:id/image', async (c) => {
       }
     )
 
-    // 更新数据库中的图片 URL
+    // 更新数据库中的图片 key
     await db
       .update(t)
-      .set({ imageUrl: result.url })
+      .set({ imageR2Key: result.key })
       .where(eq(t.id, characterId))
 
     // 如果有分析结果，返回建议的描述更新
@@ -177,7 +177,7 @@ router.post('/:id/analyze-image', zValidator('json', z.object({
       return c.json({ error: 'Character not found' }, 404)
     }
 
-    const imageUrl = c.req.valid('json').imageUrl || character.imageUrl
+    const imageUrl = c.req.valid('json').imageUrl || (character.imageR2Key ? `https://pub-${c.env.STORAGE.bucketName}.${c.env.STORAGE.accountId}.r2.dev/${character.imageR2Key}` : null)
     if (!imageUrl) {
       return c.json({ error: 'No image available for analysis' }, 400)
     }

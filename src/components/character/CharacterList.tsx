@@ -188,8 +188,8 @@ export function CharacterList({ novelId }: CharacterListProps) {
                   <CharacterImageUpload
                     characterId={character.id}
                     characterName={character.name}
-                    currentImageUrl={character.imageUrl}
-                    onUploadSuccess={(url) => {
+                    currentImageR2Key={character.imageR2Key}
+                    onUploadSuccess={() => {
                       queryClient.invalidateQueries({ queryKey: ['characters', novelId] })
                     }}
                   />
