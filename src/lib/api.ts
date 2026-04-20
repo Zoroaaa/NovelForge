@@ -29,7 +29,7 @@ export function streamGenerate(
 ): () => void {
   const controller = new AbortController()
 
-  fetch('/api/v1/generate/chapter', {
+  fetch('/api/generate/chapter', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: j(payload),
@@ -74,91 +74,91 @@ export function streamGenerate(
 
 export const api = {
   novels: {
-    list:   ()                    => req<Novel[]>('/api/v1/novels'),
-    get:    (id: string)          => req<Novel>(`/api/v1/novels/${id}`),
-    create: (body: NovelInput)    => req<Novel>('/api/v1/novels', { method: 'POST', body: j(body) }),
+    list:   ()                    => req<Novel[]>('/api/novels'),
+    get:    (id: string)          => req<Novel>(`/api/novels/${id}`),
+    create: (body: NovelInput)    => req<Novel>('/api/novels', { method: 'POST', body: j(body) }),
     update: (id: string, body: Partial<NovelInput>) =>
-                                   req<Novel>(`/api/v1/novels/${id}`, { method: 'PATCH', body: j(body) }),
-    delete: (id: string)          => req(`/api/v1/novels/${id}`, { method: 'DELETE' }),
+                                   req<Novel>(`/api/novels/${id}`, { method: 'PATCH', body: j(body) }),
+    delete: (id: string)          => req(`/api/novels/${id}`, { method: 'DELETE' }),
   },
   
   // v2.0: 总纲管理（替代原 outlines）
   masterOutline: {
-    get:    (novelId: string)      => req<{ exists: boolean; outline: MasterOutline | null }>(`/api/v1/master-outline/${novelId}`),
+    get:    (novelId: string)      => req<{ exists: boolean; outline: MasterOutline | null }>(`/api/master-outline/${novelId}`),
     create: (body: { novelId: string; title: string; content: string; summary?: string }) =>
-                                   req<MasterOutline>('/api/v1/master-outline', { method: 'POST', body: j(body) }),
+                                   req<MasterOutline>('/api/master-outline', { method: 'POST', body: j(body) }),
     update: (id: string, body: { title?: string; content?: string; summary?: string }) =>
-                                   req<MasterOutline>(`/api/v1/master-outline/${id}`, { method: 'PUT', body: j(body) }),
-    history: (novelId: string)     => req<MasterOutline[]>(`/api/v1/master-outline/${novelId}/history`),
-    delete: (id: string)          => req(`/api/v1/master-outline/${id}`, { method: 'DELETE' }),
+                                   req<MasterOutline>(`/api/master-outline/${id}`, { method: 'PUT', body: j(body) }),
+    history: (novelId: string)     => req<MasterOutline[]>(`/api/master-outline/${novelId}/history`),
+    delete: (id: string)          => req(`/api/master-outline/${id}`, { method: 'DELETE' }),
   },
 
   // v2.0: 小说设定管理
   settings: {
     list:   (novelId: string, params?: { type?: string; importance?: string }) =>
-                                   req<{ settings: NovelSetting[]; total: number }>(`/api/v1/settings/${novelId}${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
-    get:    (novelId: string, id: string) => req<{ setting: NovelSetting }>(`/api/v1/settings/${novelId}/${id}`),
+                                   req<{ settings: NovelSetting[]; total: number }>(`/api/settings/${novelId}${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    get:    (novelId: string, id: string) => req<{ setting: NovelSetting }>(`/api/settings/${novelId}/${id}`),
     create: (body: { novelId: string; type: string; name: string; content: string }) =>
-                                   req<NovelSetting>('/api/v1/settings', { method: 'POST', body: j(body) }),
+                                   req<NovelSetting>('/api/settings', { method: 'POST', body: j(body) }),
     update: (id: string, body: Partial<Pick<NovelSetting, 'type' | 'category' | 'name' | 'content' | 'importance' | 'sortOrder'>>) =>
-                                   req<NovelSetting>(`/api/v1/settings/${id}`, { method: 'PUT', body: j(body) }),
-    delete: (id: string)          => req(`/api/v1/settings/${id}`, { method: 'DELETE' }),
-    tree:   (novelId: string)     => req<{ tree: any[]; stats: Record<string, number>; total: number }>(`/api/v1/settings/tree/${novelId}`),
+                                   req<NovelSetting>(`/api/settings/${id}`, { method: 'PUT', body: j(body) }),
+    delete: (id: string)          => req(`/api/settings/${id}`, { method: 'DELETE' }),
+    tree:   (novelId: string)     => req<{ tree: any[]; stats: Record<string, number>; total: number }>(`/api/settings/tree/${novelId}`),
   },
 
   // v2.0: 创作规则管理
   rules: {
     list:   (novelId: string, params?: { category?: string; activeOnly?: boolean }) =>
-                                   req<{ rules: WritingRule[] }>(`/api/v1/rules/${novelId}${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+                                   req<{ rules: WritingRule[] }>(`/api/rules/${novelId}${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
     create: (body: { novelId: string; category: string; title: string; content: string; priority?: number }) =>
-                                   req<WritingRule>('/api/v1/rules', { method: 'POST', body: j(body) }),
+                                   req<WritingRule>('/api/rules', { method: 'POST', body: j(body) }),
     update: (id: string, body: Partial<Pick<WritingRule, 'category' | 'title' | 'content' | 'priority' | 'isActive' | 'sortOrder'>>) =>
-                                   req<WritingRule>(`/api/v1/rules/${id}`, { method: 'PUT', body: j(body) }),
-    delete: (id: string)          => req(`/api/v1/rules/${id}`, { method: 'DELETE' }),
-    toggle: (id: string)           => req<{ ok: boolean; isActive: number }>(`/api/v1/rules/${id}/toggle`, { method: 'PATCH' }),
+                                   req<WritingRule>(`/api/rules/${id}`, { method: 'PUT', body: j(body) }),
+    delete: (id: string)          => req(`/api/rules/${id}`, { method: 'DELETE' }),
+    toggle: (id: string)           => req<{ ok: boolean; isActive: number }>(`/api/rules/${id}/toggle`, { method: 'PATCH' }),
   },
 
   chapters: {
-    list:   (novelId: string)     => req<Chapter[]>(`/api/v1/chapters?novelId=${novelId}`),
-    get:    (id: string)          => req<Chapter>(`/api/v1/chapters/${id}`),
-    create: (body: ChapterInput)  => req<Chapter>('/api/v1/chapters', { method: 'POST', body: j(body) }),
+    list:   (novelId: string)     => req<Chapter[]>(`/api/chapters?novelId=${novelId}`),
+    get:    (id: string)          => req<Chapter>(`/api/chapters/${id}`),
+    create: (body: ChapterInput)  => req<Chapter>('/api/chapters', { method: 'POST', body: j(body) }),
     update: (id: string, body: Partial<ChapterInput>) =>
-                                   req<Chapter>(`/api/v1/chapters/${id}`, { method: 'PATCH', body: j(body) }),
-    delete: (id: string)          => req(`/api/v1/chapters/${id}`, { method: 'DELETE' }),
+                                   req<Chapter>(`/api/chapters/${id}`, { method: 'PATCH', body: j(body) }),
+    delete: (id: string)          => req(`/api/chapters/${id}`, { method: 'DELETE' }),
   },
 
   volumes: {
-    list:   (novelId: string)     => req<Volume[]>(`/api/v1/volumes?novelId=${novelId}`),
-    get:    (id: string)          => req<Volume>(`/api/v1/volumes/${id}`),
-    create: (body: VolumeInput)   => req<Volume>('/api/v1/volumes', { method: 'POST', body: j(body) }),
+    list:   (novelId: string)     => req<Volume[]>(`/api/volumes?novelId=${novelId}`),
+    get:    (id: string)          => req<Volume>(`/api/volumes/${id}`),
+    create: (body: VolumeInput)   => req<Volume>('/api/volumes', { method: 'POST', body: j(body) }),
     update: (id: string, body: Partial<VolumeInput>) =>
-                                   req<Volume>(`/api/v1/volumes/${id}`, { method: 'PATCH', body: j(body) }),
-    delete: (id: string)          => req(`/api/v1/volumes/${id}`, { method: 'DELETE' }),
+                                   req<Volume>(`/api/volumes/${id}`, { method: 'PATCH', body: j(body) }),
+    delete: (id: string)          => req(`/api/volumes/${id}`, { method: 'DELETE' }),
   },
 
   characters: {
-    list:   (novelId: string)     => req<Character[]>(`/api/v1/characters?novelId=${novelId}`),
-    create: (body: any)           => req<Character>('/api/v1/characters', { method: 'POST', body: j(body) }),
-    update: (id: string, body: any) => req<Character>(`/api/v1/characters/${id}`, { method: 'PATCH', body: j(body) }),
-    delete: (id: string)          => req(`/api/v1/characters/${id}`, { method: 'DELETE' }),
+    list:   (novelId: string)     => req<Character[]>(`/api/characters?novelId=${novelId}`),
+    create: (body: any)           => req<Character>('/api/characters', { method: 'POST', body: j(body) }),
+    update: (id: string, body: any) => req<Character>(`/api/characters/${id}`, { method: 'PATCH', body: j(body) }),
+    delete: (id: string)          => req(`/api/characters/${id}`, { method: 'DELETE' }),
   },
 
   // Phase 1.2 / v2.0: 伏笔追踪
   foreshadowing: {
     list:   (novelId: string, params?: { status?: string }) =>
-                                   req<{ foreshadowing: ForeshadowingItem[] }>(`/api/v1/foreshadowing/${novelId}${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+                                   req<{ foreshadowing: ForeshadowingItem[] }>(`/api/foreshadowing/${novelId}${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
     create: (body: { novelId: string; chapterId?: string; title: string; description?: string; importance?: 'high' | 'normal' | 'low' }) =>
-                                   req<ForeshadowingItem>('/api/v1/foreshadowing', { method: 'POST', body: j(body) }),
+                                   req<ForeshadowingItem>('/api/foreshadowing', { method: 'POST', body: j(body) }),
     update: (id: string, body: Partial<Pick<ForeshadowingItem, 'title' | 'description' | 'status' | 'importance' | 'resolvedChapterId'>>) =>
-                                   req<ForeshadowingItem>(`/api/v1/foreshadowing/${id}`, { method: 'PUT', body: j(body) }),
-    delete: (id: string)          => req(`/api/v1/foreshadowing/${id}`, { method: 'DELETE' }),
+                                   req<ForeshadowingItem>(`/api/foreshadowing/${id}`, { method: 'PUT', body: j(body) }),
+    delete: (id: string)          => req(`/api/foreshadowing/${id}`, { method: 'DELETE' }),
   },
 
   // v2.0: 总索引（树形结构）
   entities: {
-    tree:    (novelId: string)     => req<any>(`/api/v1/entities/${novelId}`),
-    children: (novelId: string, parentId: string) => req<{ children: any[] }>(`/api/v1/entities/${novelId}/children/${parentId}`),
-    rebuild: (body: { novelId: string }) => req<any>('/api/v1/entities/rebuild', { method: 'POST', body: j(body) }),
+    tree:    (novelId: string)     => req<any>(`/api/entities/${novelId}`),
+    children: (novelId: string, parentId: string) => req<{ children: any[] }>(`/api/entities/${novelId}/children/${parentId}`),
+    rebuild: (body: { novelId: string }) => req<any>('/api/entities/rebuild', { method: 'POST', body: j(body) }),
   },
 
   generate: {
