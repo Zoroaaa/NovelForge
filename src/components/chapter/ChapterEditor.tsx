@@ -23,9 +23,9 @@ export function ChapterEditor({ chapter }: ChapterEditorProps) {
 
       <EditorRoot>
         <EditorContent
-          initialContent={chapter.content ?? undefined}
+          initialContent={chapter.content ?? undefined as any}
           onUpdate={({ editor }: any) => {
-            const html = (editor as any).getHTML()
+            const html = editor.getHTML()
             if (html !== '<p></p>') save(html)
           }}
           className="font-serif text-base leading-relaxed focus:outline-none"

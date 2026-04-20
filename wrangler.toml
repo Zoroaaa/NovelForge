@@ -6,12 +6,11 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "novelforge"
-database_id = "替换为你的-database-id"
+database_id = "3c09a004-21df-421c-856a-142ead75cdfd"
 
 [[r2_buckets]]
 binding = "STORAGE"
 bucket_name = "novelforge-storage"
-preview_bucket_name = "novelforge-storage-dev"
 
 [ai]
 binding = "AI"

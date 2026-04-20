@@ -86,7 +86,7 @@ export function OutlineTree({ novelId }: OutlineTreeProps) {
       title: title.trim(),
       type: type as any,
       parentId: parentId,
-      content: undefined,
+      content: null,
     }
     createMutation.mutate(data)
   }
