@@ -92,7 +92,7 @@ ALTER TABLE volumes ADD COLUMN chapter_count     INTEGER NOT NULL DEFAULT 0;
 -- 5. 伏笔追踪表（新增）
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS foreshadowing (
-  id                  TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8))),
+  id                  TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
   novel_id            TEXT NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
   chapter_id          TEXT,
   title               TEXT NOT NULL,
@@ -118,7 +118,7 @@ ALTER TABLE characters ADD COLUMN power_level TEXT;   -- JSON: 境界信息
 -- 7. 总索引表（新增，串联所有实体形成树形结构）
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS entity_index (
-  id            TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8))),
+  id            TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
   entity_type   TEXT NOT NULL,     -- novel | volume | chapter | character | setting | rule | foreshadowing
   entity_id     TEXT NOT NULL,     -- 对应实体的实际 ID
   novel_id      TEXT NOT NULL,     -- 所属小说

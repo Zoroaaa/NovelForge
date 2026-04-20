@@ -394,8 +394,8 @@ function extractToolCallsFromContent(content: string): Array<{ name: string; arg
           
           // 尝试从附近文本提取参数
           const argsPatterns = [
-            /(?:参数|args?|arguments?)\\s*[：:]=?\\s*(\\{[\\s\\S]*?\\})(?=\\s*$|\\n\\n|\\[)/gi,
-            /(?:参数|args?|arguments?)\\s*[：:]\\s*(\\{[^}]+\\})/gi,
+            /(?:参数|args?|arguments?)\s*[：:]=?\s*(\{[\s\S]*?\})(?=\s*$|\n\n|\[)/gi,
+            /(?:参数|args?|arguments?)\s*[：:]\s*(\{[^}]+\})/gi,
           ]
           
           for (const argsPattern of argsPatterns) {

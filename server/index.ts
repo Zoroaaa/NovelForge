@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { Env } from './lib/types'
 import { novels } from './routes/novels'
-import { outlines } from './routes/outlines'
+import { masterOutlineRouter as outlines } from './routes/master-outline'
 import { volumes } from './routes/volumes'
 import { chapters } from './routes/chapters'
 import { characters } from './routes/characters'
