@@ -26,10 +26,7 @@ import type { Env } from '../lib/types'
 
 const router = new Hono<{ Bindings: Env }>()
 
-/**
- * GET /entities/:novelId
- * 获取小说的完整树形结构
- */
+// GET /entities/:novelId - 获取小说的完整树形结构
 router.get('/:novelId', async (c) => {
   const novelId = c.req.param('novelId')
   const db = drizzle(c.env.DB)
@@ -70,12 +67,9 @@ router.get('/:novelId', async (c) => {
     stats,
     totalNodes: allEntities.length,
   })
-}
+})
 
-/**
- * GET /entities/:novelId/children/:parentId
- * 获取某个节点的直接子节点
- */
+// GET /entities/:novelId/children/:parentId - 获取某个节点的直接子节点
 router.get('/:novelId/children/:parentId', async (c) => {
   const { novelId, parentId } = c.req.params
   const db = drizzle(c.env.DB)
@@ -90,16 +84,14 @@ router.get('/:novelId/children/:parentId', async (c) => {
     .all()
 
   return c.json({ children })
-}
+})
 
-/**
- * POST /entities/rebuild
- * 重建整个小说的实体索引树
- * （通常在大量 CRUD 操作后调用）
- */
-router.post('/rebuild', zValidator('json', z.object({
+// POST /entities/rebuild - 重建整个小说的实体索引树
+const RebuildSchema = z.object({
   novelId: z.string().min(1),
-})), async (c) => {
+})
+
+router.post('/rebuild', zValidator('json', RebuildSchema), async (c) => {
   const { novelId } = c.req.valid('json')
   const db = drizzle(c.env.DB)
   
@@ -231,14 +223,13 @@ router.post('/rebuild', zValidator('json', z.object({
       })
     }
 
-    console.log(`✅ Entity index rebuilt for novel ${novelId}`)
+    console.log(`Entity index rebuilt for novel ${novelId}`)
 
     return c.json({ 
       ok: true, 
       message: '索引重建完成',
       stats: {
         volumes: volumeList.length,
-        chapters: 0, // 可以统计
         characters: charList.length,
         settings: settingList.length,
       }

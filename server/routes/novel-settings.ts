@@ -3,11 +3,11 @@
  *
  * API 端点：
  * GET    /api/v1/settings/:novelId           - 获取所有设定
- * GET    /api/v1/settings/:novelId/:type      - 按类型获取设定
- * POST   /api/v1/settings                     - 创建新设定
- * PUT    /api/v1/settings/:id                 - 更新设定
- * DELETE /api/v1/settings/:id                 - 删除设定
- * GET    /api/v1/settings/tree/:novelId       - 获取树形结构
+ * GET    /api/v1/settings/:novelId/:id       - 获取单个设定
+ * POST   /api/v1/settings                    - 创建新设定
+ * PUT    /api/v1/settings/:id                - 更新设定
+ * DELETE /api/v1/settings/:id                - 删除设定
+ * GET    /api/v1/settings/tree/:novelId      - 获取树形结构
  */
 
 import { Hono } from 'hono'
@@ -15,24 +15,22 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { drizzle } from 'drizzle-orm/d1'
 import { novelSettings } from '../db/schema'
-import { eq, and, desc, like, sql } from 'drizzle-orm'
+import { eq, and, desc, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 
 const router = new Hono<{ Bindings: Env }>()
 
-// ============================================================
 // Schema 验证
-// ============================================================
 const CreateSettingSchema = z.object({
   novelId: z.string().min(1),
   type: z.enum(['worldview', 'power_system', 'faction', 'geography', 'item_skill', 'misc']),
   category: z.string().optional(),
   name: z.string().min(1).max(100),
   content: z.string().min(1),
-  attributes: z.string().optional(),        // JSON
+  attributes: z.string().optional(),
   parentId: z.string().optional(),
   importance: z.enum(['high', 'normal', 'low']).default('normal'),
-  relatedIds: z.string().optional(),       // JSON array
+  relatedIds: z.string().optional(),
 })
 
 const UpdateSettingSchema = z.object({
@@ -47,14 +45,7 @@ const UpdateSettingSchema = z.object({
   sortOrder: z.number().optional(),
 })
 
-// ============================================================
-// CRUD 接口
-// ============================================================
-
-/**
- * GET /settings/:novelId
- * 获取小说的所有设定（支持分页和筛选）
- */
+// GET /settings/:novelId - 获取小说的所有设定（支持分页和筛选）
 router.get('/:novelId', zValidator('query', z.object({
   type: z.enum(['worldview', 'power_system', 'faction', 'geography', 'item_skill', 'misc']).optional(),
   category: z.string().optional(),
@@ -106,10 +97,7 @@ router.get('/:novelId', zValidator('query', z.object({
   })
 })
 
-/**
- * GET /settings/:novelId/:id
- * 获取单个设定的详细信息
- */
+// GET /settings/:novelId/:id - 获取单个设定的详细信息
 router.get('/:novelId/:id', async (c) => {
   const { novelId, id } = c.req.params
   const db = drizzle(c.env.DB)
@@ -130,10 +118,7 @@ router.get('/:novelId/:id', async (c) => {
   return c.json({ setting })
 })
 
-/**
- * POST /settings
- * 创建新设定
- */
+// POST /settings - 创建新设定
 router.post('/', zValidator('json', CreateSettingSchema), async (c) => {
   const body = c.req.valid('json')
   const db = drizzle(c.env.DB)
@@ -158,10 +143,7 @@ router.post('/', zValidator('json', CreateSettingSchema), async (c) => {
   }
 })
 
-/**
- * PUT /settings/:id
- * 更新设定
- */
+// PUT /settings/:id - 更新设定
 router.put('/:id', zValidator('json', UpdateSettingSchema), async (c) => {
   const id = c.req.param('id')
   const body = c.req.valid('json')
@@ -202,10 +184,7 @@ router.put('/:id', zValidator('json', UpdateSettingSchema), async (c) => {
   }
 })
 
-/**
- * DELETE /settings/:id
- * 删除设定（软删除）
- */
+// DELETE /settings/:id - 删除设定（软删除）
 router.delete('/:id', async (c) => {
   const id = c.req.param('id')
   const db = drizzle(c.env.DB)
@@ -223,10 +202,7 @@ router.delete('/:id', async (c) => {
   }
 })
 
-/**
- * GET /settings/tree/:novelId
- * 获取树形结构的设定列表
- */
+// GET /settings/tree/:novelId - 获取树形结构的设定列表
 router.get('/tree/:novelId', async (c) => {
   const novelId = c.req.param('novelId')
   const db = drizzle(c.env.DB)
@@ -265,6 +241,6 @@ router.get('/tree/:novelId', async (c) => {
     stats,
     total: allSettings.length,
   })
-}
+})
 
 export { router as novelSettingsRouter }

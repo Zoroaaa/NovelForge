@@ -11,7 +11,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { drizzle } from 'drizzle-orm/d1'
-import { outlines, chapters } from '../db/schema'
+import { masterOutline, chapters } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import {
@@ -50,10 +50,11 @@ router.post(
       const db = drizzle(c.env.DB)
 
       if (sourceType === 'outline') {
+        // v2.0: 从总纲表获取内容（替代原 outlines）
         const row = await db
-          .select({ content: outlines.content })
-          .from(outlines)
-          .where(eq(outlines.id, sourceId))
+          .select({ content: masterOutline.content })
+          .from(masterOutline)
+          .where(eq(masterOutline.id, sourceId))
           .get()
         content = row?.content || null
       } else if (sourceType === 'chapter') {

@@ -3,10 +3,10 @@
  *
  * API 端点：
  * GET    /api/v1/rules/:novelId              - 获取所有规则
- * POST   /api/v1/rules                      - 创建新规则
- * PUT    /api/v1/rules/:id                  - 更新规则
- * DELETE /api/v1/rules/:id                  - 删除规则
- * PATCH  /api/v1/rules/:id/toggle            - 启用/禁用规则
+ * POST   /api/v1/rules                        - 创建新规则
+ * PUT    /api/v1/rules/:id                    - 更新规则
+ * DELETE /api/v1/rules/:id                    - 删除规则
+ * PATCH  /api/v1/rules/:id/toggle             - 启用/禁用规则
  */
 
 import { Hono } from 'hono'
@@ -14,7 +14,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { drizzle } from 'drizzle-orm/d1'
 import { writingRules } from '../db/schema'
-import { eq, and, desc } from 'drizzle-orm'
+import { eq, and, desc, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 
 const router = new Hono<{ Bindings: Env }>()
@@ -37,9 +37,7 @@ const UpdateRuleSchema = z.object({
   isActive: z.number().min(0).max(1).optional(),
 })
 
-/**
- * GET /rules/:novelId
- */
+// GET /rules/:novelId - 获取所有创作规则
 router.get('/:novelId', zValidator('query', z.object({
   category: z.enum(['style', 'pacing', 'character', 'plot', 'world', 'taboo', 'custom']).optional(),
   activeOnly: z.coerce.boolean().optional().default(false),
@@ -69,9 +67,7 @@ router.get('/:novelId', zValidator('query', z.object({
   return c.json({ rules })
 })
 
-/**
- * POST /rules
- */
+// POST /rules - 创建新规则
 router.post('/', zValidator('json', CreateRuleSchema), async (c) => {
   const body = c.req.valid('json')
   const db = drizzle(c.env.DB)
@@ -93,9 +89,7 @@ router.post('/', zValidator('json', CreateRuleSchema), async (c) => {
   }
 })
 
-/**
- * PUT /rules/:id
- */
+// PUT /rules/:id - 更新规则
 router.put('/:id', zValidator('json', UpdateRuleSchema), async (c) => {
   const id = c.req.param('id')
   const body = c.req.valid('json')
@@ -124,9 +118,7 @@ router.put('/:id', zValidator('json', UpdateRuleSchema), async (c) => {
   }
 })
 
-/**
- * DELETE /rules/:id
- */
+// DELETE /rules/:id - 删除规则（软删除）
 router.delete('/:id', async (c) => {
   const id = c.req.param('id')
   const db = drizzle(c.env.DB)
@@ -139,9 +131,7 @@ router.delete('/:id', async (c) => {
   return c.json({ ok: true })
 })
 
-/**
- * PATCH /rules/:id/toggle
- */
+// PATCH /rules/:id/toggle - 启用/禁用规则
 router.patch('/:id/toggle', async (c) => {
   const id = c.req.param('id')
   const db = drizzle(c.env.DB)
@@ -163,6 +153,6 @@ router.patch('/:id/toggle', async (c) => {
     .where(eq(writingRules.id, id))
 
   return c.json({ ok: true, isActive: newStatus })
-}
+})
 
 export { router as writingRulesRouter }

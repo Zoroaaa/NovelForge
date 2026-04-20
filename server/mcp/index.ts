@@ -15,7 +15,7 @@
 import { drizzle } from 'drizzle-orm/d1'
 import { eq, and, isNull, desc } from 'drizzle-orm'
 import type { Env } from '../lib/types'
-import { novels, outlines, chapters, characters } from '../db/schema'
+import { novels, masterOutline, novelSettings, chapters, characters } from '../db/schema'
 import { searchSimilar, embedText } from '../services/embedding'
 
 export interface MCPTool {
@@ -241,15 +241,15 @@ export async function handleToolCall(
     case 'queryOutlines': {
       const { novelId, type } = args
 
+      // v2.0: 查询总纲表（替代原 outlines）
       let query = db
         .select()
-        .from(outlines)
-        .where(and(eq(outlines.novelId, novelId), isNull(outlines.deletedAt)))
-        .orderBy(outlines.sortOrder)
-
-      if (type) {
-        query = query.where(eq(outlines.type, type)) as any
-      }
+        .from(masterOutline)
+        .where(and(
+          eq(masterOutline.novelId, novelId),
+          isNull(masterOutline.deletedAt)
+        ))
+        .orderBy(desc(masterOutline.version))
 
       const rows = await query.all()
       return {
@@ -344,12 +344,14 @@ export async function handleToolCall(
     case 'createOutline': {
       const { novelId, title, content, type = 'custom', parentId } = args
       if (!novelId) throw new Error('novelId is required')
-      const [row] = await db.insert(outlines).values({
+      
+      // v2.0: 创建总纲版本（替代原 outlines 表）
+      const [row] = await db.insert(masterOutline).values({
         novelId,
         title,
         content: content || '',
-        type,
-        parentId: parentId || null,
+        version: 1,
+        wordCount: content?.length || 0,
       }).returning()
       return { ok: true, id: row.id }
     }
@@ -381,10 +383,15 @@ export async function handleToolCall(
       let indexedCount = 0
 
       if (sourceTypes.includes('outline')) {
+        // v2.0: 向量化总纲表（替代原 outlines）
         const outlinesToIndex = await db
-          .select({ id: outlines.id, title: outlines.title, content: outlines.content })
-          .from(outlines)
-          .where(and(eq(outlines.novelId, novelId), isNull(outlines.deletedAt), isNull(outlines.content).not()))
+          .select({ id: masterOutline.id, title: masterOutline.title, content: masterOutline.content })
+          .from(masterOutline)
+          .where(and(
+            eq(masterOutline.novelId, novelId),
+            isNull(masterOutline.deletedAt),
+            isNull(masterOutline.content).not()
+          ))
           .all()
         for (const o of outlinesToIndex) {
           if (o.content) {

@@ -49,38 +49,38 @@ const apiV1 = new Hono<{ Bindings: Env }>()
 // --- 小说基础管理 ---
 apiV1.route('/novels', novelsRouter)
 
-# --- 内容创作管理 ---
+// --- 内容创作管理 ---
 apiV1.route('/chapters', chaptersRouter)
 apiV1.route('/volumes', volumesRouter)
 
-# --- 角色与设定 ---
+// --- 角色与设定 ---
 apiV1.route('/characters', charactersRouter)
 apiV1.route('/settings', novelSettingsRouter)       // v2.0: 小说设定（世界观/境界/势力等）
 
-# --- 创作规则 ---
+// --- 创作规则 ---
 apiV1.route('/rules', writingRulesRouter)           // v2.0: 创作规则（文风/节奏/禁忌等）
 
-# --- 总纲管理 ---
+// --- 总纲管理 ---
 apiV1.route('/master-outline', masterOutlineRouter) // v2.0: 总纲（替代原 outlines）
 
-# --- AI 智能服务 ---
+// --- AI 智能服务 ---
 apiV1.route('/generate', generateRouter)
 
-# --- 伏笔追踪 ---
+// --- 伏笔追踪 ---
 apiV1.route('/foreshadowing', foreshadowingRouter)   // Phase 1.2 / v2.0
 
-# --- 总索引（树形结构）---
+// --- 总索引（树形结构）---
 apiV1.route('/entities', entityIndexRouter)         // v2.0: 实体索引
 
-# --- 辅助工具 ---
+// --- 辅助工具 ---
 apiV1.route('/export', exportRouter)
 apiV1.route('/search', searchRouter)
 apiV1.route('/vectorize', vectorizeRouter)
 
-# --- 系统配置 ---
+// --- 系统配置 ---
 apiV1.route('/config', settingsConfigRouter)
 
-# --- MCP 协议 ---
+// --- MCP 协议 ---
 apiV1.route('/mcp', mcpRouter)
 
 app.route('/api/v1', apiV1)
