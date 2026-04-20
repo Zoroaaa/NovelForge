@@ -9,6 +9,7 @@ export interface Novel {
   title: string
   description: string | null
   genre: string | null
+  coverR2Key: string | null
   status: 'draft' | 'writing' | 'completed' | 'archived'
   wordCount: number
   chapterCount: number

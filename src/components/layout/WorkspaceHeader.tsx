@@ -19,7 +19,11 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { ModelConfig } from '@/components/settings/ModelConfig'
+import { GenerationLogs } from '@/components/settings/GenerationLogs'
+import { WritingStats } from '@/components/settings/WritingStats'
+import { SearchBar } from '@/components/search/SearchBar'
 import type { Novel } from '@/lib/types'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 interface WorkspaceHeaderProps {
   novel: Novel
@@ -28,7 +32,6 @@ interface WorkspaceHeaderProps {
 export function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
   return (
     <header className="h-14 border-b bg-card/50 backdrop-blur-sm flex items-center px-4 shrink-0">
-      {/* 左侧：返回和标题 */}
       <div className="flex items-center gap-3 flex-1 min-w-0">
         <Button variant="ghost" size="icon" asChild className="shrink-0">
           <Link to="/novels" title="返回小说列表">
@@ -46,11 +49,14 @@ export function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
             </span>
           )}
         </div>
+
+        {/* 全文搜索框 */}
+        <div className="hidden md:block w-64 ml-4">
+          <SearchBar novelId={novel.id} />
+        </div>
       </div>
 
-      {/* 右侧：操作按钮 */}
       <div className="flex items-center gap-2 shrink-0">
-        {/* 全局模型配置 */}
         <Dialog>
           <DialogTrigger asChild>
             <Button variant="ghost" size="sm" className="gap-2 hidden sm:flex">
@@ -65,13 +71,25 @@ export function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
                 模型配置
               </DialogTitle>
             </DialogHeader>
-            <div className="mt-4">
-              <ModelConfig novelId={novel.id} />
-            </div>
+            <Tabs defaultValue="models" className="mt-4">
+              <TabsList className="grid w-full grid-cols-3 h-8">
+                <TabsTrigger value="models" className="text-xs">模型配置</TabsTrigger>
+                <TabsTrigger value="logs" className="text-xs">生成日志</TabsTrigger>
+                <TabsTrigger value="stats" className="text-xs">写作统计</TabsTrigger>
+              </TabsList>
+              <TabsContent value="models" className="mt-3">
+                <ModelConfig novelId={novel.id} />
+              </TabsContent>
+              <TabsContent value="logs" className="mt-3">
+                <GenerationLogs novelId={novel.id} />
+              </TabsContent>
+              <TabsContent value="stats" className="mt-3">
+                <WritingStats novelId={novel.id} />
+              </TabsContent>
+            </Tabs>
           </DialogContent>
         </Dialog>
 
-        {/* 进入阅读器 */}
         <Button variant="outline" size="sm" className="gap-2" asChild>
           <Link to={`/novels/${novel.id}/read`}>
             <BookOpen className="h-4 w-4" />

@@ -17,7 +17,8 @@ import { drizzle } from 'drizzle-orm/d1'
 import { eq, desc, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { generateChapter } from '../services/agent'
-import { generationLogs } from '../db/schema'
+import { generationLogs, chapters, characters } from '../db/schema'
+import { resolveConfig } from '../services/llm'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -57,6 +58,11 @@ router.post('/chapter', async (c) => {
     // onChunk
     (text) => {
       const data = `data: ${JSON.stringify({ content: text })}\n\n`
+      writer.write(encoder.encode(data))
+    },
+    // onToolCall
+    (name, args, result) => {
+      const data = `data: ${JSON.stringify({ type: 'tool_call', name, args, result: result.slice(0, 500) })}\n\n`
       writer.write(encoder.encode(data))
     },
     // onDone

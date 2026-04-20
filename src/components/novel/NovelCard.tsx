@@ -1,3 +1,4 @@
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -16,7 +17,9 @@ import {
   Edit, 
   Clock,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  ImagePlus,
+  ImageIcon,
 } from 'lucide-react'
 import type { Novel } from '@/lib/types'
 
@@ -61,9 +64,30 @@ const statusConfig: Record<string, { label: string; color: string; icon: React.R
 
 export function NovelCard({ novel, onEdit, onDelete }: NovelCardProps) {
   const navigate = useNavigate()
-  const status = statusConfig[novel.status]
+  const [uploading, setUploading] = useState(false)
+  const [coverUrl, setCoverUrl] = useState(novel.coverR2Key ? `/api/novels/${novel.id}/cover?t=${novel.updatedAt}` : null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  // 生成渐变背景色（基于小说标题）
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    try {
+      const resp = await fetch(`/api/novels/${novel.id}/cover`, {
+        method: 'POST',
+        body: file,
+        headers: { 'Content-Type': file.type },
+      })
+      if (!resp.ok) throw new Error('上传失败')
+      setCoverUrl(`/api/novels/${novel.id}/cover?t=${Date.now()}`)
+    } catch (error) {
+      console.error('Cover upload failed:', error)
+    } finally {
+      setUploading(false)
+    }
+  }
+
   const getGradient = (title: string) => {
     const colors = [
       'from-purple-500/20 to-blue-500/20',
@@ -78,64 +102,83 @@ export function NovelCard({ novel, onEdit, onDelete }: NovelCardProps) {
 
   return (
     <Card className="group relative overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer border-0 bg-card/50 backdrop-blur-sm">
-      {/* 顶部渐变条 */}
       <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${getGradient(novel.title)}`} />
       
       <CardContent className="p-6">
-        <div className="flex items-start justify-between mb-4">
-          <div
-            className="flex-1 min-w-0"
-            onClick={() => navigate(`/novels/${novel.id}`)}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <h3 className="text-lg font-semibold line-clamp-1 group-hover:text-primary transition-colors">
-                {novel.title}
-              </h3>
-              <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-1" />
+        {/* 封面图区域 */}
+        <div className="flex gap-4 mb-4">
+          {coverUrl ? (
+            <div className="relative w-24 h-32 shrink-0 rounded-lg overflow-hidden border bg-muted group/cover">
+              <img
+                src={coverUrl}
+                alt={novel.title}
+                className="w-full h-full object-cover"
+              />
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  inputRef.current?.click()
+                }}
+                className="absolute inset-0 bg-black/50 opacity-0 group-hover/cover:opacity-100 transition-opacity flex items-center justify-center"
+              >
+                <ImagePlus className="h-5 w-5 text-white" />
+              </button>
             </div>
-            
-            <div className="flex items-center gap-2 flex-wrap">
-              {novel.genre && (
-                <Badge variant="secondary" className={`${genreColors[novel.genre] || genreColors['其他']} text-xs`}>
-                  {novel.genre}
-                </Badge>
+          ) : (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                inputRef.current?.click()
+              }}
+              disabled={uploading}
+              className="w-24 h-32 shrink-0 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 transition-colors flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-primary"
+            >
+              {uploading ? (
+                <div className="h-5 w-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <>
+                  <ImagePlus className="h-5 w-5" />
+                  <span className="text-[10px]">上传封面</span>
+                </>
               )}
-              {status && (
-                <Badge variant="secondary" className={`${status.color} text-xs flex items-center gap-1`}>
-                  {status.icon}
-                  {status.label}
-                </Badge>
-              )}
+            </button>
+          )}
+
+          <div className="flex-1 min-w-0">
+            <div
+              onClick={() => navigate(`/novels/${novel.id}`)}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <h3 className="text-lg font-semibold line-clamp-1 group-hover:text-primary transition-colors">
+                  {novel.title}
+                </h3>
+                <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-1" />
+              </div>
+              
+              <div className="flex items-center gap-2 flex-wrap">
+                {novel.genre && (
+                  <Badge variant="secondary" className={`${genreColors[novel.genre] || genreColors['其他']} text-xs`}>
+                    {novel.genre}
+                  </Badge>
+                )}
+                {statusConfig[novel.status] && (
+                  <Badge variant="secondary" className={`${statusConfig[novel.status].color} text-xs flex items-center gap-1`}>
+                    {statusConfig[novel.status].icon}
+                    {statusConfig[novel.status].label}
+                  </Badge>
+                )}
+              </div>
             </div>
           </div>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => navigate(`/novels/${novel.id}`)}>
-                <BookOpen className="mr-2 h-4 w-4" />
-                进入工作台
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onEdit(novel)}>
-                <Edit className="mr-2 h-4 w-4" />
-                编辑信息
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onDelete(novel.id)} className="text-destructive">
-                <Trash2 className="mr-2 h-4 w-4" />
-                删除
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleCoverUpload}
+        />
 
         {novel.description ? (
           <p className="text-sm text-muted-foreground mb-4 line-clamp-2 leading-relaxed">
@@ -147,7 +190,6 @@ export function NovelCard({ novel, onEdit, onDelete }: NovelCardProps) {
           </p>
         )}
 
-        {/* 统计信息 */}
         <div className="flex items-center justify-between pt-4 border-t border-border/50">
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
@@ -168,11 +210,37 @@ export function NovelCard({ novel, onEdit, onDelete }: NovelCardProps) {
           </div>
         </div>
       </CardContent>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => navigate(`/novels/${novel.id}`)}>
+            <BookOpen className="mr-2 h-4 w-4" />
+            进入工作台
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onEdit(novel)}>
+            <Edit className="mr-2 h-4 w-4" />
+            编辑信息
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onDelete(novel.id)} className="text-destructive">
+            <Trash2 className="mr-2 h-4 w-4" />
+            删除
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </Card>
   )
 }
 
-// 格式化日期为相对时间
 function formatDate(timestamp: number): string {
   const date = new Date(timestamp)
   const now = new Date()

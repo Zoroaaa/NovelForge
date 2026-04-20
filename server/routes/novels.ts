@@ -52,4 +52,46 @@ router.delete('/:id', async (c) => {
   return c.json({ ok: true })
 })
 
+router.post('/:id/cover', async (c) => {
+  const id = c.req.param('id')
+  const db = drizzle(c.env.DB)
+
+  const contentType = c.req.header('content-type') || ''
+  if (!contentType.includes('image/')) {
+    return c.json({ error: 'Only image files are allowed' }, 400)
+  }
+
+  const body = await c.req.arrayBuffer()
+  const key = `covers/${id}/${Date.now()}.jpg`
+
+  await c.env.STORAGE.put(key, body, { httpMetadata: { contentType } })
+
+  const novel = await db.select({ coverR2Key: t.coverR2Key }).from(t).where(eq(t.id, id)).get()
+
+  if (novel?.coverR2Key) {
+    try { await c.env.STORAGE.delete(novel.coverR2Key) } catch {}
+  }
+
+  await db.update(t).set({ coverR2Key: key, updatedAt: sql`(unixepoch())` }).where(eq(t.id, id))
+
+  return c.json({ ok: true, coverUrl: `/api/novels/${id}/cover` })
+})
+
+router.get('/:id/cover', async (c) => {
+  const id = c.req.param('id')
+  const db = drizzle(c.env.DB)
+
+  const novel = await db.select({ coverR2Key: t.coverR2Key }).from(t).where(eq(t.id, id)).get()
+  if (!novel?.coverR2Key) return c.json({ error: 'No cover' }, 404)
+
+  const obj = await c.env.STORAGE.get(novel.coverR2Key)
+  if (!obj) return c.json({ error: 'Cover not found' }, 404)
+
+  const blob = await obj.arrayBuffer()
+  return c.body(blob, 200, {
+    'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
+    'Cache-Control': 'public, max-age=31536000',
+  })
+})
+
 export { router as novels }

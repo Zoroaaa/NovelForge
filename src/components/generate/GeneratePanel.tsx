@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Square, PenLine, Brain } from 'lucide-react'
+import { Square, PenLine, Brain, Shield } from 'lucide-react'
 import { useGenerate } from '@/hooks/useGenerate'
 import { StreamOutput } from './StreamOutput'
 import {
   ContextPreview,
   type ContextBundle,
 } from './ContextPreview'
+import { CharacterConsistencyCheck } from './CharacterConsistencyCheck'
 
 interface GeneratePanelProps {
   novelId: string
@@ -23,7 +24,8 @@ export function GeneratePanel({
   onInsertContent,
   onContextUpdate,
 }: GeneratePanelProps) {
-  const { output, status, generate, stop, contextInfo } = useGenerate()
+  const { output, status, generate, stop, contextInfo, toolCalls } = useGenerate()
+  const [showConsistencyCheck, setShowConsistencyCheck] = useState(false)
 
   const handleInsert = () => {
     if (output) {
@@ -57,6 +59,7 @@ export function GeneratePanel({
       <ContextPreview
         contextBundle={contextInfo}
         isGenerating={status === 'generating'}
+        toolCalls={toolCalls}
       />
 
       <div className="flex gap-2">
@@ -95,6 +98,21 @@ export function GeneratePanel({
             <PenLine className="h-4 w-4" />
             写入编辑器
           </Button>
+
+          {/* 一致性检查按钮 */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full gap-2"
+            onClick={() => setShowConsistencyCheck(!showConsistencyCheck)}
+          >
+            <Shield className="h-4 w-4" />
+            角色一致性检查
+          </Button>
+
+          {showConsistencyCheck && (
+            <CharacterConsistencyCheck chapterId={chapterId} novelId={novelId} />
+          )}
 
           {/* 生成完成提示 */}
           {contextInfo?.debug && (

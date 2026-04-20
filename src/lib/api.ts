@@ -50,6 +50,13 @@ export const api = {
     create: (body: any)           => req<Character>('/api/characters', { method: 'POST', body: j(body) }),
     delete: (id: string)          => req(`/api/characters/${id}`, { method: 'DELETE' }),
   },
+  generate: {
+    check: (chapterId: string, characterIds: string[]) =>
+      req<{ conflicts: Array<{ characterName: string; conflict: string; excerpt: string }>; warnings: string[] }>('/api/generate/check', {
+        method: 'POST',
+        body: j({ chapterId, characterIds }),
+      }),
+  },
   settings: {
     list:   (novelId?: string)    => novelId
       ? req<ModelConfig[]>(`/api/settings?novelId=${novelId}`)

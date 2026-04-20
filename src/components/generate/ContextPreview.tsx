@@ -26,6 +26,8 @@ import {
   Clock,
   Hash,
   AlertCircle,
+  Wrench,
+  Loader2,
 } from 'lucide-react'
 
 export interface ContextDebugInfo {
@@ -53,9 +55,22 @@ export interface ContextBundle {
   debug: ContextDebugInfo
 }
 
+export interface ToolCallEvent {
+  name: string
+  args: Record<string, any>
+  result: string
+}
+
+const TOOL_LABELS: Record<string, string> = {
+  queryOutline: '查询大纲',
+  queryCharacter: '查询角色',
+  searchSemantic: '语义搜索',
+}
+
 interface ContextPreviewProps {
   contextBundle: ContextBundle | null
   isGenerating?: boolean
+  toolCalls?: ToolCallEvent[]
 }
 
 const SOURCE_TYPE_CONFIG = {
@@ -64,8 +79,9 @@ const SOURCE_TYPE_CONFIG = {
   chapter_summary: { icon: BookOpen, label: '章节摘要', color: 'bg-green-100 text-green-800' },
 }
 
-export function ContextPreview({ contextBundle, isGenerating }: ContextPreviewProps) {
+export function ContextPreview({ contextBundle, isGenerating, toolCalls }: ContextPreviewProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [toolsExpanded, setToolsExpanded] = useState<number | null>(null)
 
   if (!contextBundle && !isGenerating) return null
 
@@ -79,6 +95,17 @@ export function ContextPreview({ contextBundle, isGenerating }: ContextPreviewPr
         <p className="text-xs text-muted-foreground pl-6">
           Agent 正在检索相关资料、组装生成上下文
         </p>
+        {toolCalls && toolCalls.length > 0 && (
+          <div className="mt-2 space-y-1.5 pl-6">
+            {toolCalls.map((tc, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs">
+                <Wrench className="h-3 w-3 text-amber-500" />
+                <span className="text-muted-foreground">{TOOL_LABELS[tc.name] || tc.name}</span>
+                <Badge variant="outline" className="text-[10px] h-4 px-1">已完成</Badge>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     )
   }
@@ -129,6 +156,56 @@ export function ContextPreview({ contextBundle, isGenerating }: ContextPreviewPr
 
         <CollapsibleContent>
           <div className="pt-3 space-y-3 mt-2 border-t">
+            {/* 工具调用记录 */}
+            {toolCalls && toolCalls.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                  <Wrench className="h-3 w-3" />
+                  Agent 工具调用 ({toolCalls.length})
+                </h4>
+                <div className="space-y-1.5">
+                  {toolCalls.map((tc, i) => (
+                    <div key={i} className="rounded border overflow-hidden">
+                      <button
+                        onClick={() => setToolsExpanded(toolsExpanded === i ? null : i)}
+                        className="w-full flex items-center justify-between p-2 text-left hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Wrench className="h-3.5 w-3.5 text-amber-500" />
+                          <span className="text-xs font-medium">{TOOL_LABELS[tc.name] || tc.name}</span>
+                          <Badge variant="outline" className="text-[10px] h-4 px-1">
+                            {tc.result.startsWith('Error:') ? '失败' : '成功'}
+                          </Badge>
+                        </div>
+                        {toolsExpanded === i ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </button>
+                      {toolsExpanded === i && (
+                        <div className="px-3 pb-2 space-y-2 bg-muted/20 border-t">
+                          <div className="pt-2">
+                            <span className="text-xs text-muted-foreground">参数：</span>
+                            <pre className="text-xs mt-1 bg-background p-1.5 rounded font-mono overflow-x-auto">
+                              {JSON.stringify(tc.args, null, 2)}
+                            </pre>
+                          </div>
+                          <div>
+                            <span className="text-xs text-muted-foreground">结果：</span>
+                            <pre className="text-xs mt-1 bg-background p-1.5 rounded font-mono overflow-x-auto max-h-32 whitespace-pre-wrap">
+                              {tc.result.slice(0, 1000)}
+                              {tc.result.length > 1000 ? '\n...(截断)' : ''}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* 强制注入部分 */}
             {(mandatory.chapterOutline || mandatory.prevChapterSummary || mandatory.volumeSummary) && (
               <div className="space-y-2">

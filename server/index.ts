@@ -8,6 +8,7 @@ import { characters } from './routes/characters'
 import { generate } from './routes/generate'
 import { settings } from './routes/settings'
 import { vectorize } from './routes/vectorize'
+import { search } from './routes/search'
 import * as exportModule from './routes/export'
 import { mcp } from './routes/mcp'
 
@@ -21,6 +22,7 @@ app.route('/characters', characters)
 app.route('/generate', generate)
 app.route('/settings', settings)
 app.route('/vectorize', vectorize)
+app.route('/search', search)
 app.route('/export', exportModule.export)
 app.route('/mcp', mcp)
 

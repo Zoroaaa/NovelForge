@@ -54,6 +54,7 @@ export async function generateChapter(
   chapterId: string,
   novelId: string,
   onChunk: (text: string) => void,
+  onToolCall: (name: string, args: Record<string, any>, result: string) => void,
   onDone: (usage: { prompt_tokens: number; completion_tokens: number }, resolvedModelId: string) => void,
   onError: (err: Error) => void,
   config: Partial<AgentConfig> = {},
@@ -143,6 +144,7 @@ export async function generateChapter(
       for (const toolCall of toolCalls) {
         try {
           const result = await executeAgentTool(env, toolCall.name, toolCall.args)
+          onToolCall(toolCall.name, toolCall.args, result)
           messages.push({
             role: 'assistant',
             content: `[Tool: ${toolCall.name}] Called with: ${JSON.stringify(toolCall.args)}`,
@@ -153,9 +155,11 @@ export async function generateChapter(
           })
           console.log(`Tool executed: ${toolCall.name}`, result.slice(0, 100))
         } catch (error) {
+          const errorMsg = (error as Error).message
+          onToolCall(toolCall.name, toolCall.args, `Error: ${errorMsg}`)
           messages.push({
             role: 'user',
-            content: `[Tool Error: ${toolCall.name}]\n${(error as Error).message}`,
+            content: `[Tool Error: ${toolCall.name}]\n${errorMsg}`,
           })
           console.warn(`Tool execution failed: ${toolCall.name}`, error)
         }
