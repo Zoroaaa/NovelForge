@@ -127,7 +127,7 @@ router.delete('/:id', async (c) => {
   // 先删除向量索引
   if (c.env.VECTORIZE) {
     c.executionContext.waitUntil(
-      deindexContent(c.env, 'outline', id, 1).catch((err) =>
+      deindexContent(c.env, 'outline', id).catch((err) =>
         console.warn('Deindex failed:', err)
       )
     )

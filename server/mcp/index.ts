@@ -141,6 +141,61 @@ export const TOOLS: MCPTool[] = [
       required: ['novelId', 'query'],
     },
   },
+  {
+    name: 'createOutline',
+    description: '创建新大纲节点',
+    parameters: {
+      type: 'object',
+      properties: {
+        novelId: { type: 'string', description: '小说ID（必填）' },
+        title: { type: 'string', description: '大纲标题' },
+        content: { type: 'string', description: '大纲内容' },
+        type: { type: 'string', description: '类型: world_setting/volume/chapter_outline/custom' },
+        parentId: { type: 'string', description: '父节点ID（可选）' },
+      },
+      required: ['novelId', 'title'],
+    },
+  },
+  {
+    name: 'updateChapter',
+    description: '更新章节内容',
+    parameters: {
+      type: 'object',
+      properties: {
+        chapterId: { type: 'string', description: '章节ID（必填）' },
+        content: { type: 'string', description: '新内容' },
+        title: { type: 'string', description: '新标题（可选）' },
+      },
+      required: ['chapterId', 'content'],
+    },
+  },
+  {
+    name: 'generateChapterSummary',
+    description: '手动触发章节摘要生成',
+    parameters: {
+      type: 'object',
+      properties: {
+        chapterId: { type: 'string', description: '章节ID（必填）' },
+      },
+      required: ['chapterId'],
+    },
+  },
+  {
+    name: 'bulkIndexNovels',
+    description: '批量触发小说内容向量化（大纲、章节、角色）',
+    parameters: {
+      type: 'object',
+      properties: {
+        novelId: { type: 'string', description: '小说ID（必填）' },
+        sourceTypes: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '要向量化的类型列表: outline/chapter/character，默认全部',
+        },
+      },
+      required: ['novelId'],
+    },
+  },
 ]
 
 // 工具实现
@@ -284,6 +339,90 @@ export async function handleToolCall(
         })),
         count: results.length,
       }
+    }
+
+    case 'createOutline': {
+      const { novelId, title, content, type = 'custom', parentId } = args
+      if (!novelId) throw new Error('novelId is required')
+      const [row] = await db.insert(outlines).values({
+        novelId,
+        title,
+        content: content || '',
+        type,
+        parentId: parentId || null,
+      }).returning()
+      return { ok: true, id: row.id }
+    }
+
+    case 'updateChapter': {
+      const { chapterId, content, title } = args
+      if (!chapterId) throw new Error('chapterId is required')
+      const updateData: any = { updatedAt: Math.floor(Date.now() / 1e3) }
+      if (content) updateData.content = content
+      if (title) updateData.title = title
+      await db.update(chapters).set(updateData).where(eq(chapters.id, chapterId))
+      return { ok: true, chapterId }
+    }
+
+    case 'generateChapterSummary': {
+      const { chapterId } = args
+      if (!chapterId) throw new Error('chapterId is required')
+      const { triggerAutoSummary } = await import('../services/agent')
+      await triggerAutoSummary(env, chapterId, '', { prompt_tokens: 0, completion_tokens: 0 })
+      return { ok: true, message: 'Summary generation triggered', chapterId }
+    }
+
+    case 'bulkIndexNovels': {
+      const { novelId, sourceTypes = ['outline', 'chapter', 'character'] } = args
+      if (!novelId) throw new Error('novelId is required')
+      if (!env.VECTORIZE) throw new Error('Vectorize not configured')
+
+      const { indexContent } = await import('../services/embedding')
+      let indexedCount = 0
+
+      if (sourceTypes.includes('outline')) {
+        const outlinesToIndex = await db
+          .select({ id: outlines.id, title: outlines.title, content: outlines.content })
+          .from(outlines)
+          .where(and(eq(outlines.novelId, novelId), isNull(outlines.deletedAt), isNull(outlines.content).not()))
+          .all()
+        for (const o of outlinesToIndex) {
+          if (o.content) {
+            await indexContent(env, 'outline', o.id, novelId, o.title, o.content)
+            indexedCount++
+          }
+        }
+      }
+
+      if (sourceTypes.includes('chapter')) {
+        const chaptersToIndex = await db
+          .select({ id: chapters.id, title: chapters.title, content: chapters.content })
+          .from(chapters)
+          .where(and(eq(chapters.novelId, novelId), isNull(chapters.deletedAt), isNull(chapters.content).not()))
+          .all()
+        for (const c of chaptersToIndex) {
+          if (c.content) {
+            await indexContent(env, 'chapter', c.id, novelId, c.title, c.content)
+            indexedCount++
+          }
+        }
+      }
+
+      if (sourceTypes.includes('character')) {
+        const charactersToIndex = await db
+          .select({ id: characters.id, name: characters.name, description: characters.description })
+          .from(characters)
+          .where(and(eq(characters.novelId, novelId), isNull(characters.deletedAt), isNull(characters.description).not()))
+          .all()
+        for (const ch of charactersToIndex) {
+          if (ch.description) {
+            await indexContent(env, 'character', ch.id, novelId, ch.name, ch.description)
+            indexedCount++
+          }
+        }
+      }
+
+      return { ok: true, indexedCount, novelId }
     }
 
     default:

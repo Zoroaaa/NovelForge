@@ -9,6 +9,7 @@ import {
   uploadAndAnalyzeImage,
   analyzeCharacterImage,
 } from '../services/vision'
+import { indexContent, deindexContent } from '../services/embedding'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -45,10 +46,27 @@ router.post('/', zValidator('json', CreateSchema), async (c) => {
 
 router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
   const db = drizzle(c.env.DB)
+  const id = c.req.param('id')
+  const body = c.req.valid('json')
+
   const [row] = await db.update(t)
-    .set(c.req.valid('json'))
-    .where(eq(t.id, c.req.param('id')))
+    .set({ ...body, updatedAt: Math.floor(Date.now() / 1000) })
+    .where(eq(t.id, id))
     .returning()
+
+  if (body.description !== undefined && row && c.env.VECTORIZE) {
+    c.executionContext.waitUntil(
+      indexContent(
+        c.env,
+        'character',
+        row.id,
+        row.novelId,
+        row.name,
+        body.description
+      ).catch((err) => console.warn('Character vectorization failed:', err))
+    )
+  }
+
   return c.json(row)
 })
 

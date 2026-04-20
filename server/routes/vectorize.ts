@@ -109,8 +109,8 @@ router.delete('/:type/:id', async (c) => {
   }
 
   try {
-    // 默认删除1个chunk（简单实现）
-    await deindexContent(c.env, sourceType, sourceId, 1)
+    // 从 D1 查询实际 chunk 数量，不再硬编码
+    await deindexContent(c.env, sourceType, sourceId)
 
     return c.json({
       ok: true,

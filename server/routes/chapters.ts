@@ -9,6 +9,8 @@ import { indexContent, deindexContent } from '../services/embedding'
 
 const router = new Hono<{ Bindings: Env }>()
 
+const MAX_SNAPSHOTS = 10
+
 const CreateSchema = z.object({
   novelId: z.string(),
   volumeId: z.string().optional(),
@@ -112,6 +114,10 @@ router.patch(
           body.content
         )
       )
+
+      c.executionContext.waitUntil(
+        saveSnapshot(c.env, row.novelId, row.id, body.content).catch(e => console.warn('Snapshot save failed:', e))
+      )
     }
 
     // 如果生成了摘要，也索引摘要
@@ -140,8 +146,8 @@ router.delete('/:id', async (c) => {
   if (c.env.VECTORIZE) {
     c.executionContext.waitUntil(
       Promise.all([
-        deindexContent(c.env, 'chapter', id, 1),
-        deindexContent(c.env, 'summary', id, 1),
+        deindexContent(c.env, 'chapter', id),
+        deindexContent(c.env, 'summary', id),
       ]).catch((err) => console.warn('Deindex failed:', err))
     )
   }
@@ -153,5 +159,68 @@ router.delete('/:id', async (c) => {
 
   return c.json({ ok: true })
 })
+
+router.get('/:id/snapshots', async (c) => {
+  const id = c.req.param('id')
+  const db = drizzle(c.env.DB)
+
+  const chapter = await db.select({ snapshotKeys: t.snapshotKeys }).from(t).where(eq(t.id, id)).get()
+  if (!chapter) return c.json({ error: 'Chapter not found' }, 404)
+
+  const keys: string[] = chapter.snapshotKeys ? JSON.parse(chapter.snapshotKeys) : []
+  const snapshots = await Promise.all(
+    keys.map(async (key) => {
+      try {
+        const obj = await c.env.STORAGE.get(key)
+        if (!obj) return null
+        const content = await obj.text()
+        const match = key.match(/(\d+)\.txt$/)
+        const timestamp = match ? parseInt(match[1]) : 0
+        return { key, timestamp, preview: content.slice(0, 200) }
+      } catch { return null }
+    })
+  )
+  return c.json({ snapshots: snapshots.filter(Boolean) })
+})
+
+router.post('/:id/restore', zValidator('json', z.object({ key: z.string() })), async (c) => {
+  const id = c.req.param('id')
+  const { key } = c.req.valid('json')
+  const db = drizzle(c.env.DB)
+
+  const chapter = await db.select().from(t).where(eq(t.id, id)).get()
+  if (!chapter) return c.json({ error: 'Chapter not found' }, 404)
+
+  const obj = await c.env.STORAGE.get(key)
+  if (!obj) return c.json({ error: 'Snapshot not found' }, 404)
+
+  const content = await obj.text()
+  await db.update(t).set({ content, updatedAt: Math.floor(Date.now() / 1e3) }).where(eq(t.id, id))
+
+  return c.json({ ok: true, content })
+})
+
+async function saveSnapshot(env: Env, novelId: string, chapterId: string, content: string): Promise<string | null> {
+  if (!content || !env.STORAGE) return null
+
+  const db = drizzle(env.DB)
+  const chapter = await db.select({ snapshotKeys: t.snapshotKeys }).from(t).where(eq(t.id, chapterId)).get()
+  const existingKeys: string[] = chapter?.snapshotKeys ? JSON.parse(chapter.snapshotKeys) : []
+
+  const timestamp = Date.now()
+  const key = `snapshots/${novelId}/${chapterId}/${timestamp}.txt`
+
+  await env.STORAGE.put(key, content, { httpMetadata: { contentType: 'text/plain' } })
+
+  const newKeys = [key, ...existingKeys].slice(0, MAX_SNAPSHOTS)
+  await db.update(t).set({ snapshotKeys: JSON.stringify(newKeys) }).where(eq(t.id, chapterId))
+
+  if (existingKeys.length >= MAX_SNAPSHOTS) {
+    const oldestKey = existingKeys[existingKeys.length - 1]
+    try { await env.STORAGE.delete(oldestKey) } catch {}
+  }
+
+  return key
+}
 
 export { router as chapters }

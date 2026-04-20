@@ -16,6 +16,7 @@ export interface ContextBundle {
   mandatory: {
     chapterOutline: string
     prevChapterSummary: string
+    recentChainSummaries: string[]
     volumeSummary: string
     protagonistCards: string[]
   }
@@ -55,10 +56,11 @@ export async function buildChapterContext(
   const db = drizzle(env.DB)
 
   // 1. 并发拉取强制注入内容（走 D1，精准 ID 查询）
-  const [chapterOutline, prevSummary, volumeSummary, protagonists] =
+  const [chapterOutline, prevSummary, recentChainSummaries, volumeSummary, protagonists] =
     await Promise.all([
       fetchChapterOutline(db, chapterId),
       fetchPrevChapterSummary(db, chapterId),
+      fetchRecentChapterSummaries(db, chapterId, 3),
       fetchVolumeSummary(db, chapterId),
       fetchProtagonistCards(db, chapterId),
     ])
@@ -108,13 +110,14 @@ export async function buildChapterContext(
     mandatory: {
       chapterOutline,
       prevChapterSummary,
+      recentChainSummaries,
       volumeSummary,
       protagonistCards: protagonists,
     },
     ragChunks,
     debug: {
       totalTokenEstimate:
-        estimateMandatoryTokens({ chapterOutline, prevSummary, volumeSummary, protagonists }) +
+        estimateMandatoryTokens({ chapterOutline, prevChapterSummary: prevSummary, recentChainSummaries, volumeSummary, protagonistCards: protagonists }) +
         ragChunks.reduce((sum, chunk) => sum + estimateTokens(chunk.content), 0),
       ragHitsCount: ragChunks.length,
       skippedByBudget: skipped,
@@ -177,6 +180,54 @@ async function fetchPrevChapterSummary(db: any, chapterId: string): Promise<stri
   } catch (error) {
     console.warn('Failed to fetch previous chapter summary:', error)
     return ''
+  }
+}
+
+async function fetchRecentChapterSummaries(
+  db: any,
+  chapterId: string,
+  chainLength: number = 3
+): Promise<string[]> {
+  if (chainLength <= 0) return []
+
+  try {
+    const currentChapter = await db
+      .select({
+        novelId: chapters.novelId,
+        sortOrder: chapters.sortOrder,
+      })
+      .from(chapters)
+      .where(eq(chapters.id, chapterId))
+      .get()
+
+    if (!currentChapter) return []
+
+    const recentChapters = await db
+      .select({
+        id: chapters.id,
+        title: chapters.title,
+        summary: chapters.summary,
+        sortOrder: chapters.sortOrder,
+      })
+      .from(chapters)
+      .where(
+        and(
+          eq(chapters.novelId, currentChapter.novelId),
+          sql`${chapters.sortOrder} < ${currentChapter.sortOrder}`,
+          sql`${chapters.summary} IS NOT NULL`,
+          sql`${chapters.summary} != ''`
+        )
+      )
+      .orderBy(desc(chapters.sortOrder))
+      .limit(chainLength)
+      .all()
+
+    return recentChapters
+      .reverse()
+      .map(ch => `[第${ch.sortOrder}章] ${ch.title}: ${ch.summary}`)
+  } catch (error) {
+    console.warn('Failed to fetch recent chapter summaries:', error)
+    return []
   }
 }
 
@@ -315,13 +366,15 @@ export function estimateTokens(text: string): number {
 function estimateMandatoryTokens(m: {
   chapterOutline: string
   prevChapterSummary: string
+  recentChainSummaries: string[]
   volumeSummary: string
   protagonistCards: string[]
 }): number {
   return (
     estimateTokens(m.chapterOutline) +
     estimateTokens(m.prevChapterSummary) +
+    m.recentChainSummaries.reduce((s, summary) => s + estimateTokens(summary), 0) +
     estimateTokens(m.volumeSummary) +
-    m.protagonists.reduce((s: number, c: string) => s + estimateTokens(c), 0)
+    m.protagonistCards.reduce((s: number, c: string) => s + estimateTokens(c), 0)
   )
 }

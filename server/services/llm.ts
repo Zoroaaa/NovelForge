@@ -10,7 +10,7 @@
 
 import type { Database } from 'drizzle-orm'
 import type { modelConfigs } from '../db/schema'
-import { eq, desc } from 'drizzle-orm'
+import { eq, and, desc } from 'drizzle-orm'
 
 export interface LLMConfig {
   provider: 'volcengine' | 'anthropic' | 'openai'
@@ -23,6 +23,7 @@ export interface LLMConfig {
     top_p?: number
     frequency_penalty?: number
     presence_penalty?: number
+    systemPromptOverride?: string
   }
   apiKeyEnv?: string
 }
@@ -69,40 +70,48 @@ export async function resolveConfig(
   stage: string,
   novelId: string
 ): Promise<LLMConfig> {
-  // 1. 尝试获取小说级别的 stage 配置
-  const stageConfig = await db
+  // 1. 尝试获取小说级别的 stage 配置（novelId + stage 双过滤）
+  const novelConfig = await db
     .select()
     .from(modelConfigs)
     .where(
-      eq(modelConfigs.stage, stage)
+      and(
+        eq(modelConfigs.novelId, novelId),
+        eq(modelConfigs.stage, stage),
+        eq(modelConfigs.isActive, 1)
+      )
     )
     .orderBy(desc(modelConfigs.createdAt))
     .limit(1)
     .get()
 
-  if (stageConfig && stageConfig.novelId === novelId && stageConfig.isActive) {
+  if (novelConfig) {
     return {
-      provider: stageConfig.provider as 'volcengine' | 'anthropic' | 'openai',
-      modelId: stageConfig.modelId,
-      apiBase: stageConfig.apiBase || getDefaultBase(stageConfig.provider),
-      apiKey: '', // API key 由调用方从环境变量注入
-      params: stageConfig.params ? JSON.parse(stageConfig.params) : undefined,
-      apiKeyEnv: stageConfig.apiKeyEnv,
+      provider: novelConfig.provider as 'volcengine' | 'anthropic' | 'openai',
+      modelId: novelConfig.modelId,
+      apiBase: novelConfig.apiBase || getDefaultBase(novelConfig.provider),
+      apiKey: '',
+      params: novelConfig.params ? JSON.parse(novelConfig.params) : undefined,
+      apiKeyEnv: novelConfig.apiKeyEnv,
     }
   }
 
-  // 2. 尝试获取全局配置
+  // 2. 尝试获取全局配置（scope='global' + stage 过滤）
   const globalConfig = await db
     .select()
     .from(modelConfigs)
     .where(
-      eq(modelConfigs.scope, 'global')
+      and(
+        eq(modelConfigs.scope, 'global'),
+        eq(modelConfigs.stage, stage),
+        eq(modelConfigs.isActive, 1)
+      )
     )
     .orderBy(desc(modelConfigs.createdAt))
     .limit(1)
     .get()
 
-  if (globalConfig && globalConfig.isActive) {
+  if (globalConfig) {
     return {
       provider: globalConfig.provider as 'volcengine' | 'anthropic' | 'openai',
       modelId: globalConfig.modelId,
@@ -123,7 +132,8 @@ export async function resolveConfig(
 export async function streamGenerate(
   config: LLMConfig,
   messages: Message[],
-  options: StreamOptions
+  options: StreamOptions,
+  tools?: Array<{ type: string; function: { name: string; description: string; parameters: any } }>
 ): Promise<void> {
   const { onChunk, onDone, onError } = options
 
@@ -141,6 +151,7 @@ export async function streamGenerate(
       frequency_penalty: mergedParams.frequency_penalty,
       presence_penalty: mergedParams.presence_penalty,
       ...(mergedParams.stop.length > 0 ? { stop: mergedParams.stop } : {}),
+      ...(tools ? { tools } : {}),
     }
 
     // Anthropic 格式适配

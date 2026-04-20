@@ -55,13 +55,16 @@ export async function embedText(
  */
 export async function embedBatch(
   ai: Env['AI'],
-  chunks: string[]
+  chunks: string[],
+  concurrency: number = 5
 ): Promise<number[][]> {
   const results: number[][] = []
+  const batchSize = concurrency
 
-  for (const chunk of chunks) {
-    const vector = await embedText(ai, chunk)
-    results.push(vector)
+  for (let i = 0; i < chunks.length; i += batchSize) {
+    const batch = chunks.slice(i, i + batchSize)
+    const batchResults = await Promise.all(batch.map(chunk => embedText(ai, chunk)))
+    results.push(...batchResults)
   }
 
   return results
@@ -227,15 +230,16 @@ export async function indexContent(
 
   // 删除旧索引（如果存在）
   if (existingIndex) {
+    const oldRecords = await db
+      .select()
+      .from(vectorIndex)
+      .where(eq(vectorIndex.sourceId, sourceId))
+      .all()
+
     await db.delete(vectorIndex).where(eq(vectorIndex.sourceId, sourceId))
-    // 删除Vectorize中的旧向量
+
     try {
-      const oldChunks = await db
-        .select()
-        .from(vectorIndex)
-        .where(eq(vectorIndex.sourceId, sourceId))
-        .all()
-      for (const old of oldChunks) {
+      for (const old of oldRecords) {
         await deleteVector(env.VECTORIZE, old.id)
       }
     } catch (e) {
@@ -281,13 +285,23 @@ export async function deindexContent(
   env: Env,
   sourceType: VectorMetadata['sourceType'],
   sourceId: string,
-  totalChunks: number = 1
+  _totalChunks: number = 1
 ): Promise<void> {
-  const idsToDelete = Array.from({ length: totalChunks }, (_, i) =>
-    `${sourceType}_${sourceId}_${i}`
-  )
+  const db = drizzle(env.DB)
 
-  for (const id of idsToDelete) {
-    await deleteVector(env.VECTORIZE, id)
+  const existingRecords = await db
+    .select({ id: vectorIndex.id })
+    .from(vectorIndex)
+    .where(eq(vectorIndex.sourceId, sourceId))
+    .all()
+
+  if (existingRecords.length === 0) {
+    return
   }
+
+  for (const record of existingRecords) {
+    await deleteVector(env.VECTORIZE, record.id)
+  }
+
+  await db.delete(vectorIndex).where(eq(vectorIndex.sourceId, sourceId))
 }
