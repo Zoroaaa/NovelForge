@@ -62,7 +62,7 @@ router.post('/', zValidator('json', CreateSchema), async (c) => {
   const [row] = await db.insert(t).values(body).returning()
 
   // 异步触发向量化（如果有内容）
-  ctx.executionContext.waitUntil(
+  c.executionContext.waitUntil(
     triggerVectorization(
       c.env,
       'chapter',
@@ -102,7 +102,7 @@ router.patch(
 
     // 异步重新索引（内容更新时）
     if (body.content !== undefined && row) {
-      ctx.executionContext.waitUntil(
+      c.executionContext.waitUntil(
         triggerVectorization(
           c.env,
           'chapter',
@@ -116,7 +116,7 @@ router.patch(
 
     // 如果生成了摘要，也索引摘要
     if (body.summary !== undefined && row) {
-      ctx.executionContext.waitUntil(
+      c.executionContext.waitUntil(
         triggerVectorization(
           c.env,
           'summary',
@@ -138,7 +138,7 @@ router.delete('/:id', async (c) => {
 
   // 删除向量索引（章节+摘要）
   if (c.env.VECTORIZE) {
-    ctx.executionContext.waitUntil(
+    c.executionContext.waitUntil(
       Promise.all([
         deindexContent(c.env, 'chapter', id, 1),
         deindexContent(c.env, 'summary', id, 1),

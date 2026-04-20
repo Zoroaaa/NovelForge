@@ -62,7 +62,7 @@ router.post('/', zValidator('json', CreateSchema), async (c) => {
   const [row] = await db.insert(t).values(body).returning()
 
   // 异步触发向量化
-  ctx.executionContext.waitUntil(
+  c.executionContext.waitUntil(
     triggerVectorization(
       c.env,
       'outline',
@@ -89,7 +89,7 @@ router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
 
   // 异步重新索引（内容更新时）
   if (body.content !== undefined && row) {
-    ctx.executionContext.waitUntil(
+    c.executionContext.waitUntil(
       triggerVectorization(
         c.env,
         'outline',
@@ -126,7 +126,7 @@ router.delete('/:id', async (c) => {
 
   // 先删除向量索引
   if (c.env.VECTORIZE) {
-    ctx.executionContext.waitUntil(
+    c.executionContext.waitUntil(
       deindexContent(c.env, 'outline', id, 1).catch((err) =>
         console.warn('Deindex failed:', err)
       )
