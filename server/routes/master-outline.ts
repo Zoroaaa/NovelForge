@@ -13,7 +13,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { drizzle } from 'drizzle-orm/d1'
 import { masterOutline } from '../db/schema'
-import { eq, desc, sql } from 'drizzle-orm'
+import { eq, desc, and, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 
 const router = new Hono<{ Bindings: Env }>()
