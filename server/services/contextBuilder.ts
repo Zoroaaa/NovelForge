@@ -71,7 +71,7 @@ export async function buildChapterContext(
   const startTime = Date.now()
   const db = drizzle(env.DB)
 
-  const summaryChainLength = options?.summaryChainLength || 5
+  let summaryChainLength = options?.summaryChainLength || 5
   summaryChainLength = Math.min(Math.max(summaryChainLength, 0), 15) // 限制范围 0-15
 
   try {
