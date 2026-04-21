@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { PanelRightClose, PanelRightOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 interface AppLayoutProps {
   left: React.ReactNode
@@ -31,6 +32,7 @@ export function AppLayout({ left, center, right }: AppLayoutProps) {
   }, [])
 
   return (
+    <TooltipProvider>
     <div className="flex h-full overflow-hidden bg-background">
       {/* 移动端左侧抽屉 */}
       {isMobile ? (
@@ -50,7 +52,7 @@ export function AppLayout({ left, center, right }: AppLayoutProps) {
         </Sheet>
       ) : (
         /* 桌面端左侧边栏 */
-        <aside className="w-64 shrink-0 border-r overflow-y-auto hidden lg:block">
+        <aside className="w-72 shrink-0 border-r overflow-y-auto hidden lg:block">
           {left}
         </aside>
       )}
@@ -106,5 +108,6 @@ export function AppLayout({ left, center, right }: AppLayoutProps) {
         </Button>
       )}
     </div>
+    </TooltipProvider>
   )
 }

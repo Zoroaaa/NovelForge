@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Chapter, ChapterInput } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Plus, FileText, BookOpen, Trash2 } from 'lucide-react'
+import { Plus, BookOpen, Trash2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -136,21 +136,30 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
         </DialogContent>
       </Dialog>
 
-      <div className="mt-4 space-y-1">
+      <div className="mt-3 space-y-0.5">
         {chapters && chapters.length > 0 ? (
-          chapters.map((chapter) => (
+          chapters.map((chapter, idx) => (
             <div
               key={chapter.id}
-              className="flex items-center gap-2 py-2 px-3 hover:bg-muted rounded cursor-pointer group"
+              className="flex items-center gap-2 py-2 px-2 hover:bg-muted/70 rounded-md cursor-pointer group transition-colors"
               onClick={() => onChapterSelect?.(chapter.id)}
             >
-              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="flex-1 text-sm truncate">{chapter.title}</span>
-              <div className="flex items-center gap-0 opacity-0 group-hover:opacity-100">
+              <span className="text-[10px] text-muted-foreground/50 w-5 text-right shrink-0 font-mono tabular-nums">
+                {String(idx + 1).padStart(2, '0')}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm truncate leading-snug">{chapter.title}</p>
+                {chapter.wordCount > 0 && (
+                  <p className="text-[10px] text-muted-foreground/60 leading-tight mt-0.5">
+                    {chapter.wordCount.toLocaleString()} 字
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-0 opacity-0 group-hover:opacity-100 shrink-0">
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6 shrink-0"
+                  className="h-6 w-6"
                   onClick={(e) => {
                     e.stopPropagation()
                     navigate(`/novels/${novelId}/read/${chapter.id}`)
@@ -161,7 +170,7 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6 text-destructive shrink-0"
+                  className="h-6 w-6 text-destructive"
                   onClick={(e) => {
                     e.stopPropagation()
                     if (confirm('确定要删除这个章节吗？')) {
@@ -175,7 +184,7 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
             </div>
           ))
         ) : (
-          <p className="text-sm text-muted-foreground text-center py-4">暂无章节</p>
+          <p className="text-sm text-muted-foreground text-center py-8">暂无章节</p>
         )}
       </div>
     </div>

@@ -1,4 +1,3 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChapterList } from '@/components/chapter/ChapterList'
 import { CharacterList } from '@/components/character/CharacterList'
 import { SettingsPanel } from '@/components/settings/SettingsPanel'
@@ -6,57 +5,105 @@ import { RulesPanel } from '@/components/settings/RulesPanel'
 import { MasterOutlinePanel } from '@/components/settings/MasterOutlinePanel'
 import { ForeshadowingPanel } from '@/components/settings/ForeshadowingPanel'
 import { useNovelStore } from '@/store/novelStore'
+import {
+  BookOpen,
+  Users,
+  Layers,
+  ScrollText,
+  AlignLeft,
+  Bookmark,
+} from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
 
 interface SidebarProps {
   novelId: string
   onChapterSelect?: (chapterId: string) => void
 }
 
+const NAV_ITEMS = [
+  { value: 'chapters',      icon: BookOpen,   label: '章节' },
+  { value: 'characters',    icon: Users,       label: '角色' },
+  { value: 'settings',      icon: Layers,      label: '设定' },
+  { value: 'rules',         icon: ScrollText,  label: '规则' },
+  { value: 'outline',       icon: AlignLeft,   label: '总纲' },
+  { value: 'foreshadowing', icon: Bookmark,    label: '伏笔' },
+] as const
+
 export function Sidebar({ novelId, onChapterSelect }: SidebarProps) {
   const { sidebarTab, setSidebarTab } = useNovelStore()
 
+  const activeItem = NAV_ITEMS.find(item => item.value === sidebarTab)
+
   return (
-    <div className="p-4 h-full flex flex-col">
-      <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as any)} className="flex-1 flex flex-col overflow-hidden">
-        <TabsList className="grid w-full grid-cols-6 mb-4 h-auto gap-1">
-          <TabsTrigger value="chapters" className="text-xs py-1.5">章节</TabsTrigger>
-          <TabsTrigger value="characters" className="text-xs py-1.5">角色</TabsTrigger>
-          <TabsTrigger value="settings" className="text-xs py-1.5">设定</TabsTrigger>
-          <TabsTrigger value="rules" className="text-xs py-1.5">规则</TabsTrigger>
-          <TabsTrigger value="outline" className="text-xs py-1.5">总纲</TabsTrigger>
-          <TabsTrigger value="foreshadowing" className="text-xs py-1.5">伏笔</TabsTrigger>
-        </TabsList>
+    <div className="flex h-full overflow-hidden">
+      {/* 左侧图标导航栏 */}
+      <nav className="w-12 shrink-0 flex flex-col items-center py-3 gap-1 border-r bg-muted/30">
+        {NAV_ITEMS.map(({ value, icon: Icon, label }) => (
+          <Tooltip key={value} delayDuration={300}>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => setSidebarTab(value as any)}
+                className={cn(
+                  'w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150',
+                  sidebarTab === value
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                )}
+              >
+                <Icon className="h-4 w-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="text-xs">
+              {label}
+            </TooltipContent>
+          </Tooltip>
+        ))}
+      </nav>
 
-        {/* 章节管理 */}
-        <TabsContent value="chapters" className="flex-1 overflow-y-auto mt-0">
-          <ChapterList novelId={novelId} onChapterSelect={onChapterSelect} />
-        </TabsContent>
+      {/* 右侧内容区 */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* 面板标题 */}
+        <div className="px-4 py-3 border-b bg-background/60 shrink-0">
+          <h2 className="text-sm font-semibold text-foreground">
+            {activeItem?.label ?? ''}
+          </h2>
+        </div>
 
-        {/* 角色管理 */}
-        <TabsContent value="characters" className="flex-1 overflow-y-auto mt-0">
-          <CharacterList novelId={novelId} />
-        </TabsContent>
-
-        {/* v2.0: 小说设定管理（完整功能） */}
-        <TabsContent value="settings" className="flex-1 overflow-y-auto mt-0">
-          <SettingsPanel novelId={novelId} />
-        </TabsContent>
-
-        {/* v2.0: 创作规则管理（完整功能） */}
-        <TabsContent value="rules" className="flex-1 overflow-y-auto mt-0">
-          <RulesPanel novelId={novelId} />
-        </TabsContent>
-
-        {/* v2.0: 总纲编辑器（版本控制） */}
-        <TabsContent value="outline" className="flex-1 overflow-y-auto mt-0">
-          <MasterOutlinePanel novelId={novelId} />
-        </TabsContent>
-
-        {/* Phase 1.2 / v2.0: 伏笔追踪面板 */}
-        <TabsContent value="foreshadowing" className="flex-1 overflow-y-auto mt-0">
-          <ForeshadowingPanel novelId={novelId} />
-        </TabsContent>
-      </Tabs>
+        {/* 内容滚动区 */}
+        <div className="flex-1 overflow-y-auto">
+          {sidebarTab === 'chapters' && (
+            <div className="p-3">
+              <ChapterList novelId={novelId} onChapterSelect={onChapterSelect} />
+            </div>
+          )}
+          {sidebarTab === 'characters' && (
+            <div className="p-3">
+              <CharacterList novelId={novelId} />
+            </div>
+          )}
+          {sidebarTab === 'settings' && (
+            <div className="p-3">
+              <SettingsPanel novelId={novelId} />
+            </div>
+          )}
+          {sidebarTab === 'rules' && (
+            <div className="p-3">
+              <RulesPanel novelId={novelId} />
+            </div>
+          )}
+          {sidebarTab === 'outline' && (
+            <div className="p-3">
+              <MasterOutlinePanel novelId={novelId} />
+            </div>
+          )}
+          {sidebarTab === 'foreshadowing' && (
+            <div className="p-3">
+              <ForeshadowingPanel novelId={novelId} />
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
