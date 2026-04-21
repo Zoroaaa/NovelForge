@@ -1,8 +1,8 @@
 /**
  * @file settings.ts
  * @description 模型配置路由模块，提供模型配置的CRUD操作，支持全局配置和小说级配置
- * @version 1.0.0
- * @modified 2026-04-21 - 添加规范化注释
+ * @version 2.0.0
+ * @modified 2026-04-21 - 添加激活/停用接口
  */
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
@@ -24,6 +24,10 @@ const CreateSchema = z.object({
   apiKeyEnv: z.string(),
   apiKey: z.string().optional(),
   params: z.string().optional(),
+})
+
+const ToggleSchema = z.object({
+  isActive: z.boolean(),
 })
 
 /**
@@ -100,6 +104,45 @@ router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
   const [row] = await db.update(t)
     .set(c.req.valid('json'))
     .where(eq(t.id, c.req.param('id')))
+    .returning()
+  return c.json(row)
+})
+
+/**
+ * PATCH /:id/toggle - 激活/停用模型配置
+ * @param {string} id - 配置ID
+ * @param {boolean} isActive - 是否激活
+ * @returns {Object} 更新后的配置对象
+ */
+router.patch('/:id/toggle', zValidator('json', ToggleSchema), async (c) => {
+  const db = drizzle(c.env.DB)
+  const { isActive } = c.req.valid('json')
+  const configId = c.req.param('id')
+
+  // 获取当前配置信息
+  const config = await db.select().from(t).where(eq(t.id, configId)).get()
+  if (!config) {
+    return c.json({ error: '配置不存在' }, 404)
+  }
+
+  // 如果要激活，先停用同一 stage 的其他配置
+  if (isActive) {
+    const deactivateConditions = [eq(t.stage, config.stage)]
+    if (config.novelId) {
+      deactivateConditions.push(eq(t.novelId, config.novelId))
+    } else {
+      deactivateConditions.push(eq(t.scope, 'global'))
+    }
+
+    await db.update(t)
+      .set({ isActive: 0 })
+      .where(and(...deactivateConditions, eq(t.isActive, 1)))
+  }
+
+  // 更新目标配置
+  const [row] = await db.update(t)
+    .set({ isActive: isActive ? 1 : 0 })
+    .where(eq(t.id, configId))
     .returning()
   return c.json(row)
 })

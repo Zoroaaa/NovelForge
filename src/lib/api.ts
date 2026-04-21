@@ -209,6 +209,10 @@ export const api = {
     },
     create: (body: { stage: string; provider: string; modelId: string; scope: string; apiBase?: string; apiKeyEnv?: string; apiKey?: string; novelId?: string }) =>
                                    req<ModelConfig>('/api/config', { method: 'POST', body: j(body) }),
+    update: (id: string, body: Partial<ModelConfig>) =>
+                                   req<ModelConfig>(`/api/config/${id}`, { method: 'PATCH', body: j(body) }),
+    toggle: (id: string, isActive: boolean) =>
+                                   req<ModelConfig>(`/api/config/${id}/toggle`, { method: 'PATCH', body: j({ isActive }) }),
     delete: (id: string)          => req<{ ok: boolean }>(`/api/config/${id}`, { method: 'DELETE' }),
   },
 

@@ -1,17 +1,16 @@
 /**
  * @file ChapterList.tsx
- * @description 章节列表组件，提供章节的展示、创建、排序和删除功能
- * @version 1.0.0
- * @modified 2026-04-21 - 添加规范化注释
+ * @description 章节列表组件，提供章节的展示、创建、排序和删除功能，按卷分组显示
+ * @version 2.0.0
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import type { Chapter, ChapterInput } from '@/lib/types'
+import type { Chapter, ChapterInput, Volume } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Plus, BookOpen, Trash2, FileText, Sparkles, CheckCircle, RefreshCw } from 'lucide-react'
+import { Plus, BookOpen, Trash2, FileText, Sparkles, CheckCircle, RefreshCw, ChevronDown, ChevronRight, Library } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -28,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
 
 interface ChapterListProps {
   novelId: string
@@ -48,6 +48,7 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
   const [title, setTitle] = useState('')
   const [outlineId, setOutlineId] = useState('')
   const [volumeId, setVolumeId] = useState('')
+  const [expandedVolumes, setExpandedVolumes] = useState<Set<string>>(new Set(['uncategorized']))
 
   const { data: chapters, isLoading } = useQuery({
     queryKey: ['chapters', novelId],
@@ -57,13 +58,20 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
   const { data: volumes } = useQuery({
     queryKey: ['volumes', novelId],
     queryFn: () => api.volumes.list(novelId),
-    enabled: dialogOpen,
   })
+
+  const chaptersByVolume = (chapters || []).reduce((acc, ch) => {
+    const key = ch.volumeId || 'uncategorized'
+    if (!acc[key]) acc[key] = []
+    acc[key].push(ch)
+    return acc
+  }, {} as Record<string, Chapter[]>)
 
   const createMutation = useMutation({
     mutationFn: (data: ChapterInput) => api.chapters.create(data),
     onSuccess: (newChapter) => {
       queryClient.invalidateQueries({ queryKey: ['chapters', novelId] })
+      queryClient.invalidateQueries({ queryKey: ['volumes', novelId] })
       toast.success('章节已创建')
       setDialogOpen(false)
       setTitle('')
@@ -78,6 +86,7 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
     mutationFn: (id: string) => api.chapters.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chapters', novelId] })
+      queryClient.invalidateQueries({ queryKey: ['volumes', novelId] })
       toast.success('章节已删除')
     },
     onError: (error) => toast.error(error.message),
@@ -101,9 +110,132 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
     })
   }
 
+  const toggleVolume = (volumeId: string) => {
+    setExpandedVolumes(prev => {
+      const next = new Set(prev)
+      if (next.has(volumeId)) next.delete(volumeId)
+      else next.add(volumeId)
+      return next
+    })
+  }
+
+  const renderChapter = (chapter: Chapter, idx: number) => {
+    const statusInfo = chapterStatusConfig[chapter.status] || chapterStatusConfig.draft
+    return (
+      <div
+        key={chapter.id}
+        className="flex items-center gap-2 py-2 px-3 hover:bg-muted/70 rounded-md cursor-pointer group transition-colors"
+        onClick={() => onChapterSelect?.(chapter.id)}
+      >
+        <span className="text-[10px] text-muted-foreground/50 w-5 text-right shrink-0 font-mono tabular-nums">
+          {String(idx + 1).padStart(2, '0')}
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-sm truncate leading-snug flex-1">{chapter.title}</p>
+            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 ${statusInfo.color}`}>
+              {statusInfo.icon}
+              {statusInfo.label}
+            </span>
+          </div>
+          <div className="flex items-center gap-3 mt-0.5">
+            {chapter.wordCount > 0 && (
+              <span className="text-[10px] text-muted-foreground/60 leading-tight">
+                {chapter.wordCount.toLocaleString()} 字
+              </span>
+            )}
+            {chapter.summary && (
+              <span className="text-[10px] text-blue-600/70 leading-tight truncate flex-1" title={chapter.summary}>
+                📝 {chapter.summary.slice(0, 50)}...
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-0 opacity-0 group-hover:opacity-100 shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={(e) => {
+              e.stopPropagation()
+              navigate(`/novels/${novelId}/read/${chapter.id}`)
+            }}
+          >
+            <BookOpen className="h-3 w-3" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 text-destructive"
+            onClick={(e) => {
+              e.stopPropagation()
+              if (confirm('确定要删除这个章节吗？')) {
+                deleteMutation.mutate(chapter.id)
+              }
+            }}
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  const renderVolumeGroup = (volume: Volume | null, volumeId: string) => {
+    const volumeChapters = chaptersByVolume[volumeId] || []
+    if (volumeChapters.length === 0 && volumeId !== 'uncategorized') return null
+
+    const isExpanded = expandedVolumes.has(volumeId)
+    const totalWords = volumeChapters.reduce((sum, ch) => sum + ch.wordCount, 0)
+
+    return (
+      <div key={volumeId} className="mb-2">
+        <div
+          className="flex items-center gap-2 py-1.5 px-2 hover:bg-muted/50 rounded-md cursor-pointer transition-colors"
+          onClick={() => toggleVolume(volumeId)}
+        >
+          {isExpanded ? (
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          )}
+          
+          {volume ? (
+            <>
+              <Library className="h-3.5 w-3.5 text-primary shrink-0" />
+              <span className="text-xs font-medium truncate flex-1">{volume.title}</span>
+            </>
+          ) : (
+            <>
+              <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="text-xs text-muted-foreground truncate flex-1">未分类</span>
+            </>
+          )}
+          
+          <Badge variant="secondary" className="text-[10px] h-4 px-1">
+            {volumeChapters.length}
+          </Badge>
+          {totalWords > 0 && (
+            <span className="text-[10px] text-muted-foreground">
+              {totalWords.toLocaleString()} 字
+            </span>
+          )}
+        </div>
+
+        {isExpanded && (
+          <div className="ml-4 mt-1 space-y-0.5">
+            {volumeChapters.map((chapter, idx) => renderChapter(chapter, idx))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   if (isLoading) {
     return <div className="animate-pulse space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-10 bg-muted rounded" />)}</div>
   }
+
+  const sortedVolumes = [...(volumes || [])].sort((a, b) => a.sortOrder - b.sortOrder)
 
   return (
     <div className="space-y-2">
@@ -149,69 +281,14 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
         </DialogContent>
       </Dialog>
 
-      <div className="mt-3 space-y-0.5">
+      <div className="mt-3">
         {chapters && chapters.length > 0 ? (
-          chapters.map((chapter, idx) => {
-            const statusInfo = chapterStatusConfig[chapter.status] || chapterStatusConfig.draft
-            return (
-            <div
-              key={chapter.id}
-              className="flex items-center gap-2 py-2 px-3 hover:bg-muted/70 rounded-md cursor-pointer group transition-colors"
-              onClick={() => onChapterSelect?.(chapter.id)}
-            >
-              <span className="text-[10px] text-muted-foreground/50 w-5 text-right shrink-0 font-mono tabular-nums">
-                {String(idx + 1).padStart(2, '0')}
-              </span>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm truncate leading-snug flex-1">{chapter.title}</p>
-                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 ${statusInfo.color}`}>
-                    {statusInfo.icon}
-                    {statusInfo.label}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 mt-0.5">
-                  {chapter.wordCount > 0 && (
-                    <span className="text-[10px] text-muted-foreground/60 leading-tight">
-                      {chapter.wordCount.toLocaleString()} 字
-                    </span>
-                  )}
-                  {chapter.summary && (
-                    <span className="text-[10px] text-blue-600/70 leading-tight truncate flex-1" title={chapter.summary}>
-                      📝 {chapter.summary.slice(0, 50)}...
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-0 opacity-0 group-hover:opacity-100 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    navigate(`/novels/${novelId}/read/${chapter.id}`)
-                  }}
-                >
-                  <BookOpen className="h-3 w-3" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 text-destructive"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    if (confirm('确定要删除这个章节吗？')) {
-                      deleteMutation.mutate(chapter.id)
-                    }
-                  }}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
-            </div>
-            )
-          })
+          <>
+            {sortedVolumes.map(volume => renderVolumeGroup(volume, volume.id))}
+            {chaptersByVolume['uncategorized'] && chaptersByVolume['uncategorized'].length > 0 && (
+              renderVolumeGroup(null, 'uncategorized')
+            )}
+          </>
         ) : (
           <p className="text-sm text-muted-foreground text-center py-8">暂无章节</p>
         )}

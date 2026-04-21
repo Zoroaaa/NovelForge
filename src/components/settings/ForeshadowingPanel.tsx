@@ -1,16 +1,15 @@
 /**
  * @file ForeshadowingPanel.tsx
  * @description 伏笔管理面板组件，提供伏笔的创建、编辑、状态管理功能
- * @version 1.0.0
- * @modified 2026-04-21 - 添加规范化注释
+ * @version 2.0.0 - 添加章节关联功能
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import type { ForeshadowingItem } from '@/lib/types'
+import type { ForeshadowingItem, Chapter } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Plus, Trash2, Edit2, Save, X, AlertTriangle, CheckCircle, Ban, Circle } from 'lucide-react'
+import { Plus, Trash2, Edit2, AlertTriangle, CheckCircle, Ban, FileText } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -32,6 +31,7 @@ import { Badge } from '@/components/ui/badge'
 
 interface ForeshadowingPanelProps {
   novelId: string
+  onChapterSelect?: (chapterId: string) => void
 }
 
 const STATUS_CONFIG = {
@@ -61,43 +61,59 @@ const IMPORTANCE_OPTIONS = [
   { value: 'low', label: '次要', color: 'bg-blue-100 text-blue-800' },
 ]
 
-export function ForeshadowingPanel({ novelId }: ForeshadowingPanelProps) {
+export function ForeshadowingPanel({ novelId, onChapterSelect }: ForeshadowingPanelProps) {
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [resolveDialogOpen, setResolveDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [resolvingItem, setResolvingItem] = useState<ForeshadowingItem | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>('all')
   
-  // 表单状态
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     importance: 'normal' as 'high' | 'normal' | 'low',
+    chapterId: '' as string | null,
   })
 
-  // 查询所有伏笔
+  const [resolveChapterId, setResolveChapterId] = useState<string>('')
+
   const { data: foreshadowingData, isLoading } = useQuery({
     queryKey: ['foreshadowing', novelId],
     queryFn: () => api.foreshadowing.list(novelId),
   })
 
+  const { data: chapters } = useQuery({
+    queryKey: ['chapters', novelId],
+    queryFn: () => api.chapters.list(novelId),
+  })
+
+  const chapterMap = (chapters || []).reduce((acc, ch) => {
+    acc[ch.id] = ch
+    return acc
+  }, {} as Record<string, Chapter>)
+
   let foreshadowings = foreshadowingData?.foreshadowing || []
   
-  // 状态筛选
   if (statusFilter !== 'all') {
     foreshadowings = foreshadowings.filter(f => f.status === statusFilter)
   }
 
-  // 统计各状态数量
   const stats = (foreshadowingData?.foreshadowing || []).reduce((acc, f) => {
     acc[f.status] = (acc[f.status] || 0) + 1
     acc.total++
     return acc
   }, {} as Record<string, number>)
 
-  // 创建 mutation
   const createMutation = useMutation({
-    mutationFn: (data: typeof formData) =>
-      api.foreshadowing.create({ ...data, novelId }),
+    mutationFn: (data: typeof formData & { chapterId?: string | null }) =>
+      api.foreshadowing.create({ 
+        novelId, 
+        title: data.title, 
+        description: data.description || undefined,
+        importance: data.importance,
+        chapterId: data.chapterId || undefined,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['foreshadowing'] })
       toast.success('✅ 伏笔创建成功')
@@ -107,7 +123,6 @@ export function ForeshadowingPanel({ novelId }: ForeshadowingPanelProps) {
     onError: (err) => toast.error(`❌ 创建失败: ${(err as Error).message}`),
   })
 
-  // 更新 mutation
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<ForeshadowingItem> }) =>
       api.foreshadowing.update(id, data),
@@ -116,11 +131,12 @@ export function ForeshadowingPanel({ novelId }: ForeshadowingPanelProps) {
       toast.success('✅ 伏笔更新成功')
       setEditingId(null)
       resetForm()
+      setResolveDialogOpen(false)
+      setResolvingItem(null)
     },
     onError: (err) => toast.error(`❌ 更新失败: ${(err as Error).message}`),
   })
 
-  // 删除 mutation
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.foreshadowing.delete(id),
     onSuccess: () => {
@@ -150,15 +166,30 @@ export function ForeshadowingPanel({ novelId }: ForeshadowingPanelProps) {
       title: item.title,
       description: item.description || '',
       importance: item.importance,
+      chapterId: item.chapterId || '',
     })
     setDialogOpen(true)
   }
 
-  const handleStatusChange = (id: string, newStatus: 'resolved' | 'abandoned') => {
-    updateMutation.mutate({ 
-      id, 
-      data: { status: newStatus }
+  const handleResolve = (item: ForeshadowingItem) => {
+    setResolvingItem(item)
+    setResolveChapterId('')
+    setResolveDialogOpen(true)
+  }
+
+  const handleResolveSubmit = () => {
+    if (!resolvingItem) return
+    updateMutation.mutate({
+      id: resolvingItem.id,
+      data: {
+        status: 'resolved',
+        resolvedChapterId: resolveChapterId || null,
+      },
     })
+  }
+
+  const handleAbandon = (id: string) => {
+    updateMutation.mutate({ id, data: { status: 'abandoned' } })
   }
 
   const handleDelete = (id: string) => {
@@ -168,7 +199,7 @@ export function ForeshadowingPanel({ novelId }: ForeshadowingPanelProps) {
   }
 
   const resetForm = () => {
-    setFormData({ title: '', description: '', importance: 'normal' })
+    setFormData({ title: '', description: '', importance: 'normal', chapterId: '' })
     setEditingId(null)
   }
 
@@ -176,9 +207,7 @@ export function ForeshadowingPanel({ novelId }: ForeshadowingPanelProps) {
 
   return (
     <div className="space-y-4">
-      {/* 头部统计栏 */}
       <div className="px-3 pt-3 space-y-2">
-        {/* 统计数字行 */}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-muted-foreground">共 {stats.total || 0} 条</span>
           <span className={`text-xs px-1.5 py-0.5 rounded ${STATUS_CONFIG.open.badge}`}>
@@ -192,7 +221,6 @@ export function ForeshadowingPanel({ novelId }: ForeshadowingPanelProps) {
           </span>
         </div>
 
-        {/* 操作行 */}
         <div className="flex items-center justify-between gap-2">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="h-7 text-xs flex-1"><SelectValue /></SelectTrigger>
@@ -246,6 +274,22 @@ export function ForeshadowingPanel({ novelId }: ForeshadowingPanelProps) {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  <div className="space-y-2">
+                    <Label>埋设章节</Label>
+                    <Select 
+                      value={formData.chapterId || 'none'} 
+                      onValueChange={(v) => setFormData(prev => ({ ...prev, chapterId: v === 'none' ? null : v }))}
+                    >
+                      <SelectTrigger><SelectValue placeholder="选择章节" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">未指定</SelectItem>
+                        {chapters?.map(ch => (
+                          <SelectItem key={ch.id} value={ch.id}>{ch.title}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -275,10 +319,8 @@ export function ForeshadowingPanel({ novelId }: ForeshadowingPanelProps) {
         </div>
       </div>
 
-      {/* 伏笔列表 */}
       <div className="px-3 pb-3 space-y-2">
         {foreshadowings.length === 0 ? (
-          /* 空状态 */
           <div className="border rounded-lg p-6 text-center bg-muted/10">
             <AlertTriangle className="h-8 w-8 mx-auto text-muted-foreground opacity-50 mb-3" />
             <h3 className="font-medium mb-1 text-sm">还没有伏笔记录</h3>
@@ -286,77 +328,91 @@ export function ForeshadowingPanel({ novelId }: ForeshadowingPanelProps) {
               AI 在生成章节时会自动识别和提取伏笔，你也可以手动添加和管理伏笔，确保剧情连贯性。
             </p>
             
-            <Button onClick={() => setDialogOpen(true)} className="gap-2">
+            <Button onClick={() => setDialogOpen(true)} className="gap-2" size="sm">
               <Plus className="h-4 w-4" />
               添加第一条伏笔
             </Button>
           </div>
         ) : (
-          /* 伏笔列表 */
           foreshadowings.map(item => {
             const statusConfig = STATUS_CONFIG[item.status]
             const StatusIcon = statusConfig.icon
+            const plantChapter = item.chapterId ? chapterMap[item.chapterId] : null
+            const resolveChapter = item.resolvedChapterId ? chapterMap[item.resolvedChapterId] : null
             
             return (
-              <div key={item.id} className={`border rounded-lg p-4 transition-colors hover:bg-muted/20 ${statusConfig.color}`}>
+              <div key={item.id} className={`border rounded-lg p-3 transition-colors hover:bg-muted/20 ${statusConfig.color}`}>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <StatusIcon className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                  <div className="flex items-start gap-2 flex-1 min-w-0">
+                    <StatusIcon className="h-4 w-4 mt-0.5 flex-shrink-0" />
                     
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span className="font-medium">{item.title}</span>
+                        <span className="font-medium text-sm">{item.title}</span>
                         
-                        <Badge variant="outline" className={`text-xs ${IMPORTANCE_OPTIONS.find(o => o.value === item.importance)?.color}`}>
+                        <Badge variant="outline" className={`text-[10px] ${IMPORTANCE_OPTIONS.find(o => o.value === item.importance)?.color}`}>
                           {IMPORTANCE_OPTIONS.find(o => o.value === item.importance)?.label}
                         </Badge>
                         
-                        <Badge variant="outline" className={`text-xs ${statusConfig.badge}`}>
+                        <Badge variant="outline" className={`text-[10px] ${statusConfig.badge}`}>
                           {statusConfig.label}
                         </Badge>
                       </div>
                       
                       {item.description && (
-                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
                           {item.description}
                         </p>
                       )}
 
-                      {item.resolvedChapterId && (
-                        <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
-                          <CheckCircle className="h-3 w-3" />
-                          已在第 {item.resolvedChapterId.slice(0, 8)}... 章收尾
-                        </p>
-                      )}
+                      <div className="flex items-center gap-3 mt-2 text-[10px]">
+                        {plantChapter && (
+                          <span 
+                            className="flex items-center gap-1 text-blue-600 cursor-pointer hover:underline"
+                            onClick={() => onChapterSelect?.(plantChapter.id)}
+                          >
+                            <FileText className="h-3 w-3" />
+                            埋设于「{plantChapter.title}」
+                          </span>
+                        )}
+                        {resolveChapter && (
+                          <span 
+                            className="flex items-center gap-1 text-green-600 cursor-pointer hover:underline"
+                            onClick={() => onChapterSelect?.(resolveChapter.id)}
+                          >
+                            <CheckCircle className="h-3 w-3" />
+                            收尾于「{resolveChapter.title}」
+                          </span>
+                        )}
+                      </div>
                       
-                      <div className="text-xs text-muted-foreground mt-2">
+                      <div className="text-[10px] text-muted-foreground mt-1.5">
                         创建于 {new Date(item.createdAt * 1000).toLocaleDateString()}
                       </div>
                     </div>
                   </div>
 
-                  {/* 操作按钮 */}
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1 shrink-0">
                     {item.status === 'open' && (
                       <>
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="h-8 px-2 text-green-600 hover:text-green-700"
-                          onClick={() => handleStatusChange(item.id, 'resolved')}
+                          className="h-7 px-2 text-green-600 hover:text-green-700 text-xs"
+                          onClick={() => handleResolve(item)}
                           disabled={updateMutation.isPending}
                         >
-                          <CheckCircle className="h-4 w-4 mr-1" />
+                          <CheckCircle className="h-3 w-3 mr-1" />
                           收尾
                         </Button>
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="h-8 px-2 text-gray-500"
-                          onClick={() => handleStatusChange(item.id, 'abandoned')}
+                          className="h-7 px-2 text-gray-500 text-xs"
+                          onClick={() => handleAbandon(item.id)}
                           disabled={updateMutation.isPending}
                         >
-                          <Ban className="h-4 w-4 mr-1" />
+                          <Ban className="h-3 w-3 mr-1" />
                           放弃
                         </Button>
                       </>
@@ -365,19 +421,19 @@ export function ForeshadowingPanel({ novelId }: ForeshadowingPanelProps) {
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="h-8 w-8"
+                      className="h-7 w-7"
                       onClick={() => handleEdit(item)}
                     >
-                      <Edit2 className="h-4 w-4" />
+                      <Edit2 className="h-3.5 w-3.5" />
                     </Button>
                     
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="h-8 w-8 text-destructive"
+                      className="h-7 w-7 text-destructive"
                       onClick={() => handleDelete(item.id)}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 </div>
@@ -386,6 +442,39 @@ export function ForeshadowingPanel({ novelId }: ForeshadowingPanelProps) {
           })
         )}
       </div>
+
+      <Dialog open={resolveDialogOpen} onOpenChange={setResolveDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>收尾伏笔</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              选择伏笔「{resolvingItem?.title}」收尾的章节：
+            </p>
+            
+            <Select value={resolveChapterId} onValueChange={setResolveChapterId}>
+              <SelectTrigger><SelectValue placeholder="选择收尾章节" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">未指定</SelectItem>
+                {chapters?.map(ch => (
+                  <SelectItem key={ch.id} value={ch.id}>{ch.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setResolveDialogOpen(false)}>
+                取消
+              </Button>
+              <Button onClick={handleResolveSubmit} disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? '处理中...' : '确认收尾'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

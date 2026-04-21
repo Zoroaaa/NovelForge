@@ -36,10 +36,10 @@ const router = new Hono<{ Bindings: Env }>()
 const CreateSchema = z.object({
   novelId: z.string(),
   name: z.string(),
-  aliases: z.string().optional(),
-  role: z.string().optional(),
-  description: z.string().optional(),
-  attributes: z.string().optional(),
+  aliases: z.string().nullish(),
+  role: z.string().nullish(),
+  description: z.string().nullish(),
+  attributes: z.string().nullish(),
 })
 
 /**

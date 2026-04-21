@@ -10,6 +10,7 @@ import { SettingsPanel } from '@/components/settings/SettingsPanel'
 import { RulesPanel } from '@/components/settings/RulesPanel'
 import { MasterOutlinePanel } from '@/components/settings/MasterOutlinePanel'
 import { ForeshadowingPanel } from '@/components/settings/ForeshadowingPanel'
+import { VolumePanel } from '@/components/volume/VolumePanel'
 import { useNovelStore } from '@/store/novelStore'
 import {
   BookOpen,
@@ -17,6 +18,7 @@ import {
   Layers,
   ScrollText,
   AlignLeft,
+  Library,
   Bookmark,
 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -33,6 +35,7 @@ const NAV_ITEMS = [
   { value: 'settings',      icon: Layers,      label: '设定' },
   { value: 'rules',         icon: ScrollText,  label: '规则' },
   { value: 'outline',       icon: AlignLeft,   label: '总纲' },
+  { value: 'volumes',       icon: Library,     label: '卷' },
   { value: 'foreshadowing', icon: Bookmark,    label: '伏笔' },
 ] as const
 
@@ -103,9 +106,14 @@ export function Sidebar({ novelId, onChapterSelect }: SidebarProps) {
               <MasterOutlinePanel novelId={novelId} />
             </div>
           )}
+          {sidebarTab === 'volumes' && (
+            <div className="p-3">
+              <VolumePanel novelId={novelId} onChapterSelect={onChapterSelect} />
+            </div>
+          )}
           {sidebarTab === 'foreshadowing' && (
             <div className="p-3">
-              <ForeshadowingPanel novelId={novelId} />
+              <ForeshadowingPanel novelId={novelId} onChapterSelect={onChapterSelect} />
             </div>
           )}
         </div>
