@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Chapter, ChapterInput } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Plus, BookOpen, Trash2 } from 'lucide-react'
+import { Plus, BookOpen, Trash2, FileText, Sparkles, CheckCircle, RefreshCw } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -26,6 +26,13 @@ import {
 interface ChapterListProps {
   novelId: string
   onChapterSelect?: (chapterId: string) => void
+}
+
+const chapterStatusConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+  draft: { label: '草稿', color: 'text-gray-500 bg-gray-50', icon: <FileText className="h-3 w-3" /> },
+  generated: { label: '已生成', color: 'text-blue-500 bg-blue-50', icon: <Sparkles className="h-3 w-3" /> },
+  revised: { label: '已修订', color: 'text-orange-500 bg-orange-50', icon: <RefreshCw className="h-3 w-3" /> },
+  published: { label: '已发布', color: 'text-green-500 bg-green-50', icon: <CheckCircle className="h-3 w-3" /> },
 }
 
 export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
@@ -138,22 +145,37 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
 
       <div className="mt-3 space-y-0.5">
         {chapters && chapters.length > 0 ? (
-          chapters.map((chapter, idx) => (
+          chapters.map((chapter, idx) => {
+            const statusInfo = chapterStatusConfig[chapter.status] || chapterStatusConfig.draft
+            return (
             <div
               key={chapter.id}
-              className="flex items-center gap-2 py-2 px-2 hover:bg-muted/70 rounded-md cursor-pointer group transition-colors"
+              className="flex items-center gap-2 py-2 px-3 hover:bg-muted/70 rounded-md cursor-pointer group transition-colors"
               onClick={() => onChapterSelect?.(chapter.id)}
             >
               <span className="text-[10px] text-muted-foreground/50 w-5 text-right shrink-0 font-mono tabular-nums">
                 {String(idx + 1).padStart(2, '0')}
               </span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm truncate leading-snug">{chapter.title}</p>
-                {chapter.wordCount > 0 && (
-                  <p className="text-[10px] text-muted-foreground/60 leading-tight mt-0.5">
-                    {chapter.wordCount.toLocaleString()} 字
-                  </p>
-                )}
+                <div className="flex items-center gap-2">
+                  <p className="text-sm truncate leading-snug flex-1">{chapter.title}</p>
+                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 ${statusInfo.color}`}>
+                    {statusInfo.icon}
+                    {statusInfo.label}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mt-0.5">
+                  {chapter.wordCount > 0 && (
+                    <span className="text-[10px] text-muted-foreground/60 leading-tight">
+                      {chapter.wordCount.toLocaleString()} 字
+                    </span>
+                  )}
+                  {chapter.summary && (
+                    <span className="text-[10px] text-blue-600/70 leading-tight truncate flex-1" title={chapter.summary}>
+                      📝 {chapter.summary.slice(0, 50)}...
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-0 opacity-0 group-hover:opacity-100 shrink-0">
                 <Button
@@ -182,7 +204,8 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
                 </Button>
               </div>
             </div>
-          ))
+            )
+          })
         ) : (
           <p className="text-sm text-muted-foreground text-center py-8">暂无章节</p>
         )}

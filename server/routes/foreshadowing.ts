@@ -54,7 +54,7 @@ router.get('/:novelId', zValidator('query', z.object({
     .where(eq(foreshadowing.novelId, novelId))
 
   if (status) {
-    query = query.where(and(eq(foreshadowing.novelId, novelId), eq(foreshadowing.status, status))) as any
+    query = (query as any).where(and(eq(foreshadowing.novelId, novelId), eq(foreshadowing.status, status)))
   }
 
   const list = await query

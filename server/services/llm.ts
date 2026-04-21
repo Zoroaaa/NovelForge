@@ -8,9 +8,9 @@
  * - Token 计数与预算控制
  */
 
-import type { Database } from 'drizzle-orm'
-import type { modelConfigs } from '../db/schema'
+import { modelConfigs } from '../db/schema'
 import { eq, and, desc } from 'drizzle-orm'
+import type { DrizzleD1Database } from 'drizzle-orm/d1'
 
 export interface LLMConfig {
   provider: 'volcengine' | 'anthropic' | 'openai'
@@ -66,7 +66,7 @@ const DEFAULT_PARAMS: ModelParams = {
  * 3. 硬编码 fallback
  */
 export async function resolveConfig(
-  db: Database<typeof modelConfigs>,
+  db: DrizzleD1Database,
   stage: string,
   novelId: string
 ): Promise<LLMConfig> {
@@ -92,7 +92,7 @@ export async function resolveConfig(
       apiBase: novelConfig.apiBase || getDefaultBase(novelConfig.provider),
       apiKey: novelConfig.apiKey || '',
       params: novelConfig.params ? JSON.parse(novelConfig.params) : undefined,
-      apiKeyEnv: novelConfig.apiKeyEnv,
+      apiKeyEnv: novelConfig.apiKeyEnv ?? undefined,
     }
   }
 
@@ -118,7 +118,7 @@ export async function resolveConfig(
       apiBase: globalConfig.apiBase || getDefaultBase(globalConfig.provider),
       apiKey: globalConfig.apiKey || '',
       params: globalConfig.params ? JSON.parse(globalConfig.params) : undefined,
-      apiKeyEnv: globalConfig.apiKeyEnv,
+      apiKeyEnv: globalConfig.apiKeyEnv ?? undefined,
     }
   }
 
@@ -289,7 +289,7 @@ export async function generate(
     throw new Error(`LLM API error: ${response.status} ${errorText}`)
   }
 
-  const result = await response.json()
+  const result = await response.json() as any
   
   let text = ''
   let promptTokens = 0

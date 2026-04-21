@@ -71,7 +71,7 @@ router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
       row.novelId,
       row.name,
       body.description
-    ).catch((err) => console.warn('Character vectorization failed:', err)))
+    ).then(() => {}).catch((err) => console.warn('Character vectorization failed:', err)))
   }
 
   return c.json(row)
@@ -144,7 +144,7 @@ router.post('/:id/image', async (c) => {
       characterId,
       {
         characterName: character.name,
-        role: character.role,
+        role: character.role ?? undefined,
         skipAnalysis: !shouldAnalyze,
       }
     )
@@ -202,7 +202,7 @@ router.post('/:id/analyze-image', zValidator('json', z.object({
       return c.json({ error: 'Character not found' }, 404)
     }
 
-    const imageUrl = c.req.valid('json').imageUrl || (character.imageR2Key ? `https://pub-${c.env.STORAGE.bucketName}.${c.env.STORAGE.accountId}.r2.dev/${character.imageR2Key}` : null)
+    const imageUrl = c.req.valid('json').imageUrl || (character.imageR2Key ? `https://pub-${(c.env.STORAGE as any).bucketName}.${(c.env.STORAGE as any).accountId}.r2.dev/${character.imageR2Key}` : null)
     if (!imageUrl) {
       return c.json({ error: 'No image available for analysis' }, 400)
     }
@@ -218,7 +218,7 @@ router.post('/:id/analyze-image', zValidator('json', z.object({
     // 进行视觉分析
     const analysis = await analyzeCharacterImage(c.env, imageBuffer, {
       characterName: character.name,
-      role: character.role,
+      role: character.role ?? undefined,
     })
 
     return c.json({

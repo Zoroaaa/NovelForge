@@ -17,7 +17,7 @@ import { z } from 'zod'
 import { drizzle } from 'drizzle-orm/d1'
 import { eq, desc, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
-import { generateChapter } from '../services/agent'
+import { generateChapter, type ToolCallEvent } from '../services/agent'
 import { generationLogs, chapters, characters, volumes } from '../db/schema'
 import { resolveConfig } from '../services/llm'
 
@@ -62,8 +62,8 @@ router.post('/chapter', async (c) => {
       writer.write(encoder.encode(data))
     },
     // onToolCall
-    (name, args, result) => {
-      const data = `data: ${JSON.stringify({ type: 'tool_call', name, args, result: result.slice(0, 500) })}\n\n`
+    (event: ToolCallEvent) => {
+      const data = `data: ${JSON.stringify({ type: 'tool_call', name: event.name, args: event.args, result: (event.result || '').slice(0, 500) })}\n\n`
       writer.write(encoder.encode(data))
     },
     // onDone
@@ -248,7 +248,7 @@ ${chapter.content.slice(0, 10000)}
     return c.json({ error: 'Check failed', details: resp.statusText }, 500)
   }
 
-  const result = await resp.json()
+  const result = await resp.json() as any
   const content = result.choices?.[0]?.message?.content || '{}'
 
   try {
@@ -344,7 +344,7 @@ ${context ? `【补充上下文】：\n${context}` : ''}
       return c.json({ error: '生成失败', details: `${resp.status} ${errorText}` }, 500)
     }
 
-    const result = await resp.json()
+    const result = await resp.json() as any
     const content = result.choices?.[0]?.message?.content || ''
 
     return c.json({ content })
@@ -400,7 +400,6 @@ router.post('/outline-batch', zValidator('json', z.object({
         id: chapters.id,
         title: chapters.title,
         sortOrder: chapters.sortOrder,
-        outlineId: chapters.outlineId,
       })
       .from(chapters)
       .where(eq(chapters.volumeId, volumeId))
@@ -491,7 +490,7 @@ ${context ? `\n【补充上下文】：\n${context}` : ''}
       return c.json({ error: '批量生成失败', details: `${resp.status} ${errorText}` }, 500)
     }
 
-    const result = await resp.json()
+    const result = await resp.json() as any
     const content = result.choices?.[0]?.message?.content || ''
 
     // 7. 解析JSON结果

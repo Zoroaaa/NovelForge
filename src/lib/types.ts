@@ -28,6 +28,11 @@ export interface Volume {
   wordCount: number
   status: string
   summary: string | null
+  outline: string | null
+  blueprint: string | null
+  targetWordCount: number | null
+  notes: string | null
+  chapterCount: number
   createdAt: number
   updatedAt: number
   deletedAt: number | null
@@ -63,6 +68,8 @@ export interface Character {
   description: string | null
   attributes: string | null
   imageR2Key: string | null
+  powerLevel: string | null
+  vectorId: string | null
   createdAt: number
   updatedAt: number
   deletedAt: number | null
@@ -124,7 +131,7 @@ export interface VectorIndexRecord {
 }
 
 // Input types
-export type NovelInput = Pick<Novel, 'title'> & Partial<Pick<Novel, 'description' | 'genre'>>
+export type NovelInput = Pick<Novel, 'title'> & Partial<Pick<Novel, 'description' | 'genre' | 'status'>>
 
 // v2.0: OutlineInput 已废弃，使用 MasterOutline / NovelSetting / VolumeInput 替代
 
@@ -280,27 +287,6 @@ export interface NovelSetting {
   createdAt: number
   updatedAt: number
   deletedAt: number | null
-}
-
-/**
- * 卷表增强版 (volumes v2.0)
- * 添加了 outline/blueprint/notes/targetWordCount/chapterCount 等字段
- */
-export interface VolumeV2 extends Volume {
-  outlineId?: string | null
-  outline?: string | null         // 卷大纲 (Markdown)
-  blueprint?: string | null       // 卷蓝图 (JSON)
-  targetWordCount?: number | null // 目标字数
-  notes?: string | null           // 作者笔记
-  chapterCount?: number           // 章节计数
-}
-
-/**
- * 角色增强版 (characters v2.0)
- * 添加了 powerLevel 字段
- */
-export interface CharacterV2 extends Character {
-  powerLevel?: string | null      // JSON: 境界信息
 }
 
 /**

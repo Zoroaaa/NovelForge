@@ -72,7 +72,7 @@ router.post(
     }
 
     try {
-      const vectorIds = await indexContent(c.env, sourceType, sourceId, novelId, title, content)
+      const vectorIds = await indexContent(c.env, sourceType, sourceId, novelId, title, content ?? null)
 
       return c.json({
         ok: true,

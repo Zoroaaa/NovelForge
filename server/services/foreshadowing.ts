@@ -9,7 +9,7 @@
 
 import { drizzle } from 'drizzle-orm/d1'
 import { foreshadowing, chapters } from '../db/schema'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, isNull } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { resolveConfig } from './llm'
 
@@ -63,7 +63,7 @@ export async function extractForeshadowingFromChapter(
         and(
           eq(foreshadowing.novelId, novelId),
           eq(foreshadowing.status, 'open'),
-          eq(foreshadowing.deletedAt ?? '', '') as any  // 处理可能为 null 的情况
+          isNull(foreshadowing.deletedAt)
         )
       )
       .all()
@@ -139,7 +139,7 @@ ${existingForeshadowingText}
       throw new Error(`Foreshadowing extraction API error: ${resp.status}`)
     }
 
-    const result = await resp.json()
+    const result = await resp.json() as any
     const content = result.choices?.[0]?.message?.content || '{}'
 
     // 解析 JSON 结果

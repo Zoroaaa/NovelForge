@@ -13,7 +13,7 @@
  */
 
 import { drizzle } from 'drizzle-orm/d1'
-import { eq, and, isNull, desc } from 'drizzle-orm'
+import { eq, and, isNull, desc, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { novels, masterOutline, novelSettings, chapters, characters } from '../db/schema'
 import { searchSimilar, embedText } from '../services/embedding'
@@ -228,7 +228,7 @@ export async function handleToolCall(
         .limit(limit)
 
       if (status) {
-        query = query.where(eq(novels.status, status)) as any
+        query = (query as any).where(eq(novels.status, status))
       }
 
       const rows = await query.all()
@@ -278,7 +278,7 @@ export async function handleToolCall(
         .limit(limit)
 
       if (status) {
-        query = query.where(eq(chapters.status, status)) as any
+        query = (query as any).where(eq(chapters.status, status))
       }
 
       const rows = await query.all()
@@ -389,8 +389,8 @@ export async function handleToolCall(
           .from(masterOutline)
           .where(and(
             eq(masterOutline.novelId, novelId),
-            isNull(masterOutline.deletedAt),
-            isNull(masterOutline.content).not()
+            isNull(masterOutline.content),
+            sql`${masterOutline.content} IS NOT NULL`
           ))
           .all()
         for (const o of outlinesToIndex) {
@@ -405,7 +405,7 @@ export async function handleToolCall(
         const chaptersToIndex = await db
           .select({ id: chapters.id, title: chapters.title, content: chapters.content })
           .from(chapters)
-          .where(and(eq(chapters.novelId, novelId), isNull(chapters.deletedAt), isNull(chapters.content).not()))
+          .where(and(eq(chapters.novelId, novelId), isNull(chapters.deletedAt), sql`${chapters.content} IS NOT NULL`))
           .all()
         for (const c of chaptersToIndex) {
           if (c.content) {
@@ -419,7 +419,7 @@ export async function handleToolCall(
         const charactersToIndex = await db
           .select({ id: characters.id, name: characters.name, description: characters.description })
           .from(characters)
-          .where(and(eq(characters.novelId, novelId), isNull(characters.deletedAt), isNull(characters.description).not()))
+          .where(and(eq(characters.novelId, novelId), isNull(characters.deletedAt), sql`${characters.description} IS NOT NULL`))
           .all()
         for (const ch of charactersToIndex) {
           if (ch.description) {

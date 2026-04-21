@@ -84,6 +84,19 @@ export default function NovelsPage() {
     }
   }
 
+  const handleStatusChange = (id: string, newStatus: string) => {
+    api.novels.update(id, { status: newStatus as any }).then(() => {
+      queryClient.invalidateQueries({ queryKey: ['novels'] })
+      const statusLabels: Record<string, string> = {
+        draft: '草稿',
+        writing: '连载中',
+        completed: '已完成',
+        archived: '已归档',
+      }
+      toast.success(`状态已更新为：${statusLabels[newStatus] || newStatus}`)
+    }).catch((error) => toast.error(error.message))
+  }
+
   const statusLabels: Record<string, string> = {
     draft: '草稿',
     writing: '连载中',
@@ -176,6 +189,7 @@ export default function NovelsPage() {
                 novel={novel}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
+                onStatusChange={handleStatusChange}
               />
             ))}
           </div>

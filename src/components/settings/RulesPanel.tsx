@@ -256,6 +256,7 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
           </DialogContent>
         </Dialog>
       </div>
+      </div>
 
       {/* 规则列表（按类别分组展示） */}
       <div className="px-3 pb-3 space-y-1.5">

@@ -161,6 +161,14 @@ export const api = {
     rebuild: (body: { novelId: string }) => req<any>('/api/entities/rebuild', { method: 'POST', body: j(body) }),
   },
 
+  // 模型配置管理
+  modelConfigs: {
+    list:   (params?: { novelId?: string; stage?: string }) => {
+      const searchParams = params ? '?' + new URLSearchParams(params as any).toString() : ''
+      return req<ModelConfig[]>(`/api/config${searchParams}`)
+    },
+  },
+
   generate: {
     chapter: (payload: GenerateOptions, onChunk: (text: string) => void, onDone: () => void, onError: (e: Error) => void): (() => void) => { return () => {} },
   }

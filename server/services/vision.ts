@@ -52,7 +52,7 @@ async function uploadToR2(
   })
 
   // 构建公开访问 URL（假设 bucket 已配置公开访问）
-  const url = `https://pub-${env.STORAGE.bucketName}.${env.STORAGE.accountId}.r2.dev/${key}`
+  const url = `https://pub-${(env.STORAGE as any).bucketName}.${(env.STORAGE as any).accountId}.r2.dev/${key}`
 
   return { url, key }
 }

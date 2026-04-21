@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Character } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Plus, User, Trash2 } from 'lucide-react'
+import { Plus, User, Trash2, Edit2, Swords } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -31,10 +31,13 @@ interface CharacterListProps {
 export function CharacterList({ novelId }: CharacterListProps) {
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [role, setRole] = useState('supporting')
   const [description, setDescription] = useState('')
   const [aliases, setAliases] = useState('')
+  const [powerLevel, setPowerLevel] = useState('')
+  const [attributes, setAttributes] = useState('')
 
   const { data: characters, isLoading } = useQuery({
     queryKey: ['characters', novelId],
@@ -61,24 +64,62 @@ export function CharacterList({ novelId }: CharacterListProps) {
     onError: (error) => toast.error(error.message),
   })
 
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => api.characters.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['characters', novelId] })
+      toast.success('角色已更新')
+      setDialogOpen(false)
+      resetForm()
+    },
+    onError: (error) => toast.error(error.message),
+  })
+
   const resetForm = () => {
+    setEditingId(null)
     setName('')
     setRole('supporting')
     setDescription('')
     setAliases('')
+    setPowerLevel('')
+    setAttributes('')
   }
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
 
-    createMutation.mutate({
+    const characterData: any = {
       novelId,
       name: name.trim(),
       role,
       description: description.trim() || null,
       aliases: aliases.trim() || null,
-    })
+    }
+
+    if (powerLevel.trim()) {
+      characterData.powerLevel = powerLevel.trim()
+    }
+    if (attributes.trim()) {
+      characterData.attributes = attributes.trim()
+    }
+
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, data: characterData })
+    } else {
+      createMutation.mutate(characterData)
+    }
+  }
+
+  const handleEdit = (character: Character) => {
+    setEditingId(character.id)
+    setName(character.name)
+    setRole(character.role || 'supporting')
+    setDescription(character.description || '')
+    setAliases(character.aliases || '')
+    setPowerLevel(character.powerLevel || '')
+    setAttributes(character.attributes || '')
+    setDialogOpen(true)
   }
 
   // 处理图片分析结果
@@ -110,7 +151,7 @@ export function CharacterList({ novelId }: CharacterListProps) {
         </DialogTrigger>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>添加新角色</DialogTitle>
+            <DialogTitle>{editingId ? '编辑角色' : '添加新角色'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreate} className="space-y-4">
             {/* 图片上传 */}
@@ -167,9 +208,40 @@ export function CharacterList({ novelId }: CharacterListProps) {
               />
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="char-power-level" className="flex items-center gap-1.5">
+                <Swords className="h-4 w-4" />
+                境界信息
+              </Label>
+              <Input
+                id="char-power-level"
+                value={powerLevel}
+                onChange={(e) => setPowerLevel(e.target.value)}
+                placeholder='如：{"realm": "金丹期", "level": 3, "title": "金丹真人"}'
+              />
+              <p className="text-[10px] text-muted-foreground">JSON格式存储境界、等级等信息（选填）</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="char-attributes">属性</Label>
+              <Textarea
+                id="char-attributes"
+                value={attributes}
+                onChange={(e) => setAttributes(e.target.value)}
+                placeholder='如：{"strength": 85, "intelligence": 90, "skills": ["剑法", "阵法"]}'
+                rows={2}
+              />
+              <p className="text-[10px] text-muted-foreground">JSON格式存储额外属性（选填）</p>
+            </div>
+
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>取消</Button>
-              <Button type="submit" disabled={!name.trim() || createMutation.isPending}>创建</Button>
+              <Button 
+                type="submit" 
+                disabled={!name.trim() || createMutation.isPending || updateMutation.isPending}
+              >
+                {updateMutation.isPending ? '更新中...' : (editingId ? '更新' : '创建')}
+              </Button>
             </div>
           </form>
         </DialogContent>
@@ -196,20 +268,39 @@ export function CharacterList({ novelId }: CharacterListProps) {
 
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm truncate">{character.name}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
+                    <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
                       {character.role ? (roleLabels[character.role] || character.role) : ''}
                       {character.aliases && ` · ${character.aliases}`}
+                      {character.powerLevel && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 text-[10px] font-medium">
+                          <Swords className="h-3 w-3" />
+                          境界
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 opacity-0 group-hover:opacity-100 text-destructive shrink-0"
-                  onClick={() => deleteMutation.mutate(character.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                <div className="flex items-center gap-0 opacity-0 group-hover:opacity-100 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleEdit(character)
+                    }}
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-destructive"
+                    onClick={() => deleteMutation.mutate(character.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </div>
               {character.description && (
                 <p className="text-xs text-muted-foreground mt-2 pl-6 line-clamp-2">

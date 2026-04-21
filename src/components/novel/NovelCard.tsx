@@ -20,6 +20,7 @@ import {
   ChevronRight,
   ImagePlus,
   ImageIcon,
+  RefreshCw,
 } from 'lucide-react'
 import type { Novel } from '@/lib/types'
 
@@ -27,6 +28,7 @@ interface NovelCardProps {
   novel: Novel
   onEdit: (novel: Novel) => void
   onDelete: (id: string) => void
+  onStatusChange?: (id: string, status: string) => void
 }
 
 const genreColors: Record<string, string> = {
@@ -62,7 +64,7 @@ const statusConfig: Record<string, { label: string; color: string; icon: React.R
   },
 }
 
-export function NovelCard({ novel, onEdit, onDelete }: NovelCardProps) {
+export function NovelCard({ novel, onEdit, onDelete, onStatusChange }: NovelCardProps) {
   const navigate = useNavigate()
   const [uploading, setUploading] = useState(false)
   const [coverUrl, setCoverUrl] = useState(novel.coverR2Key ? `/api/novels/${novel.id}/cover?t=${novel.updatedAt}` : null)
@@ -231,6 +233,29 @@ export function NovelCard({ novel, onEdit, onDelete }: NovelCardProps) {
             <Edit className="mr-2 h-4 w-4" />
             编辑信息
           </DropdownMenuItem>
+          {onStatusChange && (
+            <>
+              <div className="h-px bg-border my-1" />
+              <div className="px-2 py-1.5 text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+                <RefreshCw className="h-3 w-3" />
+                更改状态
+              </div>
+              {Object.entries(statusConfig)
+                .filter(([key]) => key !== novel.status)
+                .map(([status, config]) => (
+                  <DropdownMenuItem 
+                    key={status}
+                    onClick={() => onStatusChange(novel.id, status)}
+                    className="pl-6"
+                  >
+                    {config.icon}
+                    <span className="ml-2">{config.label}</span>
+                  </DropdownMenuItem>
+                ))
+              }
+            </>
+          )}
+          <div className="h-px bg-border my-1" />
           <DropdownMenuItem onClick={() => onDelete(novel.id)} className="text-destructive">
             <Trash2 className="mr-2 h-4 w-4" />
             删除

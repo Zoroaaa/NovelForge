@@ -695,7 +695,7 @@ export async function triggerAutoSummary(
       throw new Error(`Summary API error: ${resp.status}`)
     }
 
-    const result = await resp.json()
+    const result = await resp.json() as any
     const summaryText = result.choices?.[0]?.message?.content
 
     if (summaryText) {
@@ -811,7 +811,7 @@ async function executeAgentTool(
         .where(eq(novelSettings.novelId, targetNovelId))
       
       if (settingsType) {
-        settingsQuery = settingsQuery.where(eq(novelSettings.type, settingsType)) as any
+        settingsQuery = (settingsQuery as any).where(eq(novelSettings.type, settingsType))
       }
       
       const settingsResults = await settingsQuery
@@ -829,9 +829,9 @@ async function executeAgentTool(
     case 'queryCharacter': {
       const { novelId: queryNovelId, role } = args
       const targetNovelId = queryNovelId || novelId
-      const query = db.select().from(characters).where(eq(characters.novelId, targetNovelId))
+      let query = db.select().from(characters).where(eq(characters.novelId, targetNovelId))
       if (role) {
-        query.where(eq(characters.role, role)) as any
+        query = (query as any).where(eq(characters.role, role))
       }
       const results = await query.limit(10).all()
       return JSON.stringify(results.map(c => ({ name: c.name, role: c.role, description: c.description?.slice(0, 300) })), null, 2)

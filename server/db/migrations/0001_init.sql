@@ -25,8 +25,8 @@ CREATE TABLE IF NOT EXISTS novels (
 CREATE INDEX idx_novels_status ON novels(status) WHERE deleted_at IS NULL;
 CREATE INDEX idx_novels_updated ON novels(updated_at DESC) WHERE deleted_at IS NULL;
 
--- ------------------------------------------------------------
--- 2. 大纲表（统一存储三层：world / volume / chapter_outline）
+/* -- ------------------------------------------------------------
+-- 2. 大纲表（统一存储三层：world / volume / chapter_outline）---已废弃
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS outlines (
   id            TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS outlines (
 
 CREATE INDEX idx_outlines_novel ON outlines(novel_id, type) WHERE deleted_at IS NULL;
 CREATE INDEX idx_outlines_parent ON outlines(parent_id) WHERE deleted_at IS NULL;
-CREATE INDEX idx_outlines_sort ON outlines(novel_id, sort_order);
+CREATE INDEX idx_outlines_sort ON outlines(novel_id, sort_order); */
 
 -- ------------------------------------------------------------
 -- 3. 角色表

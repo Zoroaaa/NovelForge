@@ -32,7 +32,6 @@ export interface ChapterData {
 
 export interface NovelData {
   title: string
-  author?: string
   description?: string
   genre?: string
   chapters: ChapterData[]
@@ -71,18 +70,18 @@ async function loadNovelData(db: any, options: Omit<ExportOptions, 'format'>): P
   // 如果指定了卷范围，过滤章节
   let filteredChapters = allChapters
   if (volumeIds && volumeIds.length > 0) {
-    filteredChapters = allChapters.filter(c => c.volumeId && volumeIds.includes(c.volumeId))
+    filteredChapters = allChapters.filter((c: { volumeId?: string | null }) => c.volumeId && volumeIds.includes(c.volumeId))
   }
 
   // 加载卷标题映射
   const volumeMap = new Map<string, string>()
-  if (filteredChapters.some(c => c.volumeId)) {
+  if (filteredChapters.some((c: { volumeId?: string | null }) => c.volumeId)) {
     const volList = await db.select().from(volumes).where(eq(volumes.novelId, novelId)).all()
-    volList.forEach(v => volumeMap.set(v.id, v.title))
+    volList.forEach((v: { id: string; title: string }) => volumeMap.set(v.id, v.title))
   }
 
   // 组装章节数据
-  const chapterData: ChapterData[] = filteredChapters.map(ch => ({
+  const chapterData: ChapterData[] = filteredChapters.map((ch: { id: string; title: string; content?: string | null; sortOrder: number; volumeId?: string | null }) => ({
     id: ch.id,
     title: ch.title,
     content: ch.content || '',
@@ -92,7 +91,6 @@ async function loadNovelData(db: any, options: Omit<ExportOptions, 'format'>): P
 
   return {
     title: novel.title,
-    author: novel.author || undefined,
     description: novel.description || undefined,
     genre: novel.genre || undefined,
     chapters: chapterData,
@@ -113,7 +111,6 @@ export async function exportAsMarkdown(env: Env, options: ExportOptions): Promis
   // 元信息
   if (options.includeMeta !== false) {
     md += `# ${data.title}\n\n`
-    if (data.author) md += `**作者**: ${data.author}\n\n`
     if (data.description) md += `**简介**: ${data.description}\n\n`
     if (data.genre) md += `**类型**: ${data.genre}\n\n`
     md += `---\n\n`
@@ -156,7 +153,6 @@ export async function exportAsTxt(env: Env, options: ExportOptions): Promise<Blo
   if (options.includeMeta !== false) {
     txt += `${data.title}\n`
     txt += `${'='.repeat(data.title.length)}\n\n`
-    if (data.author) txt += `作者：${data.author}\n`
     if (data.description) txt += `简介：${data.description}\n`
     if (data.genre) txt += `类型：${data.genre}\n`
     txt += '\n'
@@ -194,7 +190,7 @@ export async function exportAsEpub(env: Env, options: ExportOptions): Promise<Bl
 
     const epubOption = {
       title: data.title,
-      author: data.author || '未知作者',
+      author: 'NovelForge',
       description: data.description || '',
       publisher: 'NovelForge',
       css: `
@@ -207,8 +203,8 @@ export async function exportAsEpub(env: Env, options: ExportOptions): Promise<Bl
     }
 
     // 生成 EPUB
-    const epubBlob = await EpubGenMemory(content, epubOption)
-    return epubBlob
+    const epubBlob = await (EpubGenMemory as any)(content, epubOption)
+    return epubBlob as any
   } catch (error) {
     console.error('EPUB generation failed:', error)
     throw new Error(`EPUB生成失败: ${(error as Error).message}`)
@@ -295,7 +291,6 @@ export async function exportAsPdf(env: Env, options: ExportOptions): Promise<Blo
   <div class="title-page">
     <h1>${escapeHtml(data.title)}</h1>
     <div class="meta">
-      ${data.author ? `<p>作者：${escapeHtml(data.author)}</p>` : ''}
       ${data.description ? `<p>${escapeHtml(data.description)}</p>` : ''}
       ${data.genre ? `<p>类型：${escapeHtml(data.genre)}</p>` : ''}
     </div>

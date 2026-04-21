@@ -71,7 +71,7 @@ router.get('/:novelId', async (c) => {
 
 // GET /entities/:novelId/children/:parentId - 获取某个节点的直接子节点
 router.get('/:novelId/children/:parentId', async (c) => {
-  const { novelId, parentId } = c.req.params
+  const { novelId, parentId } = c.req.param() as { novelId: string; parentId: string }
   const db = drizzle(c.env.DB)
 
   const children = await db.select()

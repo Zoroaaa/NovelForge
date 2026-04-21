@@ -9,7 +9,7 @@
 
 import { drizzle } from 'drizzle-orm/d1'
 import { characters, chapters } from '../db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { resolveConfig } from './llm'
 
@@ -74,8 +74,10 @@ export async function detectPowerLevelBreakthrough(
       })
       .from(characters)
       .where(
-        eq(characters.novelId, novelId),
-        eq(characters.role, 'protagonist')
+        and(
+          eq(characters.novelId, novelId),
+          eq(characters.role, 'protagonist')
+        )
       )
       .all()
 
@@ -171,7 +173,7 @@ ${chapter.content.slice(0, 3000)}
       throw new Error(`Power level detection API error: ${resp.status}`)
     }
 
-    const result = await resp.json()
+    const result = await resp.json() as any
     const content = result.choices?.[0]?.message?.content || '{}'
 
     // 解析 JSON 结果
@@ -208,8 +210,8 @@ ${chapter.content.slice(0, 3000)}
 
         if (targetCharacter.powerLevel) {
           try {
-            previousPowerLevel = JSON.parse(targetCharacter.powerLevel)
-            newPowerLevel = { ...previousPowerLevel }
+            previousPowerLevel = JSON.parse(targetCharacter.powerLevel) as PowerLevelData
+            newPowerLevel = { ...previousPowerLevel, system: previousPowerLevel.system || '未知体系' }
           } catch {
             newPowerLevel = {
               system: update.system || '未知体系',

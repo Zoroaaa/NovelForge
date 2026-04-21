@@ -57,36 +57,36 @@ router.get('/:novelId', zValidator('query', z.object({
   const { type, category, importance, limit, offset } = c.req.valid('query')
   const db = drizzle(c.env.DB)
 
-  let query = db.select().from(novelSettings)
-    .where(and(
-      eq(novelSettings.novelId, novelId),
-      sql`${novelSettings.deletedAt} IS NULL`
-    ))
+  // 动态构建查询条件
+  const conditions = [
+    eq(novelSettings.novelId, novelId),
+    sql`${novelSettings.deletedAt} IS NULL`
+  ]
 
   if (type) {
-    query = query.where(eq(novelSettings.type, type)) as any
+    conditions.push(eq(novelSettings.type, type))
   }
   if (category) {
-    query = query.where(eq(novelSettings.category, category)) as any
+    conditions.push(eq(novelSettings.category, category))
   }
   if (importance) {
-    query = query.where(eq(novelSettings.importance, importance)) as any
+    conditions.push(eq(novelSettings.importance, importance))
   }
 
-  const settings = await query
+  const settings = await db
+    .select()
+    .from(novelSettings)
+    .where(and(...conditions))
     .orderBy(desc(novelSettings.importance), novelSettings.sortOrder)
     .limit(limit)
     .offset(offset)
     .all()
 
-  // 获取总数
+  // 获取总数（使用相同的筛选条件）
   const countResult = await db
     .select({ count: sql`count(*)` })
     .from(novelSettings)
-    .where(and(
-      eq(novelSettings.novelId, novelId),
-      sql`${novelSettings.deletedAt} IS NULL`
-    ))
+    .where(and(...conditions))
     .get()
 
   return c.json({
@@ -99,7 +99,7 @@ router.get('/:novelId', zValidator('query', z.object({
 
 // GET /settings/:novelId/:id - 获取单个设定的详细信息
 router.get('/:novelId/:id', async (c) => {
-  const { novelId, id } = c.req.params
+  const { novelId, id } = c.req.param() as { novelId: string; id: string }
   const db = drizzle(c.env.DB)
 
   const setting = await db.select()

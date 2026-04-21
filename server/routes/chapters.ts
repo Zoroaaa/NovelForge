@@ -100,7 +100,7 @@ router.patch(
     const body = c.req.valid('json')
 
     if (body.content) {
-      body.wordCount = body.content.length
+      (body as any).wordCount = body.content.length
     }
 
     const [row] = await db
@@ -120,7 +120,7 @@ router.patch(
         body.content
       ))
 
-      safeWaitUntil(c, saveSnapshot(c.env, row.novelId, row.id, body.content).catch(e => console.warn('Snapshot save failed:', e)))
+      safeWaitUntil(c, saveSnapshot(c.env, row.novelId, row.id, body.content ?? '').then(() => {}).catch(e => console.warn('Snapshot save failed:', e)))
     }
 
     // 如果生成了摘要，也索引摘要
@@ -148,7 +148,7 @@ router.delete('/:id', async (c) => {
     safeWaitUntil(c, Promise.all([
       deindexContent(c.env, 'chapter', id),
       deindexContent(c.env, 'summary', id),
-    ]).catch((err) => console.warn('Deindex failed:', err)))
+    ]).then(() => {}))
   }
 
   await db

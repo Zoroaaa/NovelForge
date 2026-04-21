@@ -54,10 +54,10 @@ router.get('/:novelId', zValidator('query', z.object({
     ))
 
   if (category) {
-    query = query.where(eq(writingRules.category, category)) as any
+    query = (query as any).where(eq(writingRules.category, category))
   }
   if (activeOnly) {
-    query = query.where(eq(writingRules.isActive, 1)) as any
+    query = (query as any).where(eq(writingRules.isActive, 1))
   }
 
   const rules = await query

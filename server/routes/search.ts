@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { drizzle } from 'drizzle-orm/d1'
+import { sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 
 const router = new Hono<{ Bindings: Env }>()
@@ -36,7 +37,7 @@ router.get('/', async (c) => {
           .bind(q, novelId || '', q, limit)
           .raw() as any,
       })
-      .from(c.env.DB.prepare('SELECT 1'))
+      .from(sql`SELECT 1`)
 
     const results = await c.env.DB
       .prepare(
@@ -60,8 +61,8 @@ router.get('/', async (c) => {
 
     return c.json({
       query: q,
-      total: results.length,
-      results: results.map((r: any) => ({
+      total: results.results?.length || 0,
+      results: (results.results || []).map((r: any) => ({
         id: r.id,
         novelId: r.novelId,
         title: r.title,

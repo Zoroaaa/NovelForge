@@ -3,7 +3,7 @@ import { create } from 'zustand'
 interface NovelStore {
   activeNovelId: string | null
   activeChapterId: string | null
-  sidebarTab: 'outline' | 'chapters' | 'characters'
+  sidebarTab: 'outline' | 'chapters' | 'characters' | 'settings' | 'rules' | 'foreshadowing'
   setActiveNovel: (id: string) => void
   setActiveChapter: (id: string | null) => void
   setSidebarTab: (tab: NovelStore['sidebarTab']) => void

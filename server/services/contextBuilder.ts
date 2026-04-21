@@ -90,7 +90,7 @@ export async function buildChapterContext(
   }
 
   // 1. 并发拉取强制注入内容（走 D1，精准 ID 查询）
-  const [chapterOutline, prevSummary, recentChainSummaries, volumeSummary, protagonists, openForeshadowing, powerLevelInfo] =
+  const [chapterOutline, prevChapterSummary, recentChainSummaries, volumeSummary, protagonists, openForeshadowing, powerLevelInfo] =
     await Promise.all([
       fetchChapterOutline(db, chapterId),
       fetchPrevChapterSummary(db, chapterId),
@@ -127,7 +127,7 @@ export async function buildChapterContext(
 
         usedTokens += estimated
         ragChunks.push({
-          sourceType: match.metadata.sourceType,
+          sourceType: match.metadata.sourceType as ContextBundle['ragChunks'][number]['sourceType'],
           title: match.metadata.title || 'Untitled',
           content,
           score: match.score,
@@ -155,7 +155,7 @@ export async function buildChapterContext(
     ragChunks,
     debug: {
       totalTokenEstimate:
-        estimateMandatoryTokens({ chapterOutline, prevChapterSummary: prevSummary, recentChainSummaries, volumeSummary, protagonistCards: protagonists }) +
+        estimateMandatoryTokens({ chapterOutline, prevChapterSummary, recentChainSummaries, volumeSummary, protagonistCards: protagonists }) +
         ragChunks.reduce((sum, chunk) => sum + estimateTokens(chunk.content), 0) +
         (openForeshadowing.length > 0 ? openForeshadowing.reduce((s, f) => s + estimateTokens(f), 0) : 0) +  // Phase 1.2
         (powerLevelInfo ? estimateTokens(powerLevelInfo) : 0),  // Phase 1.3
@@ -266,7 +266,7 @@ async function fetchRecentChapterSummaries(
 
     return recentChapters
       .reverse()
-      .map(ch => `[第${ch.sortOrder}章] ${ch.title}: ${ch.summary}`)
+      .map((ch: { sortOrder: number; title: string; summary: string }) => `[第${ch.sortOrder}章] ${ch.title}: ${ch.summary}`)
   } catch (error) {
     console.warn('Failed to fetch recent chapter summaries:', error)
     return []
@@ -322,8 +322,8 @@ async function fetchProtagonistCards(db: any, chapterId: string): Promise<string
 
     // 只返回主角和重要配角
     return protagonistList
-      .filter((c) => c.role === 'protagonist' || c.role === 'antagonist')
-      .map((c) => {
+      .filter((c: { role: string }) => c.role === 'protagonist' || c.role === 'antagonist')
+      .map((c: { name: string; description?: string; attributes?: string }) => {
         let card = `【${c.name}】`
         if (c.description) card += `\n${c.description}`
         if (c.attributes) {
@@ -482,13 +482,13 @@ async function fetchOpenForeshadowing(
         })
         .from(chapters)
         .where(
-          sql`${chapters.id} IN (${openForeshadowingList.map(f => `'${f.chapterId}'`).join(',')})`
+          sql`${chapters.id} IN (${openForeshadowingList.map((f: { chapterId: string }) => `'${f.chapterId}'`).join(',')})`
         )
         .all()
 
-      const chapterSortMap = new Map(foreshadowingChapters.map(ch => [ch.id, ch.sortOrder]))
+      const chapterSortMap = new Map(foreshadowingChapters.map((ch: { id: string; sortOrder: number }) => [ch.id, ch.sortOrder]))
 
-      filteredForeshadowing = openForeshadowingList.filter(f => {
+      filteredForeshadowing = openForeshadowingList.filter((f: { chapterId: string; importance: string }) => {
         const sort = chapterSortMap.get(f.chapterId)
         return !sort || sort < currentChapter.sortOrder
       })
@@ -496,12 +496,12 @@ async function fetchOpenForeshadowing(
 
     // 按重要性排序并格式化
     const importanceOrder = { high: 0, normal: 1, low: 2 }
-    filteredForeshadowing.sort((a, b) =>
+    filteredForeshadowing.sort((a: { importance: string }, b: { importance: string }) =>
       (importanceOrder[a.importance as keyof typeof importanceOrder] || 1) -
       (importanceOrder[b.importance as keyof typeof importanceOrder] || 1)
     )
 
-    return filteredForeshadowing.slice(0, 10).map(f => {
+    return filteredForeshadowing.slice(0, 10).map((f: { importance: string; title: string; description?: string }) => {
       let text = `【伏笔·${f.importance === 'high' ? '重要' : f.importance === 'normal' ? '一般' : '次要'}】${f.title}`
       if (f.description) text += `\n${f.description}`
       return text
