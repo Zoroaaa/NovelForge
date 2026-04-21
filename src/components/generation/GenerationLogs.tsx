@@ -69,7 +69,6 @@ export function GenerationLogs({ novelId }: GenerationLogsProps) {
 
   return (
     <div className="space-y-4">
-      {/* 统计概览 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <StatCard label="总生成次数" value={logs.length} />
         <StatCard label="总 Input Tokens" value={formatToken(totalPromptTokens)} />
@@ -84,7 +83,6 @@ export function GenerationLogs({ novelId }: GenerationLogsProps) {
         </div>
       )}
 
-      {/* 日志列表 */}
       <Tabs defaultValue="list">
         <TabsList className="grid w-full grid-cols-2 h-8">
           <TabsTrigger value="list" className="text-xs">记录列表</TabsTrigger>
@@ -201,9 +199,6 @@ function formatTime(ts: number): string {
   return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
 }
 
-/**
- * 简易 Token 消耗折线图（SVG 实现）
- */
 function TokenChart({ logs }: { logs: GenerationLog[] }) {
   const successLogs = logs.filter(l => l.status === 'success' && l.promptTokens).slice(0, 20).reverse()
 
@@ -234,7 +229,6 @@ function TokenChart({ logs }: { logs: GenerationLog[] }) {
   return (
     <div className="overflow-x-auto">
       <svg width={width} height={height} className="mx-auto" viewBox={`0 0 ${width} ${height}`}>
-        {/* Grid */}
         {[0, 0.25, 0.5, 0.75, 1].map((pct) => {
           const y = padding.top + chartHeight * (1 - pct)
           return (
@@ -247,10 +241,8 @@ function TokenChart({ logs }: { logs: GenerationLog[] }) {
           )
         })}
 
-        {/* Line */}
         <path d={pathD} fill="none" stroke="hsl(var(--primary))" strokeWidth="2" />
 
-        {/* Points */}
         {points.map((p, i) => (
           <g key={i}>
             <circle cx={p.x} cy={p.y} r="3" fill="hsl(var(--primary))" />
@@ -260,7 +252,6 @@ function TokenChart({ logs }: { logs: GenerationLog[] }) {
           </g>
         ))}
 
-        {/* Label */}
         <text x={width / 2} y={height - 2} textAnchor="middle" className="fill-muted-foreground" fontSize="10">
           最近 {successLogs.length} 次生成（总 tokens）
         </text>

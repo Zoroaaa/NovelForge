@@ -206,10 +206,10 @@ export function ForeshadowingPanel({ novelId, onChapterSelect }: ForeshadowingPa
   if (isLoading) return <div className="p-4 text-center">加载中...</div>
 
   return (
-    <div className="space-y-4">
-      <div className="px-3 pt-3 space-y-2">
+    <div className="flex flex-col h-full">
+      <div className="px-4 py-3 border-b space-y-2">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-muted-foreground">共 {stats.total || 0} 条</span>
+          <span className="text-xs text-muted-foreground tabular-nums">共 {stats.total || 0} 条</span>
           <span className={`text-xs px-1.5 py-0.5 rounded ${STATUS_CONFIG.open.badge}`}>
             ⚠️ 未收 {stats['open'] || 0}
           </span>
@@ -237,7 +237,7 @@ export function ForeshadowingPanel({ novelId, onChapterSelect }: ForeshadowingPa
             if (!open) resetForm()
           }}>
             <DialogTrigger asChild>
-              <Button size="sm" className="h-7 gap-1.5 text-xs shrink-0">
+              <Button size="sm" className="h-8 gap-1.5 text-xs shrink-0">
                 <Plus className="h-3.5 w-3.5" />
                 新增伏笔
               </Button>
@@ -319,7 +319,7 @@ export function ForeshadowingPanel({ novelId, onChapterSelect }: ForeshadowingPa
         </div>
       </div>
 
-      <div className="px-3 pb-3 space-y-2">
+      <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
         {foreshadowings.length === 0 ? (
           <div className="border rounded-lg p-6 text-center bg-muted/10">
             <AlertTriangle className="h-8 w-8 mx-auto text-muted-foreground opacity-50 mb-3" />

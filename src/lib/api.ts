@@ -44,7 +44,7 @@ const j = (body: unknown) => JSON.stringify(body)
  */
 export function streamGenerate(
   payload: GenerateOptions,
-  onChunk: (text: string) => void,
+  onChunk: (data: unknown) => void,
   onDone: () => void,
   onError: (e: Error) => void,
 ): () => void {

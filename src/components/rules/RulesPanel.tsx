@@ -57,7 +57,6 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   
-  // 表单状态
   const [formData, setFormData] = useState<{
     category: 'style' | 'pacing' | 'character' | 'plot' | 'world' | 'taboo' | 'custom'
     title: string
@@ -70,7 +69,6 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
     priority: 3,
   })
 
-  // 查询所有规则
   const { data: rulesData, isLoading } = useQuery({
     queryKey: ['rules', novelId],
     queryFn: () => api.rules.list(novelId),
@@ -78,7 +76,6 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
 
   const rules = rulesData?.rules || []
 
-  // 创建 mutation
   const createMutation = useMutation({
     mutationFn: (data: typeof formData) => 
       api.rules.create({ ...data, novelId }),
@@ -91,7 +88,6 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
     onError: (err) => toast.error(`❌ 创建失败: ${(err as Error).message}`),
   })
 
-  // 更新 mutation
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<WritingRule> }) =>
       api.rules.update(id, data as any),
@@ -104,7 +100,6 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
     onError: (err) => toast.error(`❌ 更新失败: ${(err as Error).message}`),
   })
 
-  // 删除 mutation
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.rules.delete(id),
     onSuccess: () => {
@@ -114,7 +109,6 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
     onError: (err) => toast.error(`❌ 删除失败: ${(err as Error).message}`),
   })
 
-  // 启用/禁用切换
   const toggleMutation = useMutation({
     mutationFn: (id: string) => api.rules.toggle(id),
     onSuccess: () => {
@@ -159,7 +153,6 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
     setEditingId(null)
   }
 
-  // 按类别分组
   const groupedRules = rules.reduce((acc, r) => {
     if (!acc[r.category]) acc[r.category] = []
     acc[r.category].push(r)
@@ -169,24 +162,22 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
   if (isLoading) return <div className="p-4 text-center">加载中...</div>
 
   return (
-    <div className="space-y-4">
-      {/* 头部操作栏 */}
-      <div className="px-3 pt-3 space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">
-            活跃 {rules.filter(r => r.isActive === 1).length} / 共 {rules.length} 条
-          </span>
-          
-          <Dialog open={dialogOpen} onOpenChange={(open) => {
-            setDialogOpen(open)
-            if (!open) resetForm()
-          }}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="h-7 gap-1.5 text-xs">
-                <Plus className="h-3.5 w-3.5" />
-                新增规则
-              </Button>
-            </DialogTrigger>
+    <div className="flex flex-col h-full">
+      <div className="px-4 py-3 border-b flex items-center justify-between gap-3">
+        <span className="text-xs text-muted-foreground tabular-nums">
+          活跃 {rules.filter(r => r.isActive === 1).length} / 共 {rules.length} 条
+        </span>
+        
+        <Dialog open={dialogOpen} onOpenChange={(open) => {
+          setDialogOpen(open)
+          if (!open) resetForm()
+        }}>
+          <DialogTrigger asChild>
+            <Button size="sm" className="h-8 gap-1.5 text-xs shrink-0">
+              <Plus className="h-3.5 w-3.5" />
+              新增规则
+            </Button>
+          </DialogTrigger>
           
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
@@ -262,10 +253,8 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
           </DialogContent>
         </Dialog>
       </div>
-      </div>
 
-      {/* 规则列表（按类别分组展示） */}
-      <div className="px-3 pb-3 space-y-1.5">
+      <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
         {RULE_CATEGORIES.map(({ value, label, icon: Icon, color }) => {
           const items = groupedRules[value] || []
           const activeCount = items.filter(r => r.isActive === 1).length
@@ -300,7 +289,6 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
                         </div>
                         
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {/* 启用/禁用按钮 */}
                           <Button
                             size="icon"
                             variant="ghost"
@@ -311,7 +299,6 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
                             {item.isActive === 1 ? <Power className="h-4 w-4" /> : <PowerOff className="h-4 w-4" />}
                           </Button>
                           
-                          {/* 编辑按钮 */}
                           <Button
                             size="icon"
                             variant="ghost"
@@ -321,7 +308,6 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
                             <Edit2 className="h-4 w-4" />
                           </Button>
                           
-                          {/* 删除按钮 */}
                           <Button
                             size="icon"
                             variant="ghost"

@@ -1,5 +1,5 @@
 /**
- * @file MasterOutlinePanel.tsx
+ * @file OutlinePanel.tsx
  * @description 总纲管理面板组件，提供总纲的创建、编辑、版本管理功能
  * @version 2.0.0 - 优化侧边栏显示，简化布局
  */
@@ -23,11 +23,11 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 
-interface MasterOutlinePanelProps {
+interface OutlinePanelProps {
   novelId: string
 }
 
-export function MasterOutlinePanel({ novelId }: MasterOutlinePanelProps) {
+export function OutlinePanel({ novelId }: OutlinePanelProps) {
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)

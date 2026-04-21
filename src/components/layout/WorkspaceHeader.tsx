@@ -14,9 +14,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { ModelConfig } from '@/components/settings/ModelConfig'
-import { GenerationLogs } from '@/components/settings/GenerationLogs'
-import { WritingStats } from '@/components/settings/WritingStats'
+import { ModelConfig } from '@/components/model/ModelConfig'
+import { GenerationLogs } from '@/components/generation/GenerationLogs'
+import { WritingStats } from '@/components/stats/WritingStats'
 import { SearchBar } from '@/components/search/SearchBar'
 import type { Novel } from '@/lib/types'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'

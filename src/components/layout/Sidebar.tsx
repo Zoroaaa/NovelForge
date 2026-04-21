@@ -6,10 +6,10 @@
  */
 import { ChapterList } from '@/components/chapter/ChapterList'
 import { CharacterList } from '@/components/character/CharacterList'
-import { SettingsPanel } from '@/components/settings/SettingsPanel'
-import { RulesPanel } from '@/components/settings/RulesPanel'
-import { MasterOutlinePanel } from '@/components/settings/MasterOutlinePanel'
-import { ForeshadowingPanel } from '@/components/settings/ForeshadowingPanel'
+import { NovelSettingsPanel } from '@/components/novelsetting/NovelSettingsPanel'
+import { RulesPanel } from '@/components/rules/RulesPanel'
+import { OutlinePanel } from '@/components/outline/OutlinePanel'
+import { ForeshadowingPanel } from '@/components/foreshadowing/ForeshadowingPanel'
 import { VolumePanel } from '@/components/volume/VolumePanel'
 import { useNovelStore } from '@/store/novelStore'
 import {
@@ -73,8 +73,8 @@ export function Sidebar({ novelId, onChapterSelect }: SidebarProps) {
       {/* 右侧内容区 */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* 面板标题 */}
-        <div className="px-4 py-3 border-b bg-background/60 shrink-0">
-          <h2 className="text-sm font-semibold text-foreground">
+        <div className="px-4 py-4 border-b bg-background/80 shrink-0">
+          <h2 className="text-sm font-semibold tracking-wide text-foreground">
             {activeItem?.label ?? ''}
           </h2>
         </div>
@@ -82,39 +82,25 @@ export function Sidebar({ novelId, onChapterSelect }: SidebarProps) {
         {/* 内容滚动区 */}
         <div className="flex-1 overflow-y-auto">
           {sidebarTab === 'chapters' && (
-            <div className="p-3">
-              <ChapterList novelId={novelId} onChapterSelect={onChapterSelect} />
-            </div>
+            <ChapterList novelId={novelId} onChapterSelect={onChapterSelect} />
           )}
           {sidebarTab === 'characters' && (
-            <div className="p-3">
-              <CharacterList novelId={novelId} />
-            </div>
+            <CharacterList novelId={novelId} />
           )}
           {sidebarTab === 'settings' && (
-            <div className="p-3">
-              <SettingsPanel novelId={novelId} />
-            </div>
+            <NovelSettingsPanel novelId={novelId} />
           )}
           {sidebarTab === 'rules' && (
-            <div className="p-3">
-              <RulesPanel novelId={novelId} />
-            </div>
+            <RulesPanel novelId={novelId} />
           )}
           {sidebarTab === 'outline' && (
-            <div className="p-3">
-              <MasterOutlinePanel novelId={novelId} />
-            </div>
+            <OutlinePanel novelId={novelId} />
           )}
           {sidebarTab === 'volumes' && (
-            <div className="p-3">
-              <VolumePanel novelId={novelId} onChapterSelect={onChapterSelect} />
-            </div>
+            <VolumePanel novelId={novelId} onChapterSelect={onChapterSelect} />
           )}
           {sidebarTab === 'foreshadowing' && (
-            <div className="p-3">
-              <ForeshadowingPanel novelId={novelId} onChapterSelect={onChapterSelect} />
-            </div>
+            <ForeshadowingPanel novelId={novelId} onChapterSelect={onChapterSelect} />
           )}
         </div>
       </div>

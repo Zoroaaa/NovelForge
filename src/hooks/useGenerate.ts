@@ -32,6 +32,7 @@ export function useGenerate() {
     setStatus('generating')
     setContextInfo(null)
     setToolCalls([])
+    setUsage(null)
 
     stopRef.current = streamGenerate(
       { 
@@ -41,33 +42,37 @@ export function useGenerate() {
         existingContent: options?.existingContent,
       },
       // onChunk
-      (data) => {
+      (data: unknown) => {
         try {
-          if (data.type === 'context') {
-            setContextInfo(data.context)
+          if (typeof data !== 'object' || data === null) {
+            if (typeof data === 'string') {
+              setOutput((prev) => prev + data)
+            }
             return
           }
-          // Phase 1.4: 处理工具调用事件（包含 status 字段）
-          if (data.type === 'tool_call') {
+          const chunk = data as Record<string, unknown>
+          if (chunk.type === 'context') {
+            setContextInfo(chunk.context as ContextBundle)
+            return
+          }
+          if (chunk.type === 'tool_call') {
             setToolCalls((prev) => {
-              // 如果是同一个工具的更新，替换而不是追加
-              const existingIndex = prev.findIndex(tc => tc.name === data.name && tc.status === 'running')
-              if (existingIndex >= 0 && data.status === 'done') {
+              const existingIndex = prev.findIndex(tc => tc.name === chunk.name && tc.status === 'running')
+              if (existingIndex >= 0 && chunk.status === 'done') {
                 const updated = [...prev]
-                updated[existingIndex] = { name: data.name, args: data.args, result: data.result || '' }
+                updated[existingIndex] = { name: chunk.name as string, args: chunk.args as Record<string, any>, result: (chunk.result as string) || '' }
                 return updated
               }
-              return [...prev, { name: data.name, args: data.args, result: data.result || '' }]
+              return [...prev, { name: chunk.name as string, args: chunk.args as Record<string, any>, result: (chunk.result as string) || '' }]
             })
             return
           }
-          // 处理完成事件，记录 usage
-          if (data.type === 'done' && data.usage) {
-            setUsage(data.usage)
+          if (chunk.type === 'done' && chunk.usage) {
+            setUsage(chunk.usage as { prompt_tokens: number; completion_tokens: number })
             return
           }
-          if (data.content) {
-            setOutput((prev) => prev + data.content)
+          if (chunk.content) {
+            setOutput((prev) => prev + (chunk.content as string))
             return
           }
         } catch {

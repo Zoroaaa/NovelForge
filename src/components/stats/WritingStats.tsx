@@ -56,7 +56,6 @@ export function WritingStats({ novelId }: WritingStatsProps) {
 
   return (
     <div className="space-y-4">
-      {/* 核心指标 */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <MetricCard label="章节数" value={chapterCount} icon={<BookOpen className="h-4 w-4" />} />
         <MetricCard label="总字数" value={totalWords.toLocaleString()} icon={<FileText className="h-4 w-4" />} />
@@ -66,7 +65,6 @@ export function WritingStats({ novelId }: WritingStatsProps) {
         <MetricCard label="平均耗时" value={`${avgDuration}ms`} icon={<Clock className="h-4 w-4" />} />
       </div>
 
-      {/* 模型分布 */}
       {Object.keys(modelDistribution).length > 0 && (
         <div className="space-y-2">
           <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">模型分布</h4>
@@ -85,7 +83,6 @@ export function WritingStats({ novelId }: WritingStatsProps) {
         </div>
       )}
 
-      {/* 错误记录 */}
       {errorLogs.length > 0 && (
         <div className="space-y-2">
           <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">

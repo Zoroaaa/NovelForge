@@ -171,20 +171,25 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
   }
 
   if (volumesLoading) {
-    return <div className="p-4 text-center">加载中...</div>
+    return (
+      <div className="p-4 space-y-2">
+        {[...Array(3)].map((_, i) => <div key={i} className="h-14 bg-muted rounded-lg animate-pulse" />)}
+      </div>
+    )
   }
 
   return (
-    <div className="space-y-3">
-      <div className="px-3 pt-3 flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">共 {volumes?.length || 0} 卷</span>
+    <div className="flex flex-col h-full">
+      {/* 操作栏 */}
+      <div className="px-4 py-3 border-b flex items-center justify-between gap-3">
+        <span className="text-xs text-muted-foreground tabular-nums">{volumes?.length || 0} 卷</span>
         
         <Dialog open={dialogOpen} onOpenChange={(open) => {
           setDialogOpen(open)
           if (!open) resetForm()
         }}>
           <DialogTrigger asChild>
-            <Button size="sm" className="h-7 gap-1.5 text-xs">
+            <Button size="sm" className="h-8 gap-1.5 text-xs shrink-0">
               <Plus className="h-3.5 w-3.5" />
               新增卷
             </Button>
@@ -252,7 +257,8 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
         </Dialog>
       </div>
 
-      <div className="px-3 pb-3 space-y-2">
+      {/* 卷列表 */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {volumes && volumes.length > 0 ? (
           volumes.map((volume) => {
             const volumeChapters = chaptersByVolume[volume.id] || []
@@ -260,55 +266,42 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
             const statusInfo = VOLUME_STATUS_CONFIG[volume.status] || VOLUME_STATUS_CONFIG.draft
             
             return (
-              <div key={volume.id} className="border rounded-lg overflow-hidden">
+              <div key={volume.id} className="rounded-lg border overflow-hidden">
                 <div 
-                  className="flex items-center gap-3 p-3 hover:bg-muted/50 cursor-pointer transition-colors"
+                  className="flex items-center gap-2.5 px-3 py-3 hover:bg-muted/50 cursor-pointer transition-colors group"
                   onClick={() => toggleVolume(volume.id)}
                 >
                   {isExpanded ? (
-                    <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   ) : (
-                    <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   )}
                   
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm truncate">{volume.title}</span>
-                      <Badge variant="outline" className={`text-[10px] ${statusInfo.color}`}>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-medium shrink-0 ${statusInfo.color}`}>
                         {statusInfo.label}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <BookOpen className="h-3 w-3" />
-                        {volumeChapters.length} 章
                       </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground/70">
+                      <span>{volumeChapters.length} 章</span>
                       {volume.wordCount > 0 && (
-                        <span>{volume.wordCount.toLocaleString()} 字</span>
+                        <span>{(volume.wordCount / 1000).toFixed(1)}k字</span>
                       )}
                       {volume.targetWordCount && (
-                        <span className="text-blue-600">
-                          目标 {volume.targetWordCount.toLocaleString()} 字
+                        <span className="text-blue-500/70">
+                          目标 {(volume.targetWordCount / 1000).toFixed(0)}k
                         </span>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7"
-                      onClick={() => handleEdit(volume)}
-                    >
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleEdit(volume)}>
                       <Edit2 className="h-3.5 w-3.5" />
                     </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7 text-destructive"
-                      onClick={() => handleDelete(volume.id)}
-                    >
+                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(volume.id)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -319,17 +312,17 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
                     {volumeChapters.map((chapter, idx) => (
                       <div
                         key={chapter.id}
-                        className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 cursor-pointer transition-colors"
+                        className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted/50 cursor-pointer transition-colors border-b last:border-b-0"
                         onClick={() => onChapterSelect?.(chapter.id)}
                       >
-                        <span className="text-[10px] text-muted-foreground/50 w-5 text-right shrink-0 font-mono">
+                        <span className="text-[11px] text-muted-foreground/40 w-5 text-right shrink-0 font-mono tabular-nums">
                           {String(idx + 1).padStart(2, '0')}
                         </span>
-                        <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <FileText className="h-3 w-3 text-muted-foreground/50 shrink-0" />
                         <span className="text-sm truncate flex-1">{chapter.title}</span>
                         {chapter.wordCount > 0 && (
-                          <span className="text-[10px] text-muted-foreground">
-                            {chapter.wordCount.toLocaleString()} 字
+                          <span className="text-[11px] text-muted-foreground/50 tabular-nums shrink-0">
+                            {chapter.wordCount.toLocaleString()}字
                           </span>
                         )}
                       </div>
@@ -338,8 +331,8 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
                 )}
 
                 {isExpanded && volume.summary && (
-                  <div className="border-t px-3 py-2 bg-muted/10">
-                    <p className="text-xs text-muted-foreground line-clamp-2">
+                  <div className="border-t px-3 py-2.5 bg-muted/10">
+                    <p className="text-xs text-muted-foreground/70 line-clamp-2 leading-relaxed">
                       {volume.summary}
                     </p>
                   </div>
@@ -348,8 +341,8 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
             )
           })
         ) : (
-          <div className="text-center py-8 text-muted-foreground">
-            <BookOpen className="h-10 w-10 mx-auto opacity-20 mb-2" />
+          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+            <BookOpen className="h-10 w-10 mb-3 opacity-20" />
             <p className="text-sm">还没有创建卷</p>
             <p className="text-xs opacity-60 mt-1">点击上方按钮添加卷</p>
           </div>

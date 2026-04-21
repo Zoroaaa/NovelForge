@@ -47,10 +47,12 @@ export function ChapterEditor({ chapter, injectedContent, onContentInserted }: C
   useEffect(() => {
     if (injectedContent && editorRef.current) {
       const editor = editorRef.current
-      editor.commands.insertContent(injectedContent)
-      setShowInsertBanner(true)
-      onContentInserted?.()
-      setTimeout(() => setShowInsertBanner(false), 3000)
+      if (editor.commands?.insertContent) {
+        editor.commands.insertContent(injectedContent)
+        setShowInsertBanner(true)
+        onContentInserted?.()
+        setTimeout(() => setShowInsertBanner(false), 3000)
+      }
     }
   }, [injectedContent])
 
@@ -58,6 +60,7 @@ export function ChapterEditor({ chapter, injectedContent, onContentInserted }: C
     if (!injectedContent || !editorRef.current) return
 
     const editor = editorRef.current
+    if (!editor.commands?.insertContent) return
 
     if (editor.getText().trim()) {
       editor.commands.insertContent('\n\n' + injectedContent)
