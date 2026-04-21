@@ -21,7 +21,6 @@ const CreateSchema = z.object({
   provider: z.string(),
   modelId: z.string(),
   apiBase: z.string().optional(),
-  apiKeyEnv: z.string(),
   apiKey: z.string().optional(),
   params: z.string().optional(),
 })

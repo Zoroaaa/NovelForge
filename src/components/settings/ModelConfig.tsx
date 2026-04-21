@@ -1,8 +1,8 @@
 /**
  * @file ModelConfig.tsx
  * @description 模型配置组件，管理AI模型的API配置和参数设置
- * @version 2.0.0
- * @modified 2026-04-21 - 添加编辑和激活功能
+ * @version 2.1.0
+ * @modified 2026-04-21 - 简化配置，移除models和keyEnv依赖
  */
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -22,7 +22,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Switch } from '@/components/ui/switch'
 import { Plus, Trash2, Settings2, CheckCircle, AlertCircle, Loader2, Pencil, Power } from 'lucide-react'
 
 interface ModelConfigProps {
@@ -92,11 +91,9 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
     setProvider(v)
     const p = PROVIDERS.find(p => p.id === v)
     if (p) {
-      setApiBase(p.apiBase || '')
-      setModelId(p.models.length > 0 && p.models[0] ? p.models[0] : '')
+      setApiBase(p.apiBase)
     } else {
       setApiBase('')
-      setModelId('')
     }
   }
 
@@ -126,12 +123,11 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
     if (!modelId) return
 
     const data = {
-      stage,
+      stage: stage as 'outline_gen' | 'chapter_gen' | 'summary_gen' | 'embedding' | 'vision',
       provider,
       modelId,
-      scope: novelId ? 'novel' : 'global',
+      scope: (novelId ? 'novel' : 'global') as 'global' | 'novel',
       apiBase: apiBase || selectedProvider?.apiBase || undefined,
-      apiKeyEnv: selectedProvider?.keyEnv || 'CUSTOM_API_KEY',
       apiKey: apiKey || undefined,
       ...(novelId ? { novelId } : {}),
     }
@@ -243,10 +239,7 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
 
               <div className="space-y-2">
                 <Label>模型 ID</Label>
-                <Input value={modelId} onChange={(e) => setModelId(e.target.value)} placeholder="输入模型 ID（可自填任意模型名）" />
-                {selectedProvider && selectedProvider.models.length > 0 && (
-                  <p className="text-xs text-muted-foreground">常用: {selectedProvider.models.slice(0, 3).join(', ')}</p>
-                )}
+                <Input value={modelId} onChange={(e) => setModelId(e.target.value)} placeholder="输入模型 ID（如 gpt-4o, deepseek-chat）" />
               </div>
 
               <div className="space-y-2">

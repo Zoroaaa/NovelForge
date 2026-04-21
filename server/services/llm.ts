@@ -1,8 +1,8 @@
 /**
  * @file llm.ts
  * @description LLM服务层模块，提供多提供商API统一封装、流式生成、模型配置管理等功能
- * @version 1.0.0
- * @modified 2026-04-21 - 添加规范化注释
+ * @version 2.0.0
+ * @modified 2026-04-21 - 扩展支持国内外主流大模型提供商
  */
 import { modelConfigs } from '../db/schema'
 import { eq, and, desc } from 'drizzle-orm'
@@ -10,8 +10,15 @@ import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import { drizzle } from 'drizzle-orm/d1'
 import type { Env } from '../lib/types'
 
+export type ProviderType = 
+  | 'baidu' | 'tencent' | 'aliyun' | 'volcengine' | 'zhipu' 
+  | 'minimax' | 'moonshot' | 'siliconflow' | 'deepseek' 
+  | 'openai' | 'anthropic' | 'google' | 'mistral' | 'xai' 
+  | 'groq' | 'perplexity' | 'openrouter' | 'nvidia' | 'gitee' 
+  | 'modelscope' | 'custom'
+
 export interface LLMConfig {
-  provider: 'volcengine' | 'anthropic' | 'openai'
+  provider: ProviderType
   modelId: string
   apiBase: string
   apiKey: string
@@ -55,6 +62,29 @@ const DEFAULT_PARAMS: ModelParams = {
   stop: [],
 }
 
+const PROVIDER_BASES: Record<string, string> = {
+  baidu: 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop',
+  tencent: 'https://api.hunyuan.cloud.tencent.com/v1',
+  aliyun: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  volcengine: 'https://ark.cn-beijing.volces.com/api/v3',
+  zhipu: 'https://open.bigmodel.cn/api/paas/v4',
+  minimax: 'https://api.minimax.chat/v1',
+  moonshot: 'https://api.moonshot.cn/v1',
+  siliconflow: 'https://api.siliconflow.cn/v1',
+  deepseek: 'https://api.deepseek.com/v1',
+  openai: 'https://api.openai.com/v1',
+  anthropic: 'https://api.anthropic.com/v1',
+  google: 'https://generativelanguage.googleapis.com/v1beta',
+  mistral: 'https://api.mistral.ai/v1',
+  xai: 'https://api.x.ai/v1',
+  groq: 'https://api.groq.com/openai/v1',
+  perplexity: 'https://api.perplexity.ai',
+  openrouter: 'https://openrouter.ai/api/v1',
+  nvidia: 'https://integrate.api.nvidia.com/v1',
+  gitee: 'https://ai.gitee.com/v1',
+  modelscope: 'https://api-inference.modelscope.cn/v1',
+}
+
 /**
  * 解析模型配置
  * @description 按优先级获取模型配置：小说级配置 > 全局配置 > 硬编码fallback
@@ -86,7 +116,7 @@ export async function resolveConfig(
 
   if (novelConfig) {
     return {
-      provider: novelConfig.provider as 'volcengine' | 'anthropic' | 'openai',
+      provider: novelConfig.provider as ProviderType,
       modelId: novelConfig.modelId,
       apiBase: novelConfig.apiBase || getDefaultBase(novelConfig.provider),
       apiKey: novelConfig.apiKey || '',
@@ -112,7 +142,7 @@ export async function resolveConfig(
 
   if (globalConfig) {
     return {
-      provider: globalConfig.provider as 'volcengine' | 'anthropic' | 'openai',
+      provider: globalConfig.provider as ProviderType,
       modelId: globalConfig.modelId,
       apiBase: globalConfig.apiBase || getDefaultBase(globalConfig.provider),
       apiKey: globalConfig.apiKey || '',
@@ -169,16 +199,20 @@ export async function streamGenerate(
       payload.anthropic_version = 'v1'
     }
 
-    const response = await fetch(`${base}${config.provider === 'anthropic' ? '/messages' : '/chat/completions'}`, {
+    const endpoint = config.provider === 'anthropic' ? '/messages' : '/chat/completions'
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${config.apiKey}`,
+    }
+
+    if (config.provider === 'anthropic') {
+      headers['x-api-key'] = config.apiKey
+      headers['anthropic-dangerous-direct-browser-access'] = 'true'
+    }
+
+    const response = await fetch(`${base}${endpoint}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${config.apiKey}`,
-        ...(config.provider === 'anthropic' ? {
-          'x-api-key': config.apiKey,
-          'anthropic-dangerous-direct-browser-access': 'true',
-        } : {}),
-      },
+      headers,
       body: JSON.stringify(payload),
     })
 
@@ -283,16 +317,20 @@ export async function generate(
     delete payload.model
   }
 
-  const response = await fetch(`${base}${config.provider === 'anthropic' ? '/messages' : '/chat/completions'}`, {
+  const endpoint = config.provider === 'anthropic' ? '/messages' : '/chat/completions'
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${config.apiKey}`,
+  }
+
+  if (config.provider === 'anthropic') {
+    headers['x-api-key'] = config.apiKey
+    headers['anthropic-dangerous-direct-browser-access'] = 'true'
+  }
+
+  const response = await fetch(`${base}${endpoint}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.apiKey}`,
-      ...(config.provider === 'anthropic' ? {
-        'x-api-key': config.apiKey,
-        'anthropic-dangerous-direct-browser-access': 'true',
-      } : {}),
-    },
+    headers,
     body: JSON.stringify(payload),
   })
 
@@ -330,16 +368,7 @@ export async function generate(
 // ========== 内部工具函数 ==========
 
 function getDefaultBase(provider: string): string {
-  switch (provider) {
-    case 'volcengine':
-      return 'https://ark.cn-beijing.volces.com/api/v3'
-    case 'anthropic':
-      return 'https://api.anthropic.com/v1'
-    case 'openai':
-      return 'https://api.openai.com/v1'
-    default:
-      return 'https://ark.cn-beijing.volces.com/api/v3'
-  }
+  return PROVIDER_BASES[provider] || 'https://api.openai.com/v1'
 }
 
 /** 中文 token 粗估：1 汉字 ≈ 1.3 token，英文 1 词 ≈ 1.3 token */

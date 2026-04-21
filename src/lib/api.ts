@@ -207,7 +207,7 @@ export const api = {
       const searchParams = params ? '?' + new URLSearchParams(params as any).toString() : ''
       return req<ModelConfig[]>(`/api/config${searchParams}`)
     },
-    create: (body: { stage: string; provider: string; modelId: string; scope: string; apiBase?: string; apiKeyEnv?: string; apiKey?: string; novelId?: string }) =>
+    create: (body: { stage: string; provider: string; modelId: string; scope: string; apiBase?: string; apiKey?: string; novelId?: string }) =>
                                    req<ModelConfig>('/api/config', { method: 'POST', body: j(body) }),
     update: (id: string, body: Partial<ModelConfig>) =>
                                    req<ModelConfig>(`/api/config/${id}`, { method: 'PATCH', body: j(body) }),
