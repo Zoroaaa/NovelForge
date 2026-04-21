@@ -16,6 +16,7 @@ import {
   getGenerationLogs,
   checkCharacterConsistency,
   generateOutlineBatch,
+  checkChapterCoherence,
 } from '../services/agent'
 import { generateOutline } from '../services/llm'
 
@@ -83,9 +84,28 @@ router.post('/chapter', async (c) => {
         status: 'success',
       })
 
+      // Phase 2.3: 异步发送连贯性检查结果（不阻塞主流程）
+      const coherenceCheckPromise = checkChapterCoherence(c.env, chapterId, novelId)
+        .then(coherenceResult => {
+          if (coherenceResult.hasIssues) {
+            const coherenceData = `data: ${JSON.stringify({
+              type: 'coherence_check',
+              score: coherenceResult.score,
+              issues: coherenceResult.issues,
+            })}\n\n`
+            writer.write(encoder.encode(coherenceData))
+          }
+        })
+        .catch(err => console.warn('Failed to send coherence check:', err))
+
       const doneData = `data: ${JSON.stringify({ type: 'done', usage })}\n\ndata: [DONE]\n\n`
       writer.write(encoder.encode(doneData))
-      writer.close()
+
+      // 等待连贯性检查完成后再关闭流（最多等 5 秒）
+      Promise.race([
+        coherenceCheckPromise,
+        new Promise(resolve => setTimeout(resolve, 5000)),
+      ]).finally(() => writer.close())
     },
     async (error) => {
       const durationMs = Date.now() - startTime

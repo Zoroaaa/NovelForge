@@ -42,6 +42,12 @@ export interface StreamOptions {
   onChunk: (text: string) => void
   onDone: (usage: { prompt_tokens: number; completion_tokens: number }) => void
   onError: (error: Error) => void
+  onToolCall?: (toolCall: {
+    id: string
+    name: string
+    args: Record<string, any>
+    status: 'start' | 'delta' | 'complete'
+  }) => void
 }
 
 export interface ModelParams {
@@ -172,7 +178,7 @@ export async function streamGenerate(
   options: StreamOptions,
   tools?: Array<{ type: string; function: { name: string; description: string; parameters: any } }>
 ): Promise<void> {
-  const { onChunk, onDone, onError } = options
+  const { onChunk, onDone, onError, onToolCall } = options
 
   try {
     const base = config.apiBase || getDefaultBase(config.provider)
@@ -188,10 +194,9 @@ export async function streamGenerate(
       frequency_penalty: mergedParams.frequency_penalty,
       presence_penalty: mergedParams.presence_penalty,
       ...(mergedParams.stop.length > 0 ? { stop: mergedParams.stop } : {}),
-      ...(tools ? { tools } : {}),
+      ...(tools && tools.length > 0 ? { tools, tool_choice: 'auto' } : {}),
     }
 
-    // Anthropic 格式适配
     if (config.provider === 'anthropic') {
       payload.system = messages.find(m => m.role === 'system')?.content || ''
       payload.messages = messages.filter(m => m.role !== 'system')
@@ -221,7 +226,6 @@ export async function streamGenerate(
       throw new Error(`LLM API error: ${response.status} ${errorText}`)
     }
 
-    // 处理 SSE 流
     const reader = response.body?.getReader()
     if (!reader) {
       throw new Error('Response body is not readable')
@@ -231,6 +235,9 @@ export async function streamGenerate(
     let buffer = ''
     let promptTokens = 0
     let completionTokens = 0
+
+    // Function calling 状态管理
+    const toolCallMap = new Map<number, { id: string; name: string; args: string }>()
 
     while (true) {
       const { done, value } = await reader.read()
@@ -249,26 +256,138 @@ export async function streamGenerate(
           const jsonStr = trimmed.slice(5).trim()
           const data = JSON.parse(jsonStr)
 
-          // 提取内容
-          let content = ''
+          // 处理 Anthropic 格式
           if (config.provider === 'anthropic') {
-            content = data.content?.[0]?.text || ''
-          } else {
-            content = data.choices?.[0]?.delta?.content || ''
+            const content = data.content?.[0]?.text || ''
+            if (content) {
+              onChunk(content)
+              completionTokens += estimateTokens(content)
+            }
+            if (data.usage) {
+              promptTokens = data.usage.input_tokens || 0
+              completionTokens = data.usage.output_tokens || completionTokens
+            }
+            continue
           }
 
+          // 处理 OpenAI 兼容格式
+          const delta = data.choices?.[0]?.delta
+          if (!delta) {
+            if (data.usage) {
+              promptTokens = data.usage.prompt_tokens || 0
+              completionTokens = data.usage.completion_tokens || completionTokens
+            }
+            continue
+          }
+
+          // 1. 处理文本内容
+          const content = delta.content || ''
           if (content) {
             onChunk(content)
             completionTokens += estimateTokens(content)
           }
 
-          // 提取 token 使用量
+          // 2. 处理 function calling（核心改进）
+          if (delta.tool_calls && onToolCall && tools && tools.length > 0) {
+            for (const tc of delta.tool_calls) {
+              const index = tc.index ?? 0
+
+              if (!toolCallMap.has(index)) {
+                toolCallMap.set(index, {
+                  id: tc.id || '',
+                  name: '',
+                  args: '',
+                })
+              }
+
+              const currentTool = toolCallMap.get(index)!
+
+              if (tc.id) {
+                currentTool.id = tc.id
+              }
+
+              if (tc.function) {
+                if (tc.function.name) {
+                  currentTool.name = tc.function.name
+                }
+                if (tc.function.arguments) {
+                  currentTool.args += tc.function.arguments
+                }
+              }
+
+              // 通知外部：工具调用开始/更新
+              const argsObj = (() => {
+                try {
+                  return JSON.parse(currentTool.args || '{}')
+                } catch {
+                  return {}
+                }
+              })()
+
+              onToolCall({
+                id: currentTool.id,
+                name: currentTool.name,
+                args: argsObj,
+                status: tc.function?.arguments ? 'delta' : 'start',
+              })
+            }
+          }
+
+          // 3. 提取 token 使用量
           if (data.usage) {
             promptTokens = data.usage.prompt_tokens || 0
             completionTokens = data.usage.completion_tokens || completionTokens
           }
+
+          // 4. 检测完成（finish_reason 为 tool_calls 时）
+          const finishReason = data.choices?.[0]?.finish_reason
+          if (finishReason === 'tool_calls' || finishReason === 'stop') {
+            // 通知所有工具调用完成
+            if (onToolCall && toolCallMap.size > 0) {
+              for (const [index, tool] of toolCallMap) {
+                if (tool.name && tool.args) {
+                  try {
+                    const finalArgs = JSON.parse(tool.args)
+                    onToolCall({
+                      id: tool.id,
+                      name: tool.name,
+                      args: finalArgs,
+                      status: 'complete',
+                    })
+                  } catch (e) {
+                    console.warn(`Failed to parse tool args for ${tool.name}:`, tool.args)
+                  }
+                }
+              }
+            }
+          }
         } catch (e) {
           console.warn('Failed to parse SSE line:', trimmed)
+        }
+      }
+    }
+
+    // 清理：确保所有工具调用都标记为 complete（防止遗漏）
+    if (onToolCall && toolCallMap.size > 0) {
+      for (const [index, tool] of toolCallMap) {
+        if (tool.name && tool.args) {
+          try {
+            const finalArgs = JSON.parse(tool.args)
+            // 检查是否已经发送过 complete 事件（避免重复）
+            const alreadyCompleted = Array.from(toolCallMap.entries())
+              .some(([i, t]) => i !== index && t.id === tool.id)
+
+            if (!alreadyCompleted) {
+              onToolCall({
+                id: tool.id,
+                name: tool.name,
+                args: finalArgs,
+                status: 'complete',
+              })
+            }
+          } catch (e) {
+            console.warn(`Final cleanup failed for tool ${tool.name}:`, e)
+          }
         }
       }
     }

@@ -10,7 +10,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Character } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Plus, User, Trash2, Edit2, Swords } from 'lucide-react'
+import { Plus, User, Trash2, Edit2, Swords, ChevronDown, ChevronRight, ChevronUp, TrendingUp } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -38,6 +38,7 @@ export function CharacterList({ novelId }: CharacterListProps) {
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [expandedCharacterId, setExpandedCharacterId] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [role, setRole] = useState('supporting')
   const [description, setDescription] = useState('')
@@ -350,18 +351,101 @@ export function CharacterList({ novelId }: CharacterListProps) {
                       · {character.aliases}
                     </span>
                   )}
-                  {character.powerLevel && (
-                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-sm bg-purple-50 text-purple-700 text-[10px] font-medium">
-                      <Swords className="h-2.5 w-2.5" />
-                      境界
-                    </span>
-                  )}
+                  {character.powerLevel && (() => {
+                    try {
+                      const powerData = JSON.parse(character.powerLevel)
+                      return (
+                        <span
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-sm bg-purple-50 text-purple-700 text-[10px] font-medium cursor-pointer hover:bg-purple-100"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setExpandedCharacterId(expandedCharacterId === character.id ? null : character.id)
+                          }}
+                        >
+                          <Swords className="h-2.5 w-2.5" />
+                          {powerData.current || '境界'}
+                          {expandedCharacterId === character.id ? (
+                            <ChevronUp className="h-2.5 w-2.5" />
+                          ) : (
+                            <ChevronDown className="h-2.5 w-2.5" />
+                          )}
+                        </span>
+                      )
+                    } catch {
+                      return null
+                    }
+                  })()}
                 </div>
                 {character.description && (
                   <p className="text-[11px] text-muted-foreground/70 line-clamp-1">
                     {character.description}
                   </p>
                 )}
+
+                {expandedCharacterId === character.id && character.powerLevel && (() => {
+                  try {
+                    const powerData = JSON.parse(character.powerLevel)
+                    return (
+                      <div className="mt-2 pt-2 border-t border-purple-100 dark:border-purple-900 space-y-2">
+                        <div className="flex items-center gap-1.5">
+                          <Swords className="h-3 w-3 text-purple-500" />
+                          <span className="text-[11px] font-medium text-purple-700 dark:text-purple-300">
+                            境界信息
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-[10px]">
+                          <div className="bg-purple-50 dark:bg-purple-950 rounded p-1.5">
+                            <span className="text-muted-foreground">体系：</span>
+                            <span className="font-medium">{powerData.system || '未知'}</span>
+                          </div>
+                          <div className="bg-purple-50 dark:bg-purple-950 rounded p-1.5">
+                            <span className="text-muted-foreground">当前：</span>
+                            <span className="font-medium text-purple-600 dark:text-purple-400">{powerData.current || '未知'}</span>
+                          </div>
+                        </div>
+
+                        {powerData.nextMilestone && (
+                          <div className="bg-blue-50 dark:bg-blue-950 rounded p-1.5 text-[10px]">
+                            <span className="text-muted-foreground">下一目标：</span>
+                            <span className="font-medium text-blue-600 dark:text-blue-400">{powerData.nextMilestone}</span>
+                          </div>
+                        )}
+
+                        {powerData.breakthroughs && powerData.breakthroughs.length > 0 && (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
+                              <TrendingUp className="h-2.5 w-2.5" />
+                              突破历史（{powerData.breakthroughs.length} 次）
+                            </div>
+                            <div className="max-h-[120px] overflow-y-auto space-y-1">
+                              {powerData.breakthroughs.map((bt: any, idx: number) => (
+                                <div key={idx} className="text-[10px] bg-muted/50 rounded p-1.5 flex items-start gap-1.5">
+                                  <span className="text-purple-500 font-mono shrink-0">#{idx + 1}</span>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-medium text-green-600 dark:text-green-400">
+                                      {bt.from} → {bt.to}
+                                    </div>
+                                    {bt.note && (
+                                      <div className="text-muted-foreground line-clamp-1 mt-0.5">{bt.note}</div>
+                                    )}
+                                    {bt.timestamp && (
+                                      <div className="text-muted-foreground/50 mt-0.5">
+                                        {new Date(bt.timestamp).toLocaleDateString('zh-CN')}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  } catch {
+                    return null
+                  }
+                })()}
               </div>
 
               <div className="flex items-center opacity-0 group-hover:opacity-100 shrink-0 transition-opacity">

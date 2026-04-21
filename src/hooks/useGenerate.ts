@@ -71,6 +71,25 @@ export function useGenerate() {
             setUsage(chunk.usage as { prompt_tokens: number; completion_tokens: number })
             return
           }
+          // Phase 2.3: 处理连贯性检查结果
+          if (chunk.type === 'coherence_check') {
+            const { score, issues } = chunk as any
+            const errorCount = issues?.filter((i: any) => i.severity === 'error').length || 0
+            const warningCount = issues?.filter((i: any) => i.severity === 'warning').length || 0
+
+            if (errorCount > 0) {
+              toast.error(`连贯性检测发现 ${errorCount} 个问题（评分: ${score}/100）`, {
+                description: issues.slice(0, 3).map((i: any) => `• ${i.message}`).join('\n'),
+                duration: 8000,
+              })
+            } else if (warningCount > 0) {
+              toast.warning(`连贯性提示：${warningCount} 个建议（评分: ${score}/100）`, {
+                description: issues.slice(0, 2).map((i: any) => `• ${i.message}`).join('\n'),
+                duration: 6000,
+              })
+            }
+            return
+          }
           if (chunk.content) {
             setOutput((prev) => prev + (chunk.content as string))
             return

@@ -23,6 +23,7 @@ import { novelSettingsRouter } from './routes/novel-settings'
 import { writingRulesRouter } from './routes/writing-rules'
 import { foreshadowing } from './routes/foreshadowing'
 import { entityIndexRouter } from './routes/entity-index'
+import { workshop } from './routes/workshop'
 
 const app = new Hono<{ Bindings: Env }>().basePath('/api')
 
@@ -43,5 +44,6 @@ app.route('/search', search)
 app.route('/vectorize', vectorize)
 app.route('/config', settings)
 app.route('/mcp', mcp)
+app.route('/workshop', workshop)
 
 export { app }

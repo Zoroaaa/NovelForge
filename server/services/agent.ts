@@ -5,8 +5,8 @@
  * @modified 2026-04-21 - 添加规范化注释
  */
 import { drizzle } from 'drizzle-orm/d1'
-import { chapters, modelConfigs, characters, novelSettings, masterOutline, volumes, generationLogs } from '../db/schema'
-import { eq, desc, sql } from 'drizzle-orm'
+import { chapters, modelConfigs, characters, novelSettings, masterOutline, volumes, generationLogs, foreshadowing } from '../db/schema'
+import { eq, desc, sql, and } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { buildChapterContext, type ContextBundle } from './contextBuilder'
 import { streamGenerate, resolveConfig } from './llm'
@@ -212,6 +212,19 @@ export async function generateChapter(
       console.warn('Power level detection failed (non-critical):', powerLevelError)
     }
 
+    // 9. Phase 2.3: 异步连贯性质量检查（不阻塞主流程）
+    setTimeout(async () => {
+      try {
+        const coherenceResult = await checkChapterCoherence(env, chapterId, novelId)
+        if (coherenceResult.hasIssues) {
+          console.warn(`⚠️ Coherence check found ${coherenceResult.issues.length} issues:`)
+          coherenceResult.issues.forEach((issue: any) => console.warn(`  - [${issue.severity}] ${issue.message}`))
+        }
+      } catch (coherenceError) {
+        console.warn('Coherence check failed (non-critical):', coherenceError)
+      }
+    }, 0)
+
     onDone(
       { prompt_tokens: usageResult.promptTokens, completion_tokens: usageResult.completionTokens },
       llmConfig.modelId
@@ -229,7 +242,7 @@ export async function generateChapter(
 async function runReActLoop(
   env: Env,
   llmConfig: any,
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+  messages: Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content?: string; tool_call_id?: string; name?: string }>,
   novelId: string,
   onChunk: (text: string) => void,
   onToolCall: (event: ToolCallEvent) => void,
@@ -241,45 +254,80 @@ async function runReActLoop(
 
   while (iteration < maxIterations) {
     iteration++
-    console.log(`🔄 ReAct iteration ${iteration}/${maxIterations}`)
+    console.log(`🔄 ReAct iteration ${iteration}/${maxIterations} (Function Calling Mode)`)
 
     let iterationContent = ''
-    let toolCallsInThisIteration: Array<any> = []
+    const collectedToolCalls: Array<{
+      id: string
+      name: string
+      args: Record<string, any>
+    }> = []
 
-    await streamGenerate(llmConfig, messages, {
+    // Phase 2.1: 使用真正的 function calling（不再依赖文本解析）
+    await streamGenerate(llmConfig, messages as any, {
       onChunk: (text) => {
         iterationContent += text
         onChunk(text)
       },
+      onToolCall: (toolCallDelta) => {
+        // 收集完整的工具调用
+        if (toolCallDelta.status === 'complete') {
+          // 避免重复添加
+          const alreadyExists = collectedToolCalls.some(tc => tc.id === toolCallDelta.id)
+          if (!alreadyExists && toolCallDelta.name) {
+            collectedToolCalls.push({
+              id: toolCallDelta.id,
+              name: toolCallDelta.name,
+              args: toolCallDelta.args || {},
+            })
+            console.log(`📌 Tool call collected: ${toolCallDelta.name}`, toolCallDelta.args)
+          }
+        }
+      },
       onDone: (usage) => {
         totalPromptTokens += usage.prompt_tokens
         totalCompletionTokens += usage.completion_tokens
-        console.log(`✅ Iteration ${iteration} streaming complete, tokens: ${usage.prompt_tokens}/${usage.completion_tokens}`)
+        console.log(`✅ Iteration ${iteration} complete - content: ${iterationContent.length} chars, tools: ${collectedToolCalls.length} calls`)
       },
       onError: (err) => {
         throw err
       },
     }, AGENT_TOOLS)
 
-    // 将 LLM 输出作为 assistant 消息追加
+    // 构造 assistant 消息（支持 function calling 格式）
+    const assistantMessage: any = { role: 'assistant' }
+
     if (iterationContent.trim()) {
-      messages.push({ role: 'assistant', content: iterationContent })
+      assistantMessage.content = iterationContent
     }
 
-    // Phase 1.4: 尝试从内容中提取工具调用（兼容模式）
-    // 注意：真正的 OpenAI function calling 应该通过 stream 事件检测
-    // 这里使用文本解析作为 fallback
-    const extractedToolCalls = extractToolCallsFromContent(iterationContent)
+    if (collectedToolCalls.length > 0) {
+      // OpenAI 标准：assistant 消息包含 tool_calls 数组
+      assistantMessage.tool_calls = collectedToolCalls.map(tc => ({
+        id: tc.id,
+        type: 'function',
+        function: {
+          name: tc.name,
+          arguments: JSON.stringify(tc.args),
+        },
+      }))
+    }
 
-    if (extractedToolCalls.length === 0) {
-      // 无工具调用，生成完成，退出循环
-      console.log(`✅ No tool calls detected in iteration ${iteration}, finishing`)
+    // 只有当有内容或工具调用时才添加消息
+    if (iterationContent.trim() || collectedToolCalls.length > 0) {
+      messages.push(assistantMessage)
+    }
+
+    // 如果没有工具调用，说明生成完成，退出循环
+    if (collectedToolCalls.length === 0) {
+      console.log(`✅ No tool calls in iteration ${iteration}, generation finished`)
       break
     }
 
-    // 执行所有检测到的工具调用
-    for (const toolCall of extractedToolCalls) {
+    // 执行所有收集到的工具调用
+    for (const toolCall of collectedToolCalls) {
       try {
+        // 通知前端：工具开始执行
         onToolCall({
           type: 'tool_call',
           name: toolCall.name,
@@ -287,8 +335,12 @@ async function runReActLoop(
           status: 'running',
         })
 
+        console.log(`🔧 Executing tool: ${toolCall.name}`, toolCall.args)
+
+        // 执行工具
         const result = await executeAgentTool(env, toolCall.name, toolCall.args, novelId)
 
+        // 通知前端：工具执行完成
         onToolCall({
           type: 'tool_call',
           name: toolCall.name,
@@ -297,21 +349,19 @@ async function runReActLoop(
           result: result.slice(0, 500),
         })
 
-        // 将工具调用和结果追加到消息历史
+        // Phase 2.1: 使用 OpenAI 标准的 tool response 格式
         messages.push({
-          role: 'assistant',
-          content: `[已调用工具: ${toolCall.name}]`,
-        })
-        messages.push({
-          role: 'user',
-          content: `[工具 ${toolCall.name} 的执行结果]\n${result}`,
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          name: toolCall.name,
+          content: result,
         })
 
-        toolCallsInThisIteration.push(toolCall)
-        console.log(`🔧 Tool executed: ${toolCall.name}`, result.slice(0, 100))
+        console.log(`✅ Tool executed: ${toolCall.name}, result length: ${result.length}`)
       } catch (error) {
         const errorMsg = (error as Error).message
-        
+
+        // 通知前端：工具执行失败
         onToolCall({
           type: 'tool_call',
           name: toolCall.name,
@@ -320,17 +370,16 @@ async function runReActLoop(
           result: `错误: ${errorMsg}`,
         })
 
+        // 工具执行失败的 response
         messages.push({
-          role: 'user',
-          content: `[工具 ${toolCall.name} 执行失败]\n错误: ${errorMsg}\n请重试或改用其他方式完成任务。`,
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          name: toolCall.name,
+          content: JSON.stringify({ error: errorMsg, message: '工具执行失败，请重试或改用其他方式完成任务。' }),
         })
-        
+
         console.warn(`❌ Tool execution failed: ${toolCall.name}`, error)
       }
-    }
-
-    if (toolCallsInThisIteration.length === 0) {
-      break
     }
   }
 
@@ -559,46 +608,39 @@ ${existingContent}
   userContentParts.push(`【创作任务】`)
   userContentParts.push(`请创作《${chapterTitle}》的正文内容，3000-5000字。`)
 
-  if (contextBundle.mandatory.chapterOutline) {
-    userContentParts.push(`\n【本章大纲】\n${contextBundle.mandatory.chapterOutline}`)
+  // Phase 2.2: 使用新的三层上下文结构
+  if (contextBundle.core.chapterOutline) {
+    userContentParts.push(`\n【本章大纲】\n${contextBundle.core.chapterOutline}`)
   }
 
-  if (contextBundle.mandatory.prevChapterSummary) {
-    userContentParts.push(`\n【上一章摘要】\n${contextBundle.mandatory.prevChapterSummary}`)
+  if (contextBundle.core.prevChapterSummary) {
+    userContentParts.push(`\n【上一章摘要】\n${contextBundle.core.prevChapterSummary}`)
   }
 
-  if (contextBundle.mandatory.recentChainSummaries.length > 0) {
-    userContentParts.push(`\n【前情回顾】\n${contextBundle.mandatory.recentChainSummaries.join('\n')}`)
-  }
-
-  if (contextBundle.mandatory.volumeSummary) {
-    userContentParts.push(`\n【当前卷概要】\n${contextBundle.mandatory.volumeSummary}`)
-  }
-
-  if (contextBundle.mandatory.protagonistCards.length > 0) {
+  if (contextBundle.core.protagonistStateCards.length > 0) {
     userContentParts.push(
-      `\n【主要角色】\n${contextBundle.mandatory.protagonistCards.join('\n\n')}`
+      `\n【主要角色状态卡】\n${contextBundle.core.protagonistStateCards.join('\n\n')}`
     )
   }
 
-  // Phase 1.2: 注入伏笔信息
-  if (contextBundle.mandatory.openForeshadowing && contextBundle.mandatory.openForeshadowing.length > 0) {
+  if (contextBundle.core.highPriorityRules.length > 0) {
     userContentParts.push(
-      `\n【当前未收尾的伏笔（本章可能需要收尾或推进）】\n${contextBundle.mandatory.openForeshadowing.join('\n\n')}`
+      `\n【高优先级创作规则】\n${contextBundle.core.highPriorityRules.join('\n\n')}`
     )
   }
 
-  // Phase 1.3: 注入境界信息
-  if (contextBundle.mandatory.powerLevelInfo) {
-    userContentParts.push(
-      `\n【主角当前境界状态】\n${contextBundle.mandatory.powerLevelInfo}`
-    )
+  // 补充上下文层
+  if (contextBundle.supplementary.summaryChain.length > 0) {
+    userContentParts.push(`\n【前情回顾（摘要链）】\n${contextBundle.supplementary.summaryChain.join('\n')}`)
   }
 
-  // 注入创作规则
-  if (contextBundle.mandatory.writingRules && contextBundle.mandatory.writingRules.length > 0) {
+  if (contextBundle.supplementary.volumeSummary) {
+    userContentParts.push(`\n【当前卷概要】\n${contextBundle.supplementary.volumeSummary}`)
+  }
+
+  if (contextBundle.supplementary.openForeshadowing && contextBundle.supplementary.openForeshadowing.length > 0) {
     userContentParts.push(
-      `\n【创作规则】\n${contextBundle.mandatory.writingRules.join('\n\n')}`
+      `\n【当前未收尾的伏笔（本章可能需要收尾或推进）】\n${contextBundle.supplementary.openForeshadowing.join('\n\n')}`
     )
   }
 
@@ -872,6 +914,283 @@ async function executeAgentTool(
     default:
       return JSON.stringify({ error: `Unknown tool: ${toolName}. Available tools: queryOutline, queryCharacter, searchSemantic` })
   }
+}
+
+// ========== Phase 2.3: 章节连贯性质量检查 ==========
+
+export interface CoherenceCheckResult {
+  hasIssues: boolean
+  issues: Array<{
+    severity: 'warning' | 'error'
+    category: 'continuity' | 'foreshadowing' | 'power_level' | 'consistency'
+    message: string
+    suggestion?: string
+  }>
+  score: number  // 0-100，越高越好
+}
+
+/**
+ * 异步检查章节连贯性（不阻塞主流程）
+ * 检测项：
+ * 1. 与前章摘要衔接是否自然
+ * 2. 应收尾的伏笔是否已收（对比大纲中的伏笔指令）
+ * 3. 主角境界是否出现不合理突变
+ */
+export async function checkChapterCoherence(
+  env: Env,
+  chapterId: string,
+  novelId: string
+): Promise<CoherenceCheckResult> {
+  const db = drizzle(env.DB)
+  const issues: CoherenceCheckResult['issues'] = []
+
+  try {
+    // 获取当前章节信息
+    const currentChapter = await db
+      .select({
+        id: chapters.id,
+        title: chapters.title,
+        content: chapters.content,
+        sortOrder: chapters.sortOrder,
+      })
+      .from(chapters)
+      .where(eq(chapters.id, chapterId))
+      .get()
+
+    if (!currentChapter?.content) {
+      return { hasIssues: false, issues: [], score: 100 }
+    }
+
+    // 1. 检查与前章摘要的衔接
+    await checkContinuityWithPrevChapter(db, currentChapter, issues)
+
+    // 2. 检查伏笔一致性
+    await checkForeshadowingConsistency(db, env, novelId, currentChapter, issues)
+
+    // 3. 检查主角境界合理性
+    await checkPowerLevelConsistency(db, novelId, currentChapter, issues)
+
+    // 计算总分
+    const deduction = issues.reduce((sum, issue) => {
+      return sum + (issue.severity === 'error' ? 20 : 10)
+    }, 0)
+    const score = Math.max(0, 100 - deduction)
+
+    return {
+      hasIssues: issues.length > 0,
+      issues,
+      score,
+    }
+  } catch (error) {
+    console.error('Coherence check error:', error)
+    return { hasIssues: false, issues: [], score: 0 }
+  }
+}
+
+/**
+ * 检查与前章的情节衔接
+ */
+async function checkContinuityWithPrevChapter(
+  db: any,
+  currentChapter: { id: string; title: string; content: string | null; sortOrder: number },
+  issues: CoherenceCheckResult['issues']
+): Promise<void> {
+  try {
+    // 获取上一章
+    const prevChapter = await db
+      .select({
+        summary: chapters.summary,
+        title: chapters.title,
+      })
+      .from(chapters)
+      .where(
+        sql`${chapters.novelId} = ${currentChapter.id}`  // 需要novelId，这里简化处理
+      )
+      .orderBy(desc(chapters.sortOrder))
+      .limit(1)
+      .get()
+
+    if (!prevChapter?.summary) return
+
+    // 简单启发式：检查上一章结尾关键词是否在当前章节开头出现
+    const prevEndingKeywords = extractKeyPhrases(prevChapter.summary.slice(-200))
+    const currentBeginning = (currentChapter.content || '').slice(0, 500)
+
+    const matchedKeywords = prevEndingKeywords.filter((kw: string) =>
+      currentBeginning.includes(kw)
+    )
+
+    if (prevEndingKeywords.length > 0 && matchedKeywords.length === 0) {
+      issues.push({
+        severity: 'warning',
+        category: 'continuity',
+        message: `与上一章《${prevChapter.title}》的情节衔接可能不够紧密`,
+        suggestion: '建议在章节开头适当回顾或承接上章的关键事件/人物状态',
+      })
+    }
+  } catch (error) {
+    console.warn('Continuity check failed:', error)
+  }
+}
+
+/**
+ * 检查伏笔一致性
+ */
+async function checkForeshadowingConsistency(
+  db: any,
+  env: Env,
+  novelId: string,
+  currentChapter: { id: string; content: string | null },
+  issues: CoherenceCheckResult['issues']
+): Promise<void> {
+  try {
+    // 获取未收尾的重要伏笔
+    const openForeshadowing = await db
+      .select({
+        id: foreshadowing.id,
+        title: foreshadowing.title,
+        description: foreshadowing.description,
+        importance: foreshadowing.importance,
+        chapterId: foreshadowing.chapterId,
+      })
+      .from(foreshadowing)
+      .where(
+        and(
+          eq(foreshadowing.novelId, novelId),
+          eq(foreshadowing.status, 'open'),
+          eq(foreshadowing.importance, 'high')
+        )
+      )
+      .all()
+
+    if (openForeshadowing.length === 0) return
+
+    // 检查重要伏笔是否在本章有进展（简单关键词匹配）
+    for (const fs of openForeshadowing.slice(0, 5)) {
+      const keywords = [fs.title, ...(fs.description ? fs.description.split(/[，。、]/).slice(0, 3) : [])]
+
+      const hasMention = keywords.some((kw: string) =>
+        kw.trim().length > 1 && (currentChapter.content || '').includes(kw.trim())
+      )
+
+      if (!hasMention) {
+        issues.push({
+          severity: 'warning',
+          category: 'foreshadowing',
+          message: `重要伏笔《${fs.title}》本章未提及或推进`,
+          suggestion: `建议在本章中适当提及或为该伏笔做铺垫（描述:${fs.description?.slice(0, 50)}）`,
+        })
+      }
+    }
+  } catch (error) {
+    console.warn('Foreshadowing consistency check failed:', error)
+  }
+}
+
+/**
+ * 检查主角境界突变
+ */
+async function checkPowerLevelConsistency(
+  db: any,
+  novelId: string,
+  currentChapter: { content: string | null },
+  issues: CoherenceCheckResult['issues']
+): Promise<void> {
+  try {
+    // 获取所有主角的当前境界
+    const protagonists = await db
+      .select({
+        name: characters.name,
+        powerLevel: characters.powerLevel,
+      })
+      .from(characters)
+      .where(
+        and(
+          eq(characters.novelId, novelId),
+          eq(characters.role, 'protagonist'),
+          sql`${characters.deletedAt} IS NULL`
+        )
+      )
+      .all()
+
+    for (const protagonist of protagonists) {
+      if (!protagonist.powerLevel) continue
+
+      let powerData: any
+      try {
+        powerData = JSON.parse(protagonist.powerLevel)
+      } catch {
+        continue
+      }
+
+      // 检查是否有不合理的连续突破（同一章内多次突破）
+      const breakthroughPattern = new RegExp(`${protagonist.name}.{0,50}(突破|进阶|晋升|升级).{0,30}(突破|进阶|晋升|升级)`, 'g')
+      const matches = (currentChapter.content || '').match(breakthroughPattern)
+
+      if (matches && matches.length > 1) {
+        issues.push({
+          severity: 'error',
+          category: 'power_level',
+          message: `${protagonist.name} 在本章出现 ${matches.length} 次境界变化描述，可能存在不合理突变`,
+          suggestion: '通常一章节内不应超过1次重大境界突破，请检查是否符合设定逻辑',
+        })
+      }
+
+      // 检查是否跳过了中间境界（如从练气期直接到金丹期）
+      if (powerData.breakthroughs && powerData.breakthroughs.length > 0) {
+        const lastBreakthrough = powerData.breakthroughs[powerData.breakthroughs.length - 1]
+        if (lastBreakthrough.timestamp) {
+          const breakthroughTime = new Date(lastBreakthrough.timestamp).getTime()
+          const now = Date.now()
+
+          // 如果最近一次突破就在几秒前（说明是刚生成的），且从低境界直接到高境界
+          if (now - breakthroughTime < 60000) {  // 60秒内
+            const levelGap = estimatePowerLevelGap(lastBreakthrough.from, lastBreakthrough.to)
+            if (levelGap > 3) {
+              issues.push({
+                severity: 'warning',
+                category: 'power_level',
+                message: `${protagonist.name} 从 ${lastBreakthrough.from} 直接突破到 ${lastBreakthrough.to}，跨度较大`,
+                suggestion: '考虑增加过渡阶段或在后续章节补充修炼过程描写',
+              })
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('Power level consistency check failed:', error)
+  }
+}
+
+// ========== 连贯性检查辅助函数 ==========
+
+function extractKeyPhrases(text: string): string[] {
+  if (!text || text.length < 10) return []
+  const phrases: string[] = []
+  const sentences = text.split(/[，。！？；\n]/).filter(s => s.trim().length > 5)
+
+  for (const sentence of sentences.slice(-3)) {
+    const words = sentence.trim().split(/[\s、：""''（）【】《》]+/)
+      .filter(w => w.length >= 2)
+    phrases.push(...words.slice(0, 2))
+  }
+
+  return [...new Set(phrases)].slice(0, 8)
+}
+
+function estimatePowerLevelGap(fromLevel: string, toLevel: string): number {
+  const commonLevels = [
+    '凡人', '炼气', '筑基', '金丹', '元婴', '化神', '合体', '大乘', '渡劫', '仙人',
+    '一级', '二级', '三级', '四级', '五级', '六级', '七级', '八级', '九级', '十级',
+    '初级', '中级', '高级', '巅峰', '圆满',
+  ]
+
+  const fromIndex = commonLevels.findIndex(l => fromLevel.includes(l))
+  const toIndex = commonLevels.findIndex(l => toLevel.includes(l))
+
+  if (fromIndex === -1 || toIndex === -1) return 1
+  return Math.abs(toIndex - fromIndex)
 }
 
 export async function logGeneration(

@@ -188,13 +188,16 @@ export async function exportAsEpub(env: Env, options: ExportOptions): Promise<Bl
     const db = drizzle(env.DB)
     const data = await loadNovelData(db, options)
 
-    // 组装 EPUB 内容
+    if (data.chapters.length === 0) {
+      throw new Error('没有可导出的章节')
+    }
+
     const content = data.chapters.map(ch => ({
       title: ch.title,
       content: ch.content || '<p>（暂无内容）</p>',
     }))
 
-    const epubOption = {
+    const epubOption: any = {
       title: data.title,
       author: 'NovelForge',
       description: data.description || '',
@@ -205,14 +208,24 @@ export async function exportAsEpub(env: Env, options: ExportOptions): Promise<Bl
         p { text-indent: 2em; margin: 0.5em 0; }
         blockquote { border-left: 3px solid #ccc; padding-left: 1em; color: #666; }
       `,
-      version: 3 as any,
+      version: 3,
     }
 
-    // 生成 EPUB
     const epubBlob = await (EpubGenMemory as any)(content, epubOption)
-    return epubBlob as any
+
+    if (!epubBlob || !(epubBlob instanceof Blob)) {
+      throw new Error('EPUB生成返回了无效的结果')
+    }
+
+    return epubBlob as Blob
   } catch (error) {
     console.error('EPUB generation failed:', error)
+
+    if ((error as Error).message.includes('epub-gen-memory') ||
+        (error as Error).message.includes('Cannot find module')) {
+      throw new Error('EPUB库未正确安装，请运行 npm install epub-gen-memory')
+    }
+
     throw new Error(`EPUB生成失败: ${(error as Error).message}`)
   }
 }
@@ -356,13 +369,14 @@ function htmlToPdfContent(html: string): string {
  * HTML 转义
  */
 function escapeHtml(text: string): string {
-  const div = { toString: () => '' }
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
+  const map: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;',
+  }
+  return text.replace(/[&<>"']/g, (char) => map[char])
 }
 
 /**
@@ -373,29 +387,43 @@ export async function exportAsZip(env: Env, options: ExportOptions): Promise<Blo
     const JSZip = (await import('jszip')).default
     const db = drizzle(env.DB)
     const data = await loadNovelData(db, options)
+
+    if (data.chapters.length === 0) {
+      throw new Error('没有可导出的章节')
+    }
+
     const zip = new JSZip()
     const title = sanitizeFilename(data.title)
 
-    // 并行生成各格式
     const [mdBlob, txtBlob] = await Promise.all([
       exportAsMarkdown(env, { ...options, format: 'md' }),
       exportAsTxt(env, { ...options, format: 'txt' }),
     ])
 
-    // 添加到 ZIP
     zip.file(`${title}.md`, await mdBlob.text())
     zip.file(`${title}.txt`, await txtBlob.text())
 
-    // 尝试添加 EPUB
     try {
       const epubBlob = await exportAsEpub(env, options)
       zip.file(`${title}.epub`, epubBlob)
     } catch (e) {
       console.warn('Failed to add EPUB to zip:', e)
+      zip.file(`${title}-epub-error.txt`, `EPUB生成失败: ${(e as Error).message}`)
     }
 
-    // 生成 ZIP 文件
+    try {
+      const pdfBlob = await exportAsPdf(env, options)
+      zip.file(`${title}-print.html`, await pdfBlob.text())
+    } catch (e) {
+      console.warn('Failed to add PDF/HTML to zip:', e)
+    }
+
     const zipBlob = await zip.generateAsync({ type: 'blob' })
+
+    if (!zipBlob || !(zipBlob instanceof Blob)) {
+      throw new Error('ZIP生成返回了无效的结果')
+    }
+
     return zipBlob
   } catch (error) {
     console.error('ZIP generation failed:', error)

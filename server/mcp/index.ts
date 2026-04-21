@@ -7,7 +7,7 @@
 import { drizzle } from 'drizzle-orm/d1'
 import { eq, and, isNull, desc, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
-import { novels, masterOutline, novelSettings, chapters, characters } from '../db/schema'
+import { novels, masterOutline, novelSettings, chapters, characters, foreshadowing, writingRules, volumes } from '../db/schema'
 import { searchSimilar, embedText } from '../services/embedding'
 
 export interface MCPTool {
@@ -186,6 +186,78 @@ export const TOOLS: MCPTool[] = [
         },
       },
       required: ['novelId'],
+    },
+  },
+  {
+    name: 'createChapter',
+    description: '创建新章节',
+    parameters: {
+      type: 'object',
+      properties: {
+        novelId: { type: 'string', description: '小说ID（必填）' },
+        volumeId: { type: 'string', description: '卷ID（可选）' },
+        title: { type: 'string', description: '章节标题' },
+        content: { type: 'string', description: '章节内容' },
+        sortOrder: { type: 'number', description: '排序号' },
+      },
+      required: ['novelId', 'title'],
+    },
+  },
+  {
+    name: 'addForeshadowing',
+    description: '新增伏笔记录',
+    parameters: {
+      type: 'object',
+      properties: {
+        novelId: { type: 'string', description: '小说ID（必填）' },
+        chapterId: { type: 'string', description: '关联章节ID（可选）' },
+        title: { type: 'string', description: '伏笔标题（必填）' },
+        description: { type: 'string', description: '伏笔描述' },
+        importance: { type: 'string', description: '重要程度: high/normal/low' },
+      },
+      required: ['novelId', 'title'],
+    },
+  },
+  {
+    name: 'resolveForeshadowing',
+    description: '标记伏笔已收尾',
+    parameters: {
+      type: 'object',
+      properties: {
+        foreshadowingId: { type: 'string', description: '伏笔ID（必填）' },
+        resolvedChapterId: { type: 'string', description: '收尾章节ID（可选）' },
+        resolutionNote: { type: 'string', description: '收尾说明' },
+      },
+      required: ['foreshadowingId'],
+    },
+  },
+  {
+    name: 'addWritingRule',
+    description: '添加创作规则',
+    parameters: {
+      type: 'object',
+      properties: {
+        novelId: { type: 'string', description: '小说ID（必填）' },
+        category: { type: 'string', description: '规则类别: style/plot/character/worldbuilding/dialogue' },
+        title: { type: 'string', description: '规则标题（必填）' },
+        content: { type: 'string', description: '规则内容（必填）' },
+        priority: { type: 'number', description: '优先级 1-10，默认5' },
+      },
+      required: ['novelId', 'title', 'content'],
+    },
+  },
+  {
+    name: 'triggerGenerate',
+    description: '触发AI章节生成（异步，返回生成任务ID）',
+    parameters: {
+      type: 'object',
+      properties: {
+        chapterId: { type: 'string', description: '章节ID（必填）' },
+        novelId: { type: 'string', description: '小说ID（必填）' },
+        mode: { type: 'string', description: '生成模式: generate/continue/rewrite，默认generate' },
+        context: { type: 'string', description: '额外上下文（可选）' },
+      },
+      required: ['chapterId', 'novelId'],
     },
   },
 ]
@@ -422,6 +494,121 @@ export async function handleToolCall(
       }
 
       return { ok: true, indexedCount, novelId }
+    }
+
+    case 'createChapter': {
+      const { novelId, volumeId, title, content, sortOrder } = args
+      if (!novelId || !title) throw new Error('novelId and title are required')
+
+      const maxSortOrder = await db
+        .select({ maxOrder: sql<number>`MAX(${chapters.sortOrder})` })
+        .from(chapters)
+        .where(eq(chapters.novelId, novelId))
+        .get()
+
+      const [newChapter] = await db.insert(chapters).values({
+        novelId,
+        volumeId: volumeId || null,
+        title,
+        content: content || '',
+        sortOrder: sortOrder ?? (maxSortOrder?.maxOrder ?? 0) + 1,
+        wordCount: content?.length || 0,
+      }).returning()
+
+      return { ok: true, chapter: newChapter }
+    }
+
+    case 'addForeshadowing': {
+      const { novelId, chapterId, title, description, importance = 'normal' } = args
+      if (!novelId || !title) throw new Error('novelId and title are required')
+
+      const [newForeshadowing] = await db.insert(foreshadowing).values({
+        novelId,
+        chapterId: chapterId || null,
+        title,
+        description: description || '',
+        status: 'open',
+        importance,
+      }).returning()
+
+      return { ok: true, foreshadowing: newForeshadowing }
+    }
+
+    case 'resolveForeshadowing': {
+      const { foreshadowingId, resolvedChapterId, resolutionNote } = args
+      if (!foreshadowingId) throw new Error('foreshadowingId is required')
+
+      const updateData: any = {
+        status: 'resolved',
+        resolvedAt: Math.floor(Date.now() / 1e3),
+      }
+      if (resolvedChapterId) updateData.resolvedChapterId = resolvedChapterId
+      if (resolutionNote) updateData.resolutionNote = resolutionNote
+
+      await db.update(foreshadowing).set(updateData).where(eq(foreshadowing.id, foreshadowingId))
+      return { ok: true, foreshadowingId, message: '伏笔已标记为已收尾' }
+    }
+
+    case 'addWritingRule': {
+      const { novelId, category, title, content, priority = 5 } = args
+      if (!novelId || !title || !content) throw new Error('novelId, title and content are required')
+
+      const [newRule] = await db.insert(writingRules).values({
+        novelId,
+        category: category || 'style',
+        title,
+        content,
+        priority,
+        isActive: 1,
+      }).returning()
+
+      return { ok: true, rule: newRule }
+    }
+
+    case 'triggerGenerate': {
+      const { chapterId, novelId, mode = 'generate', context } = args
+      if (!chapterId || !novelId) throw new Error('chapterId and novelId are required')
+
+      let config: any
+      try {
+        const { resolveConfig } = await import('../services/llm')
+        config = await resolveConfig(env.DB as any, novelId, 'chapter_gen')
+      } catch (e) {
+        throw new Error(`无法获取模型配置: ${(e as Error).message}`)
+      }
+
+      const { streamGenerate } = await import('../services/llm')
+      let generatedContent = ''
+      let generationComplete = false
+
+      try {
+        await streamGenerate(
+          config,
+          [{ role: 'user' as const, content: `请生成章节内容（模式: ${mode}）${context ? `\n\n上下文：${context}` : ''}` }],
+          {
+            onChunk: (chunk: string) => {
+              if (chunk) generatedContent += chunk
+            },
+            onDone: () => { generationComplete = true },
+            onError: (error: Error) => { throw error },
+          }
+        )
+
+        return {
+          ok: true,
+          message: '章节生成完成',
+          chapterId,
+          mode,
+          wordCount: generatedContent.length,
+          preview: generatedContent.slice(0, 500),
+        }
+      } catch (genError) {
+        return {
+          ok: false,
+          error: `生成失败: ${(genError as Error).message}`,
+          chapterId,
+        }
+      }
     }
 
     default:

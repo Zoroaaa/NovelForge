@@ -1,368 +1,373 @@
-# NovelForge · 完整开发计划
+# NovelForge · 开发计划（更新版）
 
-> 基于 v1.3.0 代码全量审查 + 你的产品愿景综合制定。
-> 最终目标：**一句话生成一部完整小说**——从创意到成品的全链路 AI 编排平台。
+> 基于 v1.4.0 代码全量审查重新制定。  
+> 最终目标：**一句话生成一部完整小说**——从创意到成品的全链路 AI 编排平台。  
+> 更新日期：2026-04-21
 
 ---
 
-## 现状评估（先看清楚在哪里）
+## 现状评估（v1.4.0 实际完成情况）
 
-### 已经有的（不用重做）
+### 已完成（不用重做）
 
 | 模块 | 完成度 | 说明 |
 |---|---|---|
-| 基础 CRUD | ✅ 完整 | 小说/卷/章节/角色/大纲 全套 |
-| 富文本编辑器 | ✅ 可用 | Novel.js + 自动保存 |
-| RAG 向量检索 | ✅ 架子搭好 | BGE-zh 嵌入 + Vectorize，有数据污染 bug |
-| SSE 流式生成 | ✅ 可用 | 章节生成已跑通 |
-| 自动摘要 | ✅ 可用 | 生成后自动触发 |
-| 多 Provider 支持 | ✅ 可用 | Volcengine / OpenAI / Anthropic |
-| 多格式导出 | ✅ 基本 | EPUB/MD/TXT/ZIP，兼容性未验证 |
-| MCP Server | ⚠️ 只读 | 无写操作工具 |
-| Agent 循环 | ⚠️ 假 ReAct | 实际是单次调用，循环逻辑是死代码 |
-| 大纲 AI 生成 | ⚠️ 片面 | 只能单节点生成，无整体规划 |
+| 基础 CRUD | ✅ 完整 | 小说 / 卷 / 章节 / 角色 全套，含软删除 |
+| 富文本编辑器 | ✅ 可用 | Novel.js + 自动保存（防抖 1.5s） |
+| 阅读器 | ✅ 可用 | Markdown 渲染，主题切换，字号调节 |
+| SSE 流式生成 | ✅ 可用 | 章节生成已跑通，含 tool_call 事件 |
+| RAG 向量检索 | ✅ 可用 | BGE-zh 嵌入 + Vectorize，vector_index 追踪表 |
+| 自动摘要 | ✅ 可用 | 生成后自动触发，写入 chapters.summary |
+| 多 Provider 支持 | ✅ 可用 | Volcengine / OpenAI / Anthropic，多级配置 |
+| 多格式导出 | ✅ 基本 | EPUB / MD / TXT / ZIP，兼容性未全量验证 |
+| **真 ReAct Agent 循环** | ✅ 已实现 | `runReActLoop` 多轮循环，文本解析工具调用 |
+| **滚动摘要链** | ✅ 已实现 | 摘要链长度可配（0-15），从 model_configs.params 读取 |
+| **伏笔追踪系统** | ✅ 已实现 | foreshadowing 表 + contextBuilder 注入 + 前端面板 |
+| **境界/成长追踪** | ✅ 已实现 | powerLevel JSON 字段 + powerLevel.ts 服务 + 自动检测 |
+| **总纲管理** | ✅ 已实现 | master_outline 表，版本历史，向量化支持 |
+| **小说设定系统** | ✅ 已实现 | novel_settings 表，6 种类型，树形结构，RAG 可检索 |
+| **创作规则系统** | ✅ 已实现 | writing_rules 表，优先级 + 启用控制，注入 context |
+| **实体索引** | ✅ 已实现 | entity_index 表，树形结构，可重建 |
+| **角色图片 + 视觉分析** | ✅ 已实现 | R2 上传 + LLaVA 分析，生成外貌/标签 |
+| **内容搜索** | ✅ 基本 | 章节关键词搜索，结果高亮预览 |
+| MCP Server | ✅ 已实现 | 只读工具（查询小说/大纲/章节/角色/语义搜索） |
+| **批量大纲生成** | ✅ 已实现 | `generateOutlineBatch` 已实现，前端待接入 |
+| 角色一致性检查 | ✅ 已实现 | `checkCharacterConsistency` 服务 + 前端组件 |
+| 生成日志 | ✅ 已实现 | generation_logs 表，GenerationLogs 前端组件 |
+| 卷增强 | ✅ 已实现 | volumes 表含 outline / blueprint / summary 字段 |
 
-### 代码中的严重 Bug（必须先修）
+### 仍存在的已知问题
 
-代码里已有一份审查文档（`docs/NovelForge-审查与增强方案.md`）记录了 B1~B6 共 6 个 bug，其中 3 个严重级：
+> 原计划 B1-B6 六个 Bug，以下是**尚未确认修复**的部分，需逐一验证：
 
-- **B2**：`triggerAutoSummary` 未 export → 手动摘要路由 100% 500 报错
-- **B3**：`resolveConfig` 查询逻辑错误 → 多小说场景下跨小说用错模型
-- **B6**：Vectorize 向量删旧顺序错误 → 旧向量永久残留，RAG 结果被污染
-
----
-
-## 你的愿景拆解与补充
-
-你的核心流程思路是对的，我在细节层补充了关键缺失点：
-
-```
-你描述的流程：
-  创意对话 → 总纲 → 角色/世界观 → 卷纲 → 章纲 → 章节正文 → 摘要 → 下一章
-
-补充的缺失点：
-  1. 创意对话需要"多轮收敛"——LLM 不是一次就能问出好的世界观，
-     需要对话式追问 + 用户确认 + 自动填充数据库
-  
-  2. 伏笔追踪系统——你提到"本章是否要收尾伏笔、是否要埋入伏笔"，
-     当前架构没有任何伏笔数据结构，需要专门建模
-  
-  3. 境界/成长体系追踪——仙侠类高频需求，主角当前境界必须在上下文中，
-     生成时不能境界倒退或突破跨度太大
-  
-  4. 章节间连贯性评估——生成完一章后自动检查：
-     - 与前章摘要是否衔接
-     - 伏笔状态是否一致
-     - 人物境界是否符合设定
-  
-  5. 一句话→小说 的编排层（终极目标）——需要一个 Orchestrator Agent
-     把以上所有步骤串起来，可中断、可干预、可异步执行
-```
-
----
-
-## Phase 0 · Bug 修复（第 1 天，必做，不可跳过）
-
-**目标**：让现有功能真正跑通，消灭静默失效。
-
-### 任务清单
-
-| # | 文件 | 修复内容 | 影响 |
+| # | 位置 | 问题 | 优先级 |
 |---|---|---|---|
-| B1 | `contextBuilder.ts` | `estimateMandatoryTokens` 调用参数名对齐 | debug.totalTokenEstimate 始终为 0 |
-| B2 | `agent.ts` | `triggerAutoSummary` 加 `export` | 手动摘要 500 |
-| B3 | `llm.ts` | `resolveConfig` 两段查询加 `novelId + stage` 双过滤 | 多小说模型串台 |
-| B4 | `server/lib/types.ts` | `Env` 补 `VECTORIZE?: VectorizeIndex` | 类型安全 |
-| B5 | `agent.ts` + `generate.ts` | `onDone` 回调传 `resolvedModelId`，写入日志 | 日志 modelId 全为 "unknown" |
-| B6 | `embedding.ts` | 先取旧 vectorId 列表，再删 D1，再删 Vectorize | RAG 数据污染 |
-
-**验收**：`POST /api/generate/chapter`（开启 RAG）完整跑通，日志 `model_id` 有实际值，多次更新同一章节后 Vectorize 不积累重复向量。
+| B3 | `llm.ts · resolveConfig` | 多小说场景下模型串台（novelId + stage 双过滤是否已加） | 🔴 高 |
+| B6 | `embedding.ts` | 更新章节时旧向量删除顺序（先取 ID → 删 D1 → 删 Vectorize） | 🔴 高 |
+| B5 | `agent.ts / generate.ts` | generation_logs.model_id 是否仍写入 "unknown" | 🟡 中 |
 
 ---
 
-## Phase 1 · 核心写作流补完（第 1~2 周）
+## 当前架构速览
 
-**目标**：把现有功能做扎实，让"写一本小说"的基础流程顺滑。
+### 数据库（13 张表，v2.0）
 
-### 1.1 滚动摘要链（最高优先级）
-
-**问题**：现在只注入上一章摘要。写到第 50 章，LLM 对前期伏笔和人物关系完全失忆。
-
-**方案**：
-- `ContextBundle.mandatory` 已有 `recentChainSummaries`，但 `contextBuilder.ts` 的 `fetchRecentChapterSummaries` 固定取 3 条
-- 暴露配置项 `summaryChainLength`（默认 5，最大 15）到 `model_configs.params`
-- 摘要链注入格式：明确标注章节序号 + 章节标题，便于 LLM 定位上下文
-
-### 1.2 伏笔追踪系统（新增，你提到但没有数据结构）
-
-**新建 `foreshadowing` 表**：
-
-```sql
-CREATE TABLE foreshadowing (
-  id TEXT PRIMARY KEY,
-  novel_id TEXT NOT NULL,
-  chapter_id TEXT,          -- 埋入伏笔的章节
-  title TEXT NOT NULL,       -- 伏笔标题（简短描述）
-  description TEXT,          -- 详细内容
-  status TEXT DEFAULT 'open', -- open / resolved / abandoned
-  resolved_chapter_id TEXT,  -- 收尾章节
-  importance TEXT DEFAULT 'normal', -- high / normal / low
-  created_at INTEGER,
-  updated_at INTEGER
-)
+```
+novels              小说主表
+master_outline      总纲（版本化）
+writing_rules       创作规则（优先级 + 启用控制）
+novel_settings      小说设定（世界观/境界/势力/地理/物品/杂录）
+volumes             卷（含大纲/蓝图/概要）
+chapters            章节（含摘要/向量/生成统计）
+characters          角色（含 powerLevel JSON）
+foreshadowing       伏笔追踪（open/resolved/abandoned）
+model_configs       模型配置（全局/小说级，多 stage）
+generation_logs     生成日志
+exports             导出记录
+vector_index        向量索引追踪
+entity_index        实体树索引
 ```
 
-- **生成时自动注入**：`contextBuilder` 在强制注入层加入 `fetchOpenForeshadowing`，查出当前章节前所有 status='open' 的伏笔，注入到 system prompt
-- **生成后自动提取**：章节生成完成后，用轻量模型分析内容，提取新埋伏笔 + 标记已收尾伏笔，写入 DB
-- **前端**：大纲编辑器侧边栏增加"伏笔面板"，可手动管理
+### 后端路由（16 个模块）
 
-### 1.3 境界/成长体系追踪
-
-**扩展 `characters` 表**：新增 `power_level` 字段（JSON）存储当前境界信息：
-
-```json
-{
-  "system": "修仙境界",
-  "current": "金丹期初期",
-  "breakthroughs": [
-    { "chapterId": "xxx", "from": "筑基期", "to": "金丹期", "note": "..." }
-  ]
-}
+```
+/api/novels             /api/chapters         /api/volumes
+/api/characters         /api/settings         /api/rules
+/api/master-outline     /api/generate         /api/foreshadowing
+/api/entities           /api/export           /api/search
+/api/vectorize          /api/config           /api/mcp
+/api/health
 ```
 
-- 生成时将主角当前境界注入 prompt："当前境界：金丹期初期，距离突破还需..."
-- 生成后用轻量模型检测是否有境界突破事件，自动更新 DB
-- 前端角色卡片展示境界历史时间线
+### 前端结构
 
-### 1.4 ReAct Agent 真正实现
-
-**问题**：现在的"Agent 循环"是死代码，实际就是一次 LLM 调用。
-
-**方案**：
 ```
-while (iteration < maxIterations):
-  1. 调用 LLM，开启 stream
-  2. 检测 stream 中的 tool_call 事件（OpenAI function calling 格式）
-  3. 无工具调用 → 结束循环，输出内容
-  4. 有工具调用 → 执行工具 → tool_result 追加 messages → 继续循环
+页面：NovelsPage / WorkspacePage / ReaderPage
+侧边栏 7 个 Tab：章节 / 角色 / 设定 / 规则 / 总纲 / 卷 / 伏笔
+右侧面板 2 个 Tab：AI 生成 / 导出
 ```
 
-关键改动：
-- 工具调用需使用 OpenAI 标准 `tools` 格式（而非当前的 JSON 文本解析方案，文本解析极不稳定）
+### 服务层
+
+```
+agent.ts            ReAct 循环 + 工具调用 + 自动摘要 + 批量大纲 + 角色一致性检查
+contextBuilder.ts   上下文组装（摘要链 + 伏笔 + 境界 + 规则 + RAG）
+llm.ts              多 Provider 统一调用层
+embedding.ts        向量化服务
+powerLevel.ts       境界突破检测
+vision.ts           角色图片视觉分析
+export.ts           多格式导出
+foreshadowing.ts    伏笔提取
+entity-index.ts     实体树管理
+```
+
+---
+
+## Phase 0 · 遗留 Bug 修复（最优先，1 天内）
+
+**目标**：确认并清除所有静默失效。
+
+| # | 文件 | 验证方法 | 修复内容 |
+|---|---|---|---|
+| B3 | `llm.ts · resolveConfig` | 切换两个小说各配不同模型，检查生成日志的 model_id | 查询加 `novelId + stage` 双条件过滤 |
+| B6 | `embedding.ts` | 同一章节更新 3 次后，Vectorize 中该章向量条数应等于 chunk 数而非累积 | 先查 vector_index 取旧 id → 删 D1 记录 → 删 Vectorize |
+| B5 | `generate.ts` | 生成一章后查 generation_logs，model_id 字段应为真实模型名 | onDone 回调传 resolvedModelId |
+
+**验收**：多小说生成日志 model_id 全部为真实值，同一章节反复更新后 Vectorize 不积累重复向量。
+
+---
+
+## Phase 1 · 功能完整性补全（第 1~2 周）
+
+**目标**：把已实现的后端能力全部接入前端，消灭"有 API 没 UI"的空缺。
+
+### 1.1 批量大纲生成前端接入
+
+后端 `generateOutlineBatch` 已实现，前端未接入。
+
+- VolumePanel 卷节点增加"AI 批量生成章节大纲"操作入口
+- 触发后 SSE 流式展示逐章生成进度
+- 生成完成后自动刷新章节列表
+
+### 1.2 生成模式完整接入（续写 / 重写）
+
+后端 `mode: continue | rewrite` 已支持，GeneratePanel 未暴露。
+
+- GeneratePanel 增加模式切换（生成 / 续写 / 重写）
+- rewrite 模式：从编辑器读取选中文本，传入 existingContent
+- continue 模式：自动截取当前章节末尾 500 字作为上下文
+
+### 1.3 境界追踪前端展示
+
+powerLevel.ts 服务已实现自动检测，前端角色卡片未展示。
+
+- CharacterList / 角色详情展示境界信息和突破历史时间线
+- 境界字段在角色编辑表单中可手动录入和修改
+
+### 1.4 MCP 写操作工具补全
+
+当前 MCP Server 只有读工具，无法通过 Claude Desktop 写入内容。
+
+新增工具：
+
+| 工具名 | 功能 |
+|---|---|
+| `createChapter` | 创建章节 |
+| `updateChapter` | 修改章节内容 |
+| `addForeshadowing` | 新增伏笔 |
+| `resolveForeshadowing` | 标记伏笔已收尾 |
+| `addWritingRule` | 添加创作规则 |
+| `triggerGenerate` | 触发章节生成 |
+
+### 1.5 导出兼容性验证与修复
+
+EPUB / ZIP 导出在 Cloudflare Workers 环境下兼容性未验证。
+
+- 在 `wrangler dev` 下全量测试四种格式
+- EPUB 如有 Worker 兼容问题，改为生成 ZIP + 客户端组装方案
+- 修复已知的 export 关键字冲突后遗症
+
+---
+
+## Phase 2 · 生成质量深化（第 3~4 周）
+
+**目标**：让 AI 生成的内容质量真正达到可用水准，而不只是流畅但平淡的文本。
+
+### 2.1 ReAct 工具调用机制升级
+
+当前 ReAct 循环使用文本解析提取工具调用（极不稳定，依赖 LLM 严格输出格式）。
+
+**升级方案**：
+- 改用 OpenAI 标准 `tools` 参数格式（function calling），消灭文本解析
 - SSE 增加 `{ type: 'tool_call', name, status: 'running' | 'done', result }` 事件
-- 前端 `GeneratePanel` 实时显示工具执行过程（"正在查询大纲..." "正在搜索相关内容..."）
+- GeneratePanel 实时显示工具执行步骤（"正在查询伏笔..." "正在检索世界观..."）
 
-### 1.5 大纲 AI 生成增强
+> 根本原因：文本解析依赖模型严格遵守格式，任何一次格式偏差就丢失工具调用；function calling 是协议级保证。
 
-**问题**：现在只能单节点生成，"生成整卷大纲"需要逐个节点点击。
+### 2.2 章节生成上下文包精细化
 
-**方案**：
-- 新路由 `POST /api/generate/outline-batch`，接受卷 ID，一次性生成该卷下所有章节大纲
-- 生成策略：先生成卷纲总结 → 再并发生成各章大纲（考虑 D1 写入并发限制）
-- 前端"卷"节点右键菜单增加"AI 批量生成章节大纲"选项
+当前上下文是"能拿多少拿多少"的策略，需改为按优先级精准注入：
 
-### 1.6 生成模式完善（续写/重写）
+```
+[强制注入 ~4000 tokens]
+- 本章大纲（含伏笔指令）
+- 上一章摘要
+- 主角当前状态卡（境界 + 随行人物）
+- 激活的高优先级创作规则
 
-代码里已有 `continue` / `rewrite` 模式但前端未接入：
-- `GeneratePanel` 增加模式切换 tab
-- `rewrite` 模式：用户在编辑器中选中文本 → 触发重写，传入选中内容
-- `continue` 模式：传入当前章节末尾 500 字作为上下文
+[按需注入 ~4000 tokens]
+- 最近 N 章摘要链（N 从 model_configs 读取）
+- 当前卷概要
+- 本章出现角色的设定卡
+- 未收尾伏笔列表（按 importance 排序）
+
+[RAG 动态检索 ~4000 tokens]
+- 语义相关的世界观/境界/势力设定
+- 语义相关的历史章节片段
+```
+
+### 2.3 章节连贯性自动检测
+
+章节生成完成后，异步运行一次轻量模型检查（不阻塞主流程）：
+
+- 与前章摘要衔接是否自然
+- 应收尾的伏笔是否已收（对比本章大纲中的伏笔指令）
+- 主角境界是否出现不合理突变
+
+检测结果以非阻塞 toast 形式提示用户，不强制重生成。
+
+### 2.4 写作统计增强
+
+WritingStats 组件已存在但数据较少，增加：
+
+- 每日字数趋势折线图
+- 各章生成耗时和 token 消耗（来自 generation_logs）
+- 模型使用分布
 
 ---
 
-## Phase 2 · 对话式创作引擎（第 3~4 周）
+## Phase 3 · 对话式创作引擎（第 5~6 周）
 
-**目标**：实现你描述的"通过多轮对话，LLM 帮我总结出小说名称、总纲等内容"。
+**目标**：实现"通过多轮对话，LLM 帮我总结出小说名称、总纲等内容"——当前完全缺失的核心模块。
 
-这是当前完全缺失的最核心功能模块。
+### 3.1 创作工坊（Workshop）
 
-### 2.1 创作对话系统（核心新功能）
-
-**架构**：
-
-```
-用户输入 "我想写一部主角从废柴逆袭的玄幻小说"
-    ↓
-对话引导 Agent（新模块）
-    ↓ 多轮对话追问：
-      - 世界背景？（修仙 / 斗气 / 末日？）
-      - 主角起点？（天才被废 / 平民崛起 / 穿越者？）
-      - 核心爽点？（系统 / 神器 / 天道认可？）
-      - 预计卷数？
-      ↓ 用户回答 3~5 轮后
-对话 Agent 汇总 → 生成结构化元数据 → 自动填入数据库
-    ↓
-输出：小说标题、总纲、世界观草稿、主角设定草稿
-```
-
-**技术实现**：
-
-```
-新路由：POST /api/workshop/session（创建对话会话）
-        POST /api/workshop/session/:id/message（发送消息，SSE 响应）
-        GET  /api/workshop/session/:id（获取会话历史）
-        POST /api/workshop/session/:id/commit（确认生成，写入 DB）
-```
-
-新建 `workshop_sessions` 表：
+**新增数据库表**：
 
 ```sql
 CREATE TABLE workshop_sessions (
   id TEXT PRIMARY KEY,
-  novel_id TEXT,              -- 关联小说（commit 后写入）
-  stage TEXT NOT NULL,        -- 'concept' | 'worldbuild' | 'characters' | 'volumes' | 'chapters'
-  messages TEXT NOT NULL,     -- JSON 对话历史
-  extracted_data TEXT,        -- JSON 当前提取的结构化数据
-  status TEXT DEFAULT 'active', -- active / committed / abandoned
+  novel_id TEXT,
+  stage TEXT NOT NULL,       -- concept | worldbuild | characters | volumes | chapters
+  messages TEXT NOT NULL,    -- JSON 对话历史
+  extracted_data TEXT,       -- JSON 当前提取的结构化数据
+  status TEXT DEFAULT 'active',  -- active | committed | abandoned
   created_at INTEGER,
   updated_at INTEGER
 )
 ```
 
-前端：全新的"创作工坊"页面，左侧对话流，右侧实时预览提取的结构化内容（标题/总纲/角色/大纲树），用户确认后一键提交写入。
+**新增路由**：
 
-### 2.2 分层 Prompt 体系
+```
+POST /api/workshop/session              创建对话会话
+POST /api/workshop/session/:id/message  发消息（SSE 响应）
+GET  /api/workshop/session/:id          获取会话历史
+POST /api/workshop/session/:id/commit   确认，写入数据库
+```
 
-当前所有生成用同一套 prompt，没有按层级区分。需要建立：
+**前端**：新增"创作工坊"页面（`/workshop`），左侧多轮对话，右侧实时预览已提取的结构化内容（标题 / 总纲 / 角色草稿 / 卷纲树），用户确认后一键提交写入。
 
-| 层级 | 输入 | 输出 | 模型建议 |
+**对话引导流程**：
+
+```
+用户："我想写一部仙侠小说，主角从废柴逆袭"
+  → Agent 追问：世界背景？主角起点？核心爽点？预计卷数？
+  → 3~5 轮对话后汇总
+  → 生成结构化元数据，自动填入 novels + master_outline + characters + volumes
+```
+
+### 3.2 分层 Prompt 体系
+
+当前所有生成共用一套 prompt。建立按层级区分的 stage 配置：
+
+| stage | 输入 | 输出 | 推荐模型级别 |
 |---|---|---|---|
-| 创意层 | 一句话描述 | 小说名 + 总纲 + 核心设定 | 强模型（GPT-4o / Claude Sonnet） |
-| 世界观层 | 总纲 + 流派 | 世界观文档（3000字） | 强模型 |
-| 角色层 | 总纲 + 世界观 | 角色卡（主角/配角/反派） | 中等模型 |
-| 卷层 | 总纲 + 角色 | 卷纲（事件线+蓝图） | 中等模型 |
-| 章纲层 | 卷纲 + 前情 | 章节大纲（关键事件+伏笔指令） | 轻量模型 |
-| 正文层 | 章纲 + 上下文包 | 章节正文（3000~5000字） | 强模型 |
-| 摘要层 | 正文 | 摘要 + 伏笔提取 + 境界更新 | 轻量模型 |
+| `concept` | 一句话描述 | 小说名 + 总纲 + 核心设定 | 强模型 |
+| `worldbuild` | 总纲 + 流派 | 世界观文档（3000字） | 强模型 |
+| `character_design` | 总纲 + 世界观 | 角色卡（主角/配角/反派） | 中等模型 |
+| `volume_outline` | 总纲 + 角色 | 卷纲（事件线+蓝图） | 中等模型 |
+| `chapter_outline` | 卷纲 + 前情 | 章节大纲（关键事件+伏笔指令） | 轻量模型 |
+| `chapter` | 章纲 + 上下文包 | 章节正文（3000~5000字） | 强模型 |
+| `summary` | 正文 | 摘要 + 伏笔提取 + 境界更新 | 轻量模型 |
 
-每层在 `model_configs` 中有独立的 `stage` 配置，允许分配不同模型和参数。
+每个 stage 在 model_configs 中有独立配置，允许分配不同模型和参数。
 
-### 2.3 章节生成上下文包 v2
+---
 
-当前章节生成注入的上下文是"能拿多少拿多少"，需要改为"精准按需注入"：
+## Phase 4 · 一键生成编排器（第 7~8 周）
 
-**章节生成上下文包应包含**（按 token 优先级排序）：
+**目标**：实现终极愿景——输入一句话，系统自动完成从创意到完整小说的全流程。
+
+### 4.1 Orchestrator Agent
+
+**新增数据库表**：
+
+```sql
+CREATE TABLE novel_plans (
+  id TEXT PRIMARY KEY,
+  novel_id TEXT,
+  status TEXT DEFAULT 'running',  -- running | paused | done | failed
+  current_step INTEGER DEFAULT 0,
+  total_steps INTEGER,
+  plan_data TEXT NOT NULL,         -- JSON 步骤定义
+  error_msg TEXT,
+  created_at INTEGER,
+  updated_at INTEGER
+)
+
+CREATE TABLE generation_queue (
+  id TEXT PRIMARY KEY,
+  plan_id TEXT NOT NULL,
+  step_type TEXT NOT NULL,         -- concept | worldbuild | character_design | ...
+  step_index INTEGER,
+  target_id TEXT,                  -- 目标 chapter_id / volume_id 等
+  status TEXT DEFAULT 'pending',   -- pending | running | done | failed
+  result TEXT,                     -- JSON
+  error_msg TEXT,
+  created_at INTEGER
+)
+```
+
+**新增路由**：
 
 ```
-[必须注入，共约 4000 tokens]
-- 本章大纲（含本章应埋/收的伏笔指令）
-- 上一章摘要
-- 主角当前状态卡（境界、装备、随行人物）
+POST   /api/plan/create           输入一句话，启动规划
+GET    /api/plan/:id              查询当前进度（SSE 或轮询）
+POST   /api/plan/:id/approve/:step  用户确认某关键节点
+POST   /api/plan/:id/resume       用户确认后继续
+POST   /api/plan/:id/pause        暂停
+DELETE /api/plan/:id              放弃
+```
 
-[按需注入，共约 4000 tokens]  
-- 最近 5 章摘要链
-- 当前卷概要
-- 关联人物设定（本章出现的角色）
-- 未收尾伏笔列表（status='open'，按 importance 排序）
+**必须人工确认的节点**（不能全自动）：
 
-[RAG 动态检索，共约 4000 tokens]
-- 语义相关的世界观设定片段
-- 语义相关的历史章节内容
-- 语义相关的角色描述
+- 总纲生成后：确认小说方向
+- 世界观生成后：确认核心设定
+- 角色生成后：确认主角设定
+- 每卷卷纲生成后：确认该卷走向
 
-[总计约 12000 tokens，与现有 DEFAULT_BUDGET 一致]
+### 4.2 前端"指挥台"页面
+
+新增 `/novels/:id/command` 路由，区别于普通工作区：
+
+```
+┌────────────────────────────────────────────────────┐
+│  [小说标题]   状态：生成中  第12章/共30章  48%      │
+├─────────────┬──────────────────────────────────────┤
+│  生成计划树 │  当前步骤详情                        │
+│  ○ 总纲 ✓  │  正在生成：第12章《龙渊秘境》        │
+│  ○ 世界观 ✓ │  ─────────────────────────────────  │
+│  ○ 角色 ✓   │  [流式输出预览...]                   │
+│  ○ 第一卷 ✓ │                                      │
+│    ○ 1-1 ✓  │  上下文包：                          │
+│    ○ 1-2 ✓  │  ✓ 本章大纲  ✓ 上章摘要             │
+│    ○ 1-3 ⏳ │  ✓ 摘要链×5  ✓ 角色卡×3            │
+│  ○ 第二卷 … │  ✓ 伏笔×2   ✓ RAG 命中×4           │
+│             │                                      │
+│  [暂停][继续]│  [查看全文][修改后继续]             │
+└─────────────┴──────────────────────────────────────┘
 ```
 
 ---
 
-## Phase 3 · 一键生成编排器（第 5~6 周）
+## Phase 5 · 智能增强（第 9~12 周）
 
-**目标**：实现终极愿景——用户给一句话，系统自动完成从创意到完整小说的全流程。
+**目标**：让平台具备真正的智能辅助能力，而不只是"执行生成请求的工具"。
 
-### 3.1 Orchestrator Agent（核心）
+### 5.1 写作质量评分
 
-**这是整个项目最复杂的模块**，需要一个能够：
-- 按依赖顺序编排所有生成步骤
-- 在每个关键节点暂停等待用户确认
-- 支持断点续传（中途退出可以继续）
-- 实时推送进度到前端
-
-**架构设计**：
-
-```
-新建 novel_plans 表：
-  id, novel_id, status, current_step, total_steps,
-  plan_data (JSON), error_msg, created_at, updated_at
-
-步骤定义（plan_data 存储）：
-  [
-    { step: 1, type: 'concept', status: 'done', data: {...} },
-    { step: 2, type: 'worldbuild', status: 'pending', data: null },
-    { step: 3, type: 'characters', status: 'pending', ... },
-    { step: 4, type: 'volume_outline', count: 3, ... },  // 3卷
-    { step: 5, type: 'chapter_outlines', count: 30, ... }, // 30章
-    { step: 6, type: 'chapters', count: 30, ... }          // 30章正文
-  ]
-```
-
-**用户干预节点**（不能全自动，必须人工确认）：
-- 总纲生成后：用户确认/修改小说方向
-- 世界观生成后：用户确认核心设定
-- 角色生成后：用户确认主角设定
-- 每卷卷纲生成后：用户确认该卷走向
-
-**新路由**：
-```
-POST /api/plan/create    - 输入一句话，启动规划
-GET  /api/plan/:id       - 查询当前进度
-POST /api/plan/:id/approve/:step  - 用户确认某步骤
-POST /api/plan/:id/resume         - 用户确认后继续
-POST /api/plan/:id/pause          - 暂停
-DELETE /api/plan/:id              - 放弃
-```
-
-### 3.2 批量章节生成队列
-
-一键生成整卷或整书时，需要串行+限速生成所有章节（避免并发打爆 API 限额）：
-
-- 使用 Cloudflare Queues 或 D1 表模拟任务队列
-- 每章生成后：自动生成摘要 → 提取伏笔 → 更新境界 → 触发下一章
-- 前端实时展示进度面板：已完成章节数 / 总字数 / 预计剩余时间 / token 消耗
-
-### 3.3 前端"指挥台"页面
-
-新增专门的小说生成指挥台页面（区别于普通编辑工作区）：
-
-```
-┌─────────────────────────────────────────────────────┐
-│  [小说标题]    状态：生成中 第12章/共30章  48%       │
-├──────────────┬──────────────────────────────────────┤
-│  生成计划树  │  当前步骤详情                        │
-│  ○ 总纲 ✓   │  正在生成：第12章《龙渊秘境》        │
-│  ○ 世界观 ✓  │  ────────────────────────────────   │
-│  ○ 角色 ✓    │  [实时流式输出预览...]               │
-│  ○ 第一卷 ✓  │                                      │
-│    ○ 1-1 ✓   │  上下文包：                          │
-│    ○ 1-2 ✓   │  ✓ 本章大纲  ✓ 上章摘要             │
-│    ○ 1-3 ⏳  │  ✓ 摘要链×5  ✓ 角色卡×3            │
-│  ○ 第二卷 …  │  ✓ 伏笔×2   ✓ RAG命中×4            │
-│              │                                      │
-│  [暂停] [继续]│  [查看全文] [修改后继续]            │
-└──────────────┴──────────────────────────────────────┘
-```
-
----
-
-## Phase 4 · 智能化深度增强（第 7~10 周）
-
-**目标**：让生成质量真正达到网文水准，而不只是流畅但平淡的文本。
-
-### 4.1 情节图谱（Plot Graph）
-
-将小说中的事件、人物、地点建模为图结构，存储在 D1 中：
-
-```
-节点类型：event（事件）/ character（角色）/ location（地点）/ item（物品）
-边类型：caused_by / participated_in / occurred_at / owned_by
-```
-
-- 每章生成后，轻量模型提取新增节点和关系，自动更新图谱
-- 生成新章节前，查询图谱中与本章相关的节点，精准注入
-- 前端提供可视化的情节图谱视图
-
-### 4.2 写作质量评估器
-
-每章生成完成后，自动运行质量评分（不阻塞主流程，异步）：
+章节生成完成后异步运行（不阻塞），结果写入新表 `quality_scores`：
 
 | 维度 | 评分依据 |
 |---|---|
@@ -372,103 +377,109 @@ DELETE /api/plan/:id              - 放弃
 | 爽感密度 | 高潮/反转/成就感事件的频率 |
 | 文笔流畅度 | 重复词汇率、句式多样性 |
 
-低于阈值时自动提示用户重新生成或修改。
+低于阈值时提示用户重新生成或修改，不强制拦截。
 
-### 4.3 多模态封面生成
+### 5.2 情节图谱（Plot Graph）
 
-当小说总纲和主角设定完成后：
-- 调用图像生成 API（Stability AI / DALL-E / CF Workers AI 的 `@cf/stabilityai/stable-diffusion-xl-base-1.0`）
+将事件、人物、地点建模为图结构：
+
+```sql
+CREATE TABLE plot_nodes (
+  id TEXT PRIMARY KEY,
+  novel_id TEXT NOT NULL,
+  type TEXT NOT NULL,       -- event | character | location | item
+  title TEXT NOT NULL,
+  description TEXT,
+  chapter_id TEXT,
+  meta TEXT,                -- JSON
+  created_at INTEGER
+)
+
+CREATE TABLE plot_edges (
+  id TEXT PRIMARY KEY,
+  novel_id TEXT NOT NULL,
+  from_id TEXT NOT NULL,
+  to_id TEXT NOT NULL,
+  relation TEXT NOT NULL,   -- caused_by | participated_in | occurred_at | owned_by
+  created_at INTEGER
+)
+```
+
+- 每章生成后轻量模型自动提取新节点和关系
+- 前端提供可视化图谱视图（使用 D3 或 React Flow）
+
+### 5.3 写作风格克隆
+
+用户上传 1~3 章参考文本：
+
+- 分析文风参数：句子平均长度、对话比例、描写密度、用词偏好
+- 将风格参数注入 system prompt
+- 生成内容在文风上向参考作品靠拢
+
+### 5.4 多模态封面生成
+
+总纲和主角设定完成后：
+
+- 调用图像生成 API（Stability AI / DALL-E / CF Workers AI `@cf/stabilityai/stable-diffusion-xl-base-1.0`）
 - 自动生成符合小说风格的封面图
-- 存储到 R2，更新 `novels.coverR2Key`
-
-### 4.4 写作风格克隆（高级功能）
-
-用户上传参考小说章节（1~3 章）：
-- 对参考文本进行风格分析：句子平均长度、对话比例、描写密度、用词风格
-- 将风格参数注入 `system prompt`
-- 生成的内容在文风上向参考作品靠拢
-
-### 4.5 MCP 写操作工具补全
-
-让 Claude Desktop / 其他 MCP 客户端可以完整操作 NovelForge：
-
-| 工具 | 功能 |
-|---|---|
-| `createNovel` | 创建新小说 |
-| `createOutline` | 创建大纲节点 |
-| `updateChapter` | 修改章节内容 |
-| `addCharacter` | 添加角色 |
-| `addForeshadowing` | 添加伏笔 |
-| `generateChapterViaMCP` | 触发章节生成 |
-| `getNovelStatus` | 获取小说完整状态 |
-
-### 4.6 多用户与协作
-
-- 集成 Cloudflare Access 实现身份验证
-- 多用户数据隔离（`user_id` 字段注入所有表）
-- 协作模式：多人实时编辑（基于 Cloudflare Durable Objects + WebSocket）
+- 存储到 R2，更新 `novels.cover_r2_key`
 
 ---
 
-## Phase 5 · 产品化与生态（第 11 周以后）
+## Phase 6 · 产品化（第 13 周以后）
 
-**目标**：从工具变成产品。
+### 6.1 多用户与认证
 
-### 5.1 模板市场
+- 集成 Cloudflare Access 实现身份验证
+- 所有表增加 `user_id` 字段，数据完全隔离
+- 协作模式（可选）：Cloudflare Durable Objects + WebSocket 实时共编
 
-- 内置 10+ 类型小说模板（玄幻、都市、科幻、言情、悬疑等）
-- 每个模板包含：世界观框架、常用角色类型、写作风格 Prompt、章纲结构
+### 6.2 RAG 知识库扩展
+
+- 用户可上传参考资料（PDF / DOCX / TXT）到个人知识库
+- 向量化入库，生成时自动 RAG 检索注入
+
+### 6.3 模板市场
+
+- 内置 10+ 类型小说模板（玄幻/都市/科幻/言情/悬疑等）
+- 每个模板包含：世界观框架、角色类型、写作风格 Prompt、章纲结构
 - 用户可导出/导入自己的模板
 
-### 5.2 RAG 知识库扩展
-
-- 用户可上传参考资料（世界设定文档、历史背景资料、已有章节）到个人知识库
-- 生成时自动从知识库 RAG 检索相关内容注入
-- 向量化入库支持 PDF / DOCX / TXT
-
-### 5.3 语音朗读
-
-- 使用 Workers AI TTS 或第三方 TTS API
-- 章节生成完成后可一键转语音
-- R2 存储音频，支持流式播放
-
-### 5.4 公开分享与阅读
+### 6.4 公开分享与朗读
 
 - 签名 URL 分享（R2 + 时效链接）
-- 公开小说主页（SSR/SSG 生成静态页）
-- 读者评论系统
+- 公开小说主页（SSR/SSG 静态页）
+- Workers AI TTS 章节语音朗读，R2 缓存音频
 
 ---
 
 ## 技术债务与架构注意事项
 
-### 需要补充的基础设施
-
 | 项目 | 当前状态 | 建议 |
 |---|---|---|
-| EPUB/PDF 导出 Workers 兼容性 | 未验证 | Phase 1 期间在 `wrangler dev` 下实测，必要时外置 Node 边车 |
-| D1 查询性能 | 单表查询，无索引规划 | 给 `chapters.novel_id + sort_order`、`outlines.novel_id + type` 加索引 |
-| SSE 连接超时 | Workers 30s 限制 | 长章节生成（>6000字）可能超时；拆成 continue 模式分段生成 |
-| Vectorize 批量索引 | 串行逐条写入 | 改为 `upsert` 批量接口，初始索引性能提升 10x |
-| 错误监控 | 无 | 接入 Sentry（Workers 版）或 Cloudflare Analytics Engine |
+| ReAct 工具解析 | 文本 JSON 解析（不稳定） | Phase 2 改为 function calling 协议（根本修复） |
+| EPUB/PDF 导出兼容性 | 未在 Workers 环境验证 | Phase 1 期间完整测试 |
+| D1 性能 | 核心查询无全局索引规划 | 给 `chapters(novel_id, sort_order)`、`foreshadowing(novel_id, status)` 补索引 |
+| SSE 超时 | Workers 限制 ~100s | 长章节（>6000字）改用分段 continue 模式 |
+| Vectorize 批量写入 | 串行逐条 | 改为 `upsert` 批量接口，初始化性能提升 10x |
+| 错误监控 | 无 | 接入 Cloudflare Analytics Engine 或 Sentry（Workers 版） |
 
-### D1 Schema 需新增的表
+---
+
+## 待新增的数据库表汇总
 
 ```sql
--- Phase 1 新增
-CREATE TABLE foreshadowing (...);
-
--- Phase 2 新增  
+-- Phase 3
 CREATE TABLE workshop_sessions (...);
 
--- Phase 3 新增
+-- Phase 4
 CREATE TABLE novel_plans (...);
 CREATE TABLE generation_queue (...);
 
--- Phase 4 新增
+-- Phase 5
+CREATE TABLE quality_scores (...);
 CREATE TABLE plot_nodes (...);
 CREATE TABLE plot_edges (...);
-CREATE TABLE quality_scores (...);
 ```
 
 ---
@@ -477,28 +488,29 @@ CREATE TABLE quality_scores (...);
 
 | 阶段 | 时间 | 核心交付 | 验收标准 |
 |---|---|---|---|
-| Phase 0 | 第 1 天 | 6 个 Bug 修复 | 全链路生成跑通，日志正常 |
-| Phase 1 | 第 1~2 周 | 写作流补完 | 伏笔面板可用，真 ReAct 工具调用，续写/重写可用 |
-| Phase 2 | 第 3~4 周 | 对话式创作引擎 | 用户通过对话能创建完整小说框架 |
-| Phase 3 | 第 5~6 周 | 一键生成编排器 | 输入一句话，30 章小说能自动跑完（含干预节点） |
-| Phase 4 | 第 7~10 周 | 智能深度增强 | 质量评分、情节图谱、风格克隆 |
-| Phase 5 | 第 11 周+ | 产品化 | 模板市场、多用户、公开分享 |
+| Phase 0 | 第 1 天 | 遗留 Bug 修复 | B3/B5/B6 验证通过，日志 model_id 正常 |
+| Phase 1 | 第 1~2 周 | 功能完整性补全 | 批量大纲前端可用，续写/重写可用，MCP 写操作可用 |
+| Phase 2 | 第 3~4 周 | 生成质量深化 | function calling 工具调用稳定，上下文包精准注入 |
+| Phase 3 | 第 5~6 周 | 对话式创作引擎 | 用户通过多轮对话能生成完整小说框架并写入数据库 |
+| Phase 4 | 第 7~8 周 | 一键生成编排器 | 输入一句话，30 章小说自动跑完（含人工确认节点） |
+| Phase 5 | 第 9~12 周 | 智能增强 | 质量评分可用，情节图谱可视化，风格克隆可用 |
+| Phase 6 | 第 13 周+ | 产品化 | 多用户隔离，模板市场，公开分享 |
 
 ---
 
 ## 最近要做的 10 件事（按优先级）
 
-1. **修复 B2/B3/B6**（今天，1小时）
-2. **修复 B1/B4/B5**（今天，30分钟）
-3. **实现真 ReAct 工具调用**（第 2~3 天）
-4. **滚动摘要链**（第 3 天，改 contextBuilder 20 行）
-5. **伏笔追踪表 + contextBuilder 注入**（第 4~5 天）
-6. **境界追踪字段**（第 5 天，改 characters 表）
-7. **创作工坊对话 API**（第 6~8 天）
-8. **创作工坊前端页面**（第 9~12 天）
-9. **批量章节大纲生成**（第 10 天）
-10. **Orchestrator Agent 设计 + 实现**（第 2 周）
+1. **验证并修复 B3**（resolveConfig 多小说串台）
+2. **验证并修复 B6**（Vectorize 旧向量残留）
+3. **验证并修复 B5**（generation_logs model_id 为 unknown）
+4. **批量大纲生成前端接入**（VolumePanel 操作入口 + SSE 进度）
+5. **续写/重写模式前端接入**（GeneratePanel 模式切换）
+6. **境界信息前端展示**（角色详情面板）
+7. **ReAct 工具调用改为 function calling**（稳定性根本修复）
+8. **上下文包精细化**（按优先级分层注入）
+9. **创作工坊 API**（workshop_sessions 表 + 对话路由）
+10. **创作工坊前端页面**（对话流 + 结构化预览 + 一键提交）
 
 ---
 
-*生成日期：2026-04-20 | 基于 NovelForge v1.3.0 代码审查*
+*基于 NovelForge v1.4.0 代码全量审查 | 更新日期：2026-04-21*

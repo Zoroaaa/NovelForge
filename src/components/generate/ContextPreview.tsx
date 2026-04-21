@@ -29,28 +29,34 @@ import {
 
 export interface ContextDebugInfo {
   totalTokenEstimate: number
+  coreTokens?: number
+  supplementaryTokens?: number
   ragHitsCount: number
   skippedByBudget: number
   buildTimeMs: number
-  summaryChainLength?: number  // Phase 1.1: 摘要链长度
+  summaryChainLength?: number
+  appliedBudgetTier?: { core: number; supplementary: number; rag: number }
 }
 
 export interface RagChunk {
-  sourceType: 'outline' | 'character' | 'chapter_summary'
+  sourceType: 'setting' | 'character' | 'chapter_summary' | 'master_outline' | 'writing_rules'
   title: string
   content: string
   score: number
 }
 
 export interface ContextBundle {
-  mandatory: {
+  core: {
     chapterOutline: string
     prevChapterSummary: string
+    protagonistStateCards: string[]
+    highPriorityRules: string[]
+  }
+  supplementary: {
+    summaryChain: string[]
     volumeSummary: string
-    protagonistCards: string[]
-    recentChainSummaries?: string[]  // Phase 1.1
-    openForeshadowing?: string[]     // Phase 1.2
-    powerLevelInfo?: string          // Phase 1.3
+    characterCards: string[]
+    openForeshadowing: string[]
   }
   ragChunks: RagChunk[]
   debug: ContextDebugInfo
@@ -76,9 +82,11 @@ interface ContextPreviewProps {
 }
 
 const SOURCE_TYPE_CONFIG = {
-  outline: { icon: FileText, label: '大纲', color: 'bg-blue-100 text-blue-800' },
+  setting: { icon: FileText, label: '设定', color: 'bg-blue-100 text-blue-800' },
   character: { icon: User, label: '角色', color: 'bg-purple-100 text-purple-800' },
   chapter_summary: { icon: BookOpen, label: '章节摘要', color: 'bg-green-100 text-green-800' },
+  master_outline: { icon: FileText, label: '总纲/卷纲', color: 'bg-blue-100 text-blue-800' },
+  writing_rules: { icon: AlertCircle, label: '规则', color: 'bg-amber-100 text-amber-800' },
 }
 
 export function ContextPreview({ contextBundle, isGenerating, toolCalls }: ContextPreviewProps) {
@@ -114,7 +122,7 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
 
   if (!contextBundle) return null
 
-  const { mandatory, ragChunks, debug } = contextBundle
+  const { core, supplementary, ragChunks, debug } = contextBundle
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -125,14 +133,14 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
               <Brain className="h-4 w-4 text-primary" />
               <span className="text-sm font-medium">AI 上下文预览</span>
               <Badge variant="secondary" className="text-xs">
-                Phase 2
+                Phase 2.2
               </Badge>
             </div>
 
             <div className="flex items-center gap-3">
               {/* 统计信息 */}
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1" title={`核心: ${debug.coreTokens || 0} | 补充: ${debug.supplementaryTokens || 0}`}>
                   <Hash className="h-3 w-3" />
                   ~{debug.totalTokenEstimate} tokens
                 </span>
@@ -140,6 +148,11 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
                   <Badge variant="outline" className="text-xs">
                     +{ragChunks.length} RAG
                   </Badge>
+                )}
+                {debug.appliedBudgetTier && (
+                  <span className="text-[10px] opacity-70" title={`预算分配 - 核心:${debug.appliedBudgetTier.core} 补充:${debug.appliedBudgetTier.supplementary} RAG:${debug.appliedBudgetTier.rag}`}>
+                    分层
+                  </span>
                 )}
                 <span className="flex items-center gap-1">
                   <Clock className="h-3 w-3" />
@@ -208,51 +221,49 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
               </div>
             )}
 
-            {/* 强制注入部分 */}
-            {(mandatory.chapterOutline || mandatory.prevChapterSummary || mandatory.volumeSummary) && (
+            {/* Phase 2.2: 第一层 - 核心必带上下文 */}
+            {(core.chapterOutline || core.prevChapterSummary) && (
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                   <FileText className="h-3 w-3" />
-                  基础上下文（强制注入）
+                  核心上下文（强制注入 ~4000 tokens）
+                  {debug.coreTokens && (
+                    <Badge variant="outline" className="text-[10px]">
+                      {debug.coreTokens}t
+                    </Badge>
+                  )}
                 </h4>
 
                 <div className="space-y-1.5 pl-4">
-                  {mandatory.chapterOutline && (
+                  {core.chapterOutline && (
                     <ContextItem
                       label="本章大纲"
-                      content={mandatory.chapterOutline}
-                      type="outline"
+                      content={core.chapterOutline}
+                      type="master_outline"
                     />
                   )}
-                  {mandatory.prevChapterSummary && (
+                  {core.prevChapterSummary && (
                     <ContextItem
                       label="上一章摘要"
-                      content={mandatory.prevChapterSummary}
+                      content={core.prevChapterSummary}
                       type="chapter_summary"
-                    />
-                  )}
-                  {mandatory.volumeSummary && (
-                    <ContextItem
-                      label="当前卷概要"
-                      content={mandatory.volumeSummary}
-                      type="outline"
                     />
                   )}
                 </div>
               </div>
             )}
 
-            {/* 角色卡 */}
-            {mandatory.protagonistCards.length > 0 && (
+            {/* 主角状态卡（含境界信息） */}
+            {core.protagonistStateCards.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                   <User className="h-3 w-3" />
-                  出场角色 ({mandatory.protagonistCards.length})
+                  主角状态卡（境界 + 随行）
                 </h4>
                 <ScrollArea className="max-h-32 rounded-md border bg-background/50 p-2">
                   <div className="space-y-1.5">
-                    {mandatory.protagonistCards.map((card, index) => (
-                      <div key={index} className="text-xs p-2 bg-muted/50 rounded">
+                    {core.protagonistStateCards.map((card, index) => (
+                      <div key={index} className="text-xs p-2 bg-purple-50 dark:bg-purple-950 rounded">
                         <pre className="whitespace-pre-wrap font-mono leading-relaxed">
                           {card.slice(0, 200)}{card.length > 200 ? '...' : ''}
                         </pre>
@@ -263,17 +274,120 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
               </div>
             )}
 
-            {/* RAG 检索结果 */}
+            {/* 高优先级创作规则 */}
+            {core.highPriorityRules.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  创作规则（高优先级）
+                </h4>
+                <ScrollArea className="max-h-24 rounded-md border bg-background/50 p-2">
+                  <div className="space-y-1">
+                    {core.highPriorityRules.map((rule, index) => (
+                      <div key={index} className="text-xs p-1.5 bg-amber-50 dark:bg-amber-950 rounded">
+                        <pre className="whitespace-pre-wrap font-mono leading-relaxed line-clamp-2">
+                          {rule.slice(0, 150)}{rule.length > 150 ? '...' : ''}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+            )}
+
+            {/* Phase 2.2: 第二层 - 补充上下文 */}
+            {(supplementary.summaryChain.length > 0 || supplementary.volumeSummary || supplementary.openForeshadowing.length > 0) && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                  <BookOpen className="h-3 w-3" />
+                  补充上下文（按需注入 ~4000 tokens）
+                  {debug.supplementaryTokens && (
+                    <Badge variant="outline" className="text-[10px]">
+                      {debug.supplementaryTokens}t
+                    </Badge>
+                  )}
+                </h4>
+
+                <div className="space-y-1.5 pl-4">
+                  {supplementary.volumeSummary && (
+                    <ContextItem
+                      label="当前卷概要"
+                      content={supplementary.volumeSummary}
+                      type="master_outline"
+                    />
+                  )}
+
+                  {supplementary.summaryChain.length > 0 && (
+                    <div className="rounded border p-2 space-y-1">
+                      <span className="text-xs font-medium flex items-center gap-1.5">
+                        <Badge variant="outline" className="text-[10px]">
+                          摘要链 (×{supplementary.summaryChain.length})
+                        </Badge>
+                      </span>
+                      <ScrollArea className="max-h-20 mt-1">
+                        <div className="space-y-0.5">
+                          {supplementary.summaryChain.map((summary, idx) => (
+                            <p key={idx} className="text-xs text-muted-foreground px-1 py-0.5 hover:bg-muted/30 rounded truncate">
+                              {summary.slice(0, 120)}{summary.length > 120 ? '...' : ''}
+                            </p>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  )}
+
+                  {supplementary.openForeshadowing.length > 0 && (
+                    <div className="rounded border p-2 space-y-1">
+                      <span className="text-xs font-medium flex items-center gap-1.5">
+                        未收尾伏笔 ({supplementary.openForeshadowing.length})
+                      </span>
+                      <ScrollArea className="max-h-20 mt-1">
+                        <div className="space-y-0.5">
+                          {supplementary.openForeshadowing.map((fs, idx) => (
+                            <p key={idx} className="text-xs text-orange-600 dark:text-orange-400 px-1 py-0.5 truncate">
+                              {fs.slice(0, 100)}{fs.length > 100 ? '...' : ''}
+                            </p>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 本章角色设定卡 */}
+            {supplementary.characterCards.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                  <User className="h-3 w-3" />
+                  本章角色设定 ({supplementary.characterCards.length})
+                </h4>
+                <ScrollArea className="max-h-28 rounded-md border bg-background/50 p-2">
+                  <div className="space-y-1">
+                    {supplementary.characterCards.map((card, index) => (
+                      <div key={index} className="text-xs p-1.5 bg-muted/50 rounded">
+                        <pre className="whitespace-pre-wrap font-mono leading-relaxed line-clamp-2">
+                          {card.slice(0, 150)}{card.length > 150 ? '...' : ''}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+            )}
+
+            {/* 第三层：RAG 检索结果 */}
             {ragChunks.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                   <Brain className="h-3 w-3" />
-                  RAG 语义检索 ({ragChunks.length} 条)
+                  RAG 动态检索 (~4000 tokens)
                 </h4>
 
                 <div className="space-y-1.5 pl-4">
                   {ragChunks.map((chunk, index) => {
-                    const config = SOURCE_TYPE_CONFIG[chunk.sourceType]
+                    const config = SOURCE_TYPE_CONFIG[chunk.sourceType] || SOURCE_TYPE_CONFIG['setting']
                     const Icon = config.icon
 
                     return (

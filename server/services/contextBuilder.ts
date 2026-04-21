@@ -11,18 +11,21 @@ import type { Env } from '../lib/types'
 import { embedText, searchSimilar } from './embedding'
 
 export interface ContextBundle {
-  /** 强制注入部分（每次必带）*/
-  mandatory: {
+  /** 第一层：核心必带（~4000 tokens）*/
+  core: {
     chapterOutline: string
     prevChapterSummary: string
-    recentChainSummaries: string[]
-    volumeSummary: string
-    protagonistCards: string[]
-    openForeshadowing?: string[]  // Phase 1.2: 未收尾伏笔列表
-    powerLevelInfo?: string       // Phase 1.3: 主角境界信息
-    writingRules?: string[]      // 创作规则
+    protagonistStateCards: string[]  // 主角境界+随行人物
+    highPriorityRules: string[]     // 高优先级创作规则
   }
-  /** RAG 检索部分（语义最相关的设定/大纲片段，按分数截断）*/
+  /** 第二层：补充上下文（~4000 tokens，按重要性排序）*/
+  supplementary: {
+    summaryChain: string[]           // 最近 N 章摘要链
+    volumeSummary: string            // 当前卷概要
+    characterCards: string[]          // 本章角色设定卡
+    openForeshadowing: string[]      // 未收尾伏笔列表（按 importance 排序）
+  }
+  /** 第三层：RAG 动态检索（~4000 tokens）*/
   ragChunks: Array<{
     sourceType: 'setting' | 'character' | 'chapter_summary' | 'master_outline' | 'writing_rules'
     title: string
@@ -32,19 +35,24 @@ export interface ContextBundle {
   /** 诊断信息（前端 ContextPreview 组件展示用）*/
   debug: {
     totalTokenEstimate: number
+    coreTokens: number
+    supplementaryTokens: number
     ragHitsCount: number
     skippedByBudget: number
     buildTimeMs: number
-    summaryChainLength: number  // Phase 1.1: 实际使用的摘要链长度
+    summaryChainLength: number
+    appliedBudgetTier: { core: number; supplementary: number; rag: number }
   }
 }
 
 /**
- * Token 预算分配（可在 model_configs.params 中覆盖）
+ * Phase 2.2: 分层 Token 预算配置
+ * 总预算 12000 tokens，分为三层
  */
 export const DEFAULT_BUDGET = {
   total: 12000,
-  mandatory: 6000,
+  core: 4000,
+  supplementary: 4000,
   rag: 4000,
   systemPrompt: 2000,
 }
@@ -73,7 +81,7 @@ export async function buildChapterContext(
   const db = drizzle(env.DB)
 
   let summaryChainLength = options?.summaryChainLength || 5
-  summaryChainLength = Math.min(Math.max(summaryChainLength, 0), 15) // 限制范围 0-15
+  summaryChainLength = Math.min(Math.max(summaryChainLength, 0), 15)
 
   try {
     const configResult = await db
@@ -99,20 +107,85 @@ export async function buildChapterContext(
     console.warn('Failed to read summaryChainLength config, using default:', error)
   }
 
-  // 1. 并发拉取强制注入内容（走 D1，精准 ID 查询）
-  const [chapterOutline, prevChapterSummary, recentChainSummaries, volumeSummary, protagonists, openForeshadowing, powerLevelInfo, writingRulesList] =
+  // ========== Phase 2.2: 分层并发获取数据 ==========
+
+  // 第一层：核心必带数据（最高优先级）
+  const [chapterOutline, prevChapterSummary, protagonists, powerLevelInfo, allWritingRules] =
     await Promise.all([
       fetchChapterOutline(db, chapterId),
       fetchPrevChapterSummary(db, chapterId),
-      fetchRecentChapterSummaries(db, chapterId, summaryChainLength),
-      fetchVolumeSummary(db, chapterId),
       fetchProtagonistCards(db, chapterId),
-      fetchOpenForeshadowing(db, novelId, chapterId),  // Phase 1.2: 获取未收尾伏笔
-      fetchProtagonistPowerLevel(db, novelId, chapterId),  // Phase 1.3: 获取主角境界信息
-      fetchWritingRules(db, novelId),  // 获取创作规则
+      fetchProtagonistPowerLevel(db, novelId, chapterId),
+      fetchWritingRules(db, novelId),
     ])
 
-  // 2. 用本章大纲作为 query，RAG 检索语义相关片段
+  // 构建主角状态卡（合并基础信息 + 境界信息）
+  const protagonistStateCards = buildProtagonistStateCards(protagonists, powerLevelInfo)
+
+  // 过滤高优先级规则（priority <= 5）
+  const highPriorityRules = allWritingRules.slice(0, 8)  // 最多8条高优先级规则
+
+  // 计算第一层 token 使用量
+  let coreTokensUsed = estimateTokens(chapterOutline) +
+    estimateTokens(prevChapterSummary) +
+    protagonistStateCards.reduce((s, c) => s + estimateTokens(c), 0) +
+    highPriorityRules.reduce((s, r) => s + estimateTokens(r), 0)
+
+  // 如果第一层超预算，进行截断
+  if (coreTokensUsed > budget.core) {
+    console.warn(`⚠️ Core context exceeds budget (${coreTokensUsed} > ${budget.core}), truncating...`)
+    // 优先保留大纲和上一章摘要，截断角色卡和规则
+    while (coreTokensUsed > budget.core && protagonistStateCards.length > 0) {
+      const removed = protagonistStateCards.pop()
+      if (removed) coreTokensUsed -= estimateTokens(removed)
+    }
+    while (coreTokensUsed > budget.core && highPriorityRules.length > 0) {
+      const removed = highPriorityRules.pop()
+      if (removed) coreTokensUsed -= estimateTokens(removed)
+    }
+  }
+
+  // ========== 第二层：补充上下文 ==========
+  const [recentChainSummaries, volumeSummary, openForeshadowing] = await Promise.all([
+    fetchRecentChapterSummaries(db, chapterId, summaryChainLength),
+    fetchVolumeSummary(db, chapterId),
+    fetchOpenForeshadowing(db, novelId, chapterId),
+  ])
+
+  // 获取本章相关的角色设定卡（从大纲中提取角色名）
+  const characterNamesFromOutline = extractCharacterNames(chapterOutline)
+  const characterCards = await fetchCharacterCardsForChapter(db, novelId, characterNamesFromOutline)
+
+  // 按重要性排序并限制数量
+  let supplementaryItems = [
+    ...recentChainSummaries.map(s => ({ type: 'summary' as const, content: s, priority: 3 })),
+    ...characterCards.map(c => ({ type: 'character' as const, content: c, priority: 4 })),
+    ...(volumeSummary ? [{ type: 'volume' as const, content: volumeSummary, priority: 2 }] : []),
+    ...openForeshadowing.map(f => ({ type: 'foreshadowing' as const, content: f, priority: f.includes('重要') ? 1 : 5 })),
+  ]
+
+  // 按优先级排序（数字越小越重要）
+  supplementaryItems.sort((a, b) => a.priority - b.priority)
+
+  // 按 budget 截断第二层
+  let supplementaryTokensUsed = 0
+  const selectedSupplementary: string[] = []
+
+  for (const item of supplementaryItems) {
+    const itemTokens = estimateTokens(item.content)
+    if (supplementaryTokensUsed + itemTokens > budget.supplementary) break
+
+    supplementaryTokensUsed += itemTokens
+    selectedSupplementary.push(item.content)
+  }
+
+  // 拆分回结构化格式
+  const summaryChain = selectedSupplementary.filter(s => s.startsWith('[第'))
+  const volumeSummaryFinal = selectedSupplementary.find(s => !s.startsWith('[第') && !s.startsWith('【伏笔') && !s.startsWith('【')) || ''
+  const finalCharacterCards = selectedSupplementary.filter(s => s.startsWith('【') && !s.startsWith('【伏笔') && !s.includes('·当前境界'))
+  const finalForeshadowing = selectedSupplementary.filter(s => s.startsWith('【伏笔'))
+
+  // ========== 第三层：RAG 动态检索 ==========
   let ragChunks: ContextBundle['ragChunks'] = []
   let skipped = 0
 
@@ -124,7 +197,6 @@ export async function buildChapterContext(
         filter: { novelId },
       })
 
-      // 3. 按 token 预算截断 RAG 结果
       let usedTokens = 0
 
       for (const match of ragResults) {
@@ -146,37 +218,138 @@ export async function buildChapterContext(
       }
     } catch (error) {
       console.warn('RAG search failed, using fallback:', error)
-      // RAG 失败时使用简单的上下文填充
       ragChunks = await fallbackContext(db, novelId, budget.rag)
     }
   }
 
   const buildTimeMs = Date.now() - startTime
+  const totalTokenEstimate = coreTokensUsed + supplementaryTokensUsed +
+    ragChunks.reduce((sum, chunk) => sum + estimateTokens(chunk.content), 0)
 
   return {
-    mandatory: {
+    core: {
       chapterOutline,
       prevChapterSummary,
-      recentChainSummaries,
-      volumeSummary,
-      protagonistCards: protagonists,
-      openForeshadowing: openForeshadowing.length > 0 ? openForeshadowing : undefined,  // Phase 1.2
-      powerLevelInfo: powerLevelInfo || undefined,  // Phase 1.3
-      writingRules: writingRulesList.length > 0 ? writingRulesList : undefined,  // 创作规则
+      protagonistStateCards,
+      highPriorityRules,
+    },
+    supplementary: {
+      summaryChain,
+      volumeSummary: typeof volumeSummaryFinal === 'string' ? volumeSummaryFinal : '',
+      characterCards: finalCharacterCards,
+      openForeshadowing: finalForeshadowing,
     },
     ragChunks,
     debug: {
-      totalTokenEstimate:
-        estimateMandatoryTokens({ chapterOutline, prevChapterSummary, recentChainSummaries, volumeSummary, protagonistCards: protagonists }) +
-        ragChunks.reduce((sum, chunk) => sum + estimateTokens(chunk.content), 0) +
-        (openForeshadowing.length > 0 ? openForeshadowing.reduce((s, f) => s + estimateTokens(f), 0) : 0) +  // Phase 1.2
-        (powerLevelInfo ? estimateTokens(powerLevelInfo) : 0) +  // Phase 1.3
-        (writingRulesList.length > 0 ? writingRulesList.reduce((s, r) => s + estimateTokens(r), 0) : 0),  // 创作规则
+      totalTokenEstimate,
+      coreTokens: coreTokensUsed,
+      supplementaryTokens: supplementaryTokensUsed,
       ragHitsCount: ragChunks.length,
       skippedByBudget: skipped,
       buildTimeMs,
-      summaryChainLength,  // Phase 1.1: 记录实际使用的摘要链长度
+      summaryChainLength,
+      appliedBudgetTier: { core: budget.core, supplementary: budget.supplementary, rag: budget.rag },
     },
+  }
+}
+
+// ========== Phase 2.2: 新增辅助函数 ==========
+
+/**
+ * 构建主角状态卡（合并基础信息 + 境界信息）
+ */
+function buildProtagonistStateCards(
+  basicCards: string[],
+  powerLevelInfo: string | null
+): string[] {
+  if (!powerLevelInfo) return basicCards
+
+  // 将境界信息追加到对应的主角卡片中
+  return basicCards.map(card => {
+    const nameMatch = card.match(/【(.+?)】/)
+    if (!nameMatch) return card
+
+    const charName = nameMatch[1]
+    // 检查境界信息是否包含该角色名
+    if (powerLevelInfo.includes(charName)) {
+      return card + '\n' + powerLevelInfo.split('\n\n').find(info => info.includes(charName))?.replace(/【.+?】\n/, '') || ''
+    }
+    return card
+  })
+}
+
+/**
+ * 从章节大纲中提取角色名（简单启发式）
+ */
+function extractCharacterNames(outline: string): string[] {
+  if (!outline) return []
+  const names = new Set<string>()
+
+  // 匹配常见模式：《角色名》、角色名说、"角色名" 等
+  const patterns = [
+    /《([^》]{2,10})》/g,
+    /([^\s，。！？；：""''【】（）]{2,6})说[：:]/g,
+    /"([^"]{2,6})"/g,
+  ]
+
+  for (const pattern of patterns) {
+    let match
+    while ((match = pattern.exec(outline)) !== null) {
+      const name = match[1].trim()
+      if (name && name.length >= 2 && name.length <= 10 && !/^[0-9]/.test(name)) {
+        names.add(name)
+      }
+    }
+  }
+
+  return Array.from(names).slice(0, 10)  // 最多提取10个角色
+}
+
+/**
+ * 获取指定角色的详细设定卡
+ */
+async function fetchCharacterCardsForChapter(
+  db: any,
+  novelId: string,
+  characterNames: string[]
+): Promise<string[]> {
+  if (characterNames.length === 0) return []
+
+  try {
+    const characterList = await db
+      .select({
+        name: characters.name,
+        description: characters.description,
+        role: characters.role,
+        attributes: characters.attributes,
+      })
+      .from(characters)
+      .where(
+        and(
+          eq(characters.novelId, novelId),
+          sql`${characters.deletedAt} IS NULL`,
+          sql`${characters.name} IN (${characterNames.map(n => `'${n.replace(/'/g, "''")}'`).join(',')})`
+        )
+      )
+      .all()
+
+    return characterList.map((c: { name: string; description?: string; attributes?: string; role?: string }) => {
+      let card = `【${c.name}${c.role && c.role !== 'protagonist' ? `(${c.role})` : ''}】`
+      if (c.description) card += `\n${c.description}`
+      if (c.attributes) {
+        try {
+          const attrs = JSON.parse(c.attributes)
+          const attrStr = Object.entries(attrs)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(', ')
+          card += `\n属性：${attrStr}`
+        } catch {}
+      }
+      return card
+    })
+  } catch (error) {
+    console.warn('Failed to fetch character cards for chapter:', error)
+    return []
   }
 }
 

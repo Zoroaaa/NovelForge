@@ -218,5 +218,15 @@ export const api = {
 
   generate: {
     chapter: (payload: GenerateOptions, onChunk: (text: string) => void, onDone: () => void, onError: (e: Error) => void): (() => void) => { return () => {} },
+    outlineBatch: (body: { volumeId: string; novelId: string; chapterCount?: number; context?: string }) =>
+      req<{
+        ok: boolean
+        message?: string
+        outlines?: any[]
+        totalRequested?: number
+        successCount?: number
+        volumeOutlinePreview?: string
+        error?: string
+      }>('/api/generate/outline-batch', { method: 'POST', body: j(body) }),
   }
 }

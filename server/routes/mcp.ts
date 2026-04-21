@@ -46,9 +46,9 @@ router.get('/', (c) => {
   return c.json({
     ok: true,
     service: 'NovelForge MCP',
-    version: '1.0.0',
+    version: '1.1.0',
     protocolVersion: '2024-11-05',
-    tools: 5,
+    tools: 14,
   })
 })
 

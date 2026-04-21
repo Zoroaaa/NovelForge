@@ -252,3 +252,17 @@ export const entityIndex = sqliteTable('entity_index', {
   meta: text('meta'),
   ...timestamps,
 })
+
+// ============================================================
+// 14. 创作工坊会话表（Phase 3 - 对话式创作引擎）
+// 用途：记录用户与 AI 的多轮对话，提取结构化小说数据
+// ============================================================
+export const workshopSessions = sqliteTable('workshop_sessions', {
+  id: id(),
+  novelId: text('novel_id'),                    // 关联的小说ID（可选，创建时可为空）
+  stage: text('stage').notNull(),               // 当前阶段：concept | worldbuild | characters | volumes | chapters
+  messages: text('messages').notNull(),          // JSON 对话历史 [{role, content, timestamp}]
+  extractedData: text('extracted_data'),        // JSON 当前提取的结构化数据 {title, genre, outline, characters, ...}
+  status: text('status').notNull().default('active'), // active | committed | abandoned
+  ...timestamps,
+})
