@@ -9,7 +9,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Volume, Chapter } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Plus, Trash2, Edit2, BookOpen, ChevronDown, ChevronRight, FileText, Hash } from 'lucide-react'
+import { Plus, Trash2, Edit2, BookOpen, ChevronDown, ChevronRight, FileText, FileCode, StickyNote } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -20,7 +20,13 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 interface VolumePanelProps {
   novelId: string
@@ -43,6 +49,9 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
     title: '',
     summary: '',
     outline: '',
+    blueprint: '',
+    notes: '',
+    status: 'draft',
     targetWordCount: '',
   })
 
@@ -64,23 +73,18 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
   }, {} as Record<string, Chapter[]>)
 
   const createMutation = useMutation({
-    mutationFn: (data: { title: string; summary?: string; outline?: string; targetWordCount?: number }) =>
+    mutationFn: (data: { title: string; summary?: string; outline?: string; blueprint?: string; notes?: string; status?: string; targetWordCount?: number }) =>
       api.volumes.create({
         novelId,
         title: data.title,
         sortOrder: (volumes?.length || 0),
         outline: data.outline || null,
-        blueprint: null,
+        blueprint: data.blueprint || null,
         targetWordCount: data.targetWordCount || null,
-        notes: null,
+        notes: data.notes || null,
+        status: data.status || 'draft',
+        summary: data.summary || null,
         chapterCount: 0,
-      }).then((volume) => {
-        if (data.summary) {
-          return api.volumes.update(volume.id, {
-            summary: data.summary,
-          } as any)
-        }
-        return volume
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['volumes', novelId] })
@@ -124,6 +128,9 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
       title: formData.title.trim(),
       summary: formData.summary.trim() || undefined,
       outline: formData.outline.trim() || undefined,
+      blueprint: formData.blueprint.trim() || undefined,
+      notes: formData.notes.trim() || undefined,
+      status: formData.status || 'draft',
       targetWordCount: formData.targetWordCount ? Number(formData.targetWordCount) : undefined,
     }
 
@@ -140,6 +147,9 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
       title: volume.title,
       summary: volume.summary || '',
       outline: volume.outline || '',
+      blueprint: volume.blueprint || '',
+      notes: volume.notes || '',
+      status: volume.status || 'draft',
       targetWordCount: volume.targetWordCount?.toString() || '',
     })
     setDialogOpen(true)
@@ -167,7 +177,7 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
 
   const resetForm = () => {
     setEditingId(null)
-    setFormData({ title: '', summary: '', outline: '', targetWordCount: '' })
+    setFormData({ title: '', summary: '', outline: '', blueprint: '', notes: '', status: 'draft', targetWordCount: '' })
   }
 
   if (volumesLoading) {
@@ -222,6 +232,18 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
               </div>
 
               <div className="space-y-2">
+                <Label>卷状态</Label>
+                <Select value={formData.status} onValueChange={(v) => setFormData(prev => ({ ...prev, status: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="draft">草稿</SelectItem>
+                    <SelectItem value="writing">连载中</SelectItem>
+                    <SelectItem value="completed">已完结</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
                 <Label>卷简介（可选）</Label>
                 <Textarea
                   placeholder="描述这一卷的主要内容..."
@@ -238,6 +260,32 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
                   rows={8}
                   value={formData.outline}
                   onChange={(e) => setFormData(prev => ({ ...prev, outline: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <FileCode className="h-4 w-4" />
+                  卷蓝图（可选，JSON格式）
+                </Label>
+                <Textarea
+                  placeholder='如：{"arc": "成长篇", "keyEvents": ["拜师", "历练"]}'
+                  rows={3}
+                  value={formData.blueprint}
+                  onChange={(e) => setFormData(prev => ({ ...prev, blueprint: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <StickyNote className="h-4 w-4" />
+                  作者笔记（可选）
+                </Label>
+                <Textarea
+                  placeholder="记录创作灵感、待办事项等..."
+                  rows={2}
+                  value={formData.notes}
+                  onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                 />
               </div>
 
@@ -330,13 +378,35 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
                   </div>
                 )}
 
-                {isExpanded && volume.summary && (
-                  <div className="border-t px-3 py-2.5 bg-muted/10">
-                    <p className="text-xs text-muted-foreground/70 line-clamp-2 leading-relaxed">
-                      {volume.summary}
-                    </p>
+                {isExpanded && (
+                  <div className="border-t bg-muted/10 space-y-2 p-3">
+                    {volume.summary && (
+                      <div className="flex items-start gap-2">
+                        <FileText className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0 mt-0.5" />
+                        <p className="text-xs text-muted-foreground/70 line-clamp-2 leading-relaxed">
+                          {volume.summary}
+                        </p>
+                      </div>
+                    )}
+                    {volume.notes && (
+                      <div className="flex items-start gap-2">
+                        <StickyNote className="h-3.5 w-3.5 text-amber-500/50 shrink-0 mt-0.5" />
+                        <p className="text-xs text-muted-foreground/70 line-clamp-2 leading-relaxed">
+                          笔记：{volume.notes}
+                        </p>
+                      </div>
+                    )}
+                    {volume.blueprint && (
+                      <div className="flex items-start gap-2">
+                        <FileCode className="h-3.5 w-3.5 text-blue-500/50 shrink-0 mt-0.5" />
+                        <p className="text-xs text-muted-foreground/70 line-clamp-2 leading-relaxed">
+                          蓝图：{volume.blueprint.slice(0, 100)}{volume.blueprint.length > 100 ? '...' : ''}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
+
               </div>
             )
           })

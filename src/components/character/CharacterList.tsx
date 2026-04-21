@@ -50,6 +50,11 @@ export function CharacterList({ novelId }: CharacterListProps) {
     queryFn: () => api.characters.list(novelId),
   })
 
+  const { data: powerSystems } = useQuery({
+    queryKey: ['settings-power-system', novelId],
+    queryFn: () => api.settings.list(novelId, { type: 'power_system' }),
+  })
+
   const createMutation = useMutation({
     mutationFn: (data: any) => api.characters.create(data),
     onSuccess: () => {
@@ -123,7 +128,16 @@ export function CharacterList({ novelId }: CharacterListProps) {
     setRole(character.role || 'supporting')
     setDescription(character.description || '')
     setAliases(character.aliases || '')
-    setPowerLevel(character.powerLevel || '')
+    let parsedPowerLevel = ''
+    if (character.powerLevel) {
+      try {
+        JSON.parse(character.powerLevel)
+        parsedPowerLevel = character.powerLevel
+      } catch {
+        parsedPowerLevel = JSON.stringify({ current: character.powerLevel })
+      }
+    }
+    setPowerLevel(parsedPowerLevel)
     setAttributes(character.attributes || '')
     setDialogOpen(true)
   }
@@ -225,13 +239,56 @@ export function CharacterList({ novelId }: CharacterListProps) {
                   <Swords className="h-4 w-4" />
                   境界信息
                 </Label>
-                <Input
-                  id="char-power-level"
-                  value={powerLevel}
-                  onChange={(e) => setPowerLevel(e.target.value)}
-                  placeholder='如：{"realm": "金丹期", "level": 3, "title": "金丹真人"}'
-                />
-                <p className="text-[10px] text-muted-foreground">JSON格式存储境界、等级等信息（选填）</p>
+                {powerSystems && powerSystems.settings && powerSystems.settings.length > 0 ? (
+                  <div className="space-y-2">
+                    <Select value={powerLevel ? JSON.parse(powerLevel).system || '' : ''} onValueChange={(system) => {
+                      const current = powerLevel ? JSON.parse(powerLevel) : {}
+                      setPowerLevel(JSON.stringify({ ...current, system }))
+                    }}>
+                      <SelectTrigger><SelectValue placeholder="选择境界体系" /></SelectTrigger>
+                      <SelectContent>
+                        {powerSystems.settings.map((s: any) => (
+                          <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {powerLevel && JSON.parse(powerLevel).system && (() => {
+                      const systemSetting = powerSystems.settings.find((s: any) => s.name === JSON.parse(powerLevel).system)
+                      const levels = systemSetting?.attributes ? JSON.parse(systemSetting.attributes).levels : null
+                      return levels ? (
+                        <Select value={JSON.parse(powerLevel).current || ''} onValueChange={(current) => {
+                          const current_data = JSON.parse(powerLevel)
+                          setPowerLevel(JSON.stringify({ ...current_data, current }))
+                        }}>
+                          <SelectTrigger><SelectValue placeholder="选择当前境界" /></SelectTrigger>
+                          <SelectContent>
+                            {levels.map((level: string) => (
+                              <SelectItem key={level} value={level}>{level}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          id="char-power-level"
+                          value={JSON.parse(powerLevel).current || ''}
+                          onChange={(e) => {
+                            const current = JSON.parse(powerLevel)
+                            setPowerLevel(JSON.stringify({ ...current, current: e.target.value }))
+                          }}
+                          placeholder="输入当前境界"
+                        />
+                      )
+                    })()}
+                  </div>
+                ) : (
+                  <Input
+                    id="char-power-level"
+                    value={powerLevel}
+                    onChange={(e) => setPowerLevel(e.target.value)}
+                    placeholder='手动输入境界，如：{"realm": "金丹期", "level": 3}'
+                  />
+                )}
+                <p className="text-[10px] text-muted-foreground">从设定表选择境界体系，或手动输入（选填）</p>
               </div>
 
               <div className="space-y-2">

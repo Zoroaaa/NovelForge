@@ -5,7 +5,7 @@
  * @modified 2026-04-21 - 添加规范化注释
  */
 import { drizzle } from 'drizzle-orm/d1'
-import { chapters, volumes, characters, modelConfigs, foreshadowing, novelSettings, masterOutline } from '../db/schema'
+import { chapters, volumes, characters, modelConfigs, foreshadowing, novelSettings, masterOutline, writingRules } from '../db/schema'
 import { eq, and, sql, desc } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { embedText, searchSimilar } from './embedding'
@@ -20,10 +20,11 @@ export interface ContextBundle {
     protagonistCards: string[]
     openForeshadowing?: string[]  // Phase 1.2: 未收尾伏笔列表
     powerLevelInfo?: string       // Phase 1.3: 主角境界信息
+    writingRules?: string[]      // 创作规则
   }
   /** RAG 检索部分（语义最相关的设定/大纲片段，按分数截断）*/
   ragChunks: Array<{
-    sourceType: 'setting' | 'character' | 'chapter_summary' | 'master_outline'
+    sourceType: 'setting' | 'character' | 'chapter_summary' | 'master_outline' | 'writing_rules'
     title: string
     content: string
     score: number
@@ -99,7 +100,7 @@ export async function buildChapterContext(
   }
 
   // 1. 并发拉取强制注入内容（走 D1，精准 ID 查询）
-  const [chapterOutline, prevChapterSummary, recentChainSummaries, volumeSummary, protagonists, openForeshadowing, powerLevelInfo] =
+  const [chapterOutline, prevChapterSummary, recentChainSummaries, volumeSummary, protagonists, openForeshadowing, powerLevelInfo, writingRulesList] =
     await Promise.all([
       fetchChapterOutline(db, chapterId),
       fetchPrevChapterSummary(db, chapterId),
@@ -108,6 +109,7 @@ export async function buildChapterContext(
       fetchProtagonistCards(db, chapterId),
       fetchOpenForeshadowing(db, novelId, chapterId),  // Phase 1.2: 获取未收尾伏笔
       fetchProtagonistPowerLevel(db, novelId, chapterId),  // Phase 1.3: 获取主角境界信息
+      fetchWritingRules(db, novelId),  // 获取创作规则
     ])
 
   // 2. 用本章大纲作为 query，RAG 检索语义相关片段
@@ -160,6 +162,7 @@ export async function buildChapterContext(
       protagonistCards: protagonists,
       openForeshadowing: openForeshadowing.length > 0 ? openForeshadowing : undefined,  // Phase 1.2
       powerLevelInfo: powerLevelInfo || undefined,  // Phase 1.3
+      writingRules: writingRulesList.length > 0 ? writingRulesList : undefined,  // 创作规则
     },
     ragChunks,
     debug: {
@@ -167,7 +170,8 @@ export async function buildChapterContext(
         estimateMandatoryTokens({ chapterOutline, prevChapterSummary, recentChainSummaries, volumeSummary, protagonistCards: protagonists }) +
         ragChunks.reduce((sum, chunk) => sum + estimateTokens(chunk.content), 0) +
         (openForeshadowing.length > 0 ? openForeshadowing.reduce((s, f) => s + estimateTokens(f), 0) : 0) +  // Phase 1.2
-        (powerLevelInfo ? estimateTokens(powerLevelInfo) : 0),  // Phase 1.3
+        (powerLevelInfo ? estimateTokens(powerLevelInfo) : 0) +  // Phase 1.3
+        (writingRulesList.length > 0 ? writingRulesList.reduce((s, r) => s + estimateTokens(r), 0) : 0),  // 创作规则
       ragHitsCount: ragChunks.length,
       skippedByBudget: skipped,
       buildTimeMs,
@@ -592,6 +596,56 @@ async function fetchProtagonistPowerLevel(
   } catch (error) {
     console.warn('Failed to fetch protagonist power level:', error)
     return null
+  }
+}
+
+// ========== 创作规则查询函数 ==========
+
+/**
+ * 获取小说的创作规则
+ * 按优先级排序，格式化后返回
+ */
+async function fetchWritingRules(
+  db: any,
+  novelId: string
+): Promise<string[]> {
+  try {
+    const rules = await db
+      .select({
+        category: writingRules.category,
+        title: writingRules.title,
+        content: writingRules.content,
+        priority: writingRules.priority,
+      })
+      .from(writingRules)
+      .where(
+        and(
+          eq(writingRules.novelId, novelId),
+          eq(writingRules.isActive, 1),
+          sql`${writingRules.deletedAt} IS NULL`
+        )
+      )
+      .orderBy(writingRules.priority)
+      .limit(20)
+      .all()
+
+    if (rules.length === 0) return []
+
+    return rules.map((rule: { category: string; title: string; content: string; priority: number }) => {
+      const categoryLabel: Record<string, string> = {
+        style: '文风',
+        pacing: '节奏',
+        character: '人物',
+        plot: '情节',
+        world: '世界观',
+        taboo: '禁忌',
+        custom: '自定义',
+      }
+      return `[${categoryLabel[rule.category] || rule.category}] ${rule.title}\n${rule.content}`
+    })
+  } catch (error) {
+    console.warn('Failed to fetch writing rules:', error)
+    return []
   }
 }
 

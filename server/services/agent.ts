@@ -595,6 +595,13 @@ ${existingContent}
     )
   }
 
+  // 注入创作规则
+  if (contextBundle.mandatory.writingRules && contextBundle.mandatory.writingRules.length > 0) {
+    userContentParts.push(
+      `\n【创作规则】\n${contextBundle.mandatory.writingRules.join('\n\n')}`
+    )
+  }
+
   if (contextBundle.ragChunks.length > 0) {
     userContentParts.push('\n【相关参考资料】')
     contextBundle.ragChunks.forEach((chunk, index) => {
@@ -610,6 +617,7 @@ ${existingContent}
     '- 与前文衔接自然\n' +
     '- 角色行为符合设定（特别是境界等级的一致性）\n' +
     '- 合理处理或推进未收尾的伏笔\n' +
+    '- 严格遵循创作规则中的文风、节奏要求\n' +
     '- 文风流畅，节奏紧凑'
   )
 

@@ -31,7 +31,7 @@ interface NovelStore {
 export const useNovelStore = create<NovelStore>((set) => ({
   activeNovelId: null,
   activeChapterId: null,
-  sidebarTab: 'outline',
+  sidebarTab: 'chapters',
   setActiveNovel: (id) => set({ activeNovelId: id }),
   setActiveChapter: (id) => set({ activeChapterId: id }),
   setSidebarTab: (tab) => set({ sidebarTab: tab }),

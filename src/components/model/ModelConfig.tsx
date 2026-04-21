@@ -32,7 +32,7 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [editingConfig, setEditingConfig] = useState<ModelConfig | null>(null)
-  const [provider, setProvider] = useState('volcengine')
+  const [provider, setProvider] = useState('')
   const [stage, setStage] = useState('chapter_gen')
   const [modelId, setModelId] = useState('')
   const [apiBase, setApiBase] = useState('')
@@ -100,7 +100,7 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
   const resetForm = () => {
     setShowForm(false)
     setEditingConfig(null)
-    setProvider('volcengine')
+    setProvider('')
     setStage('chapter_gen')
     setModelId('')
     setApiBase('')
