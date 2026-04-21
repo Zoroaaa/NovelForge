@@ -116,7 +116,7 @@ export const api = {
    */
   novels: {
     /** 获取小说列表 */
-    list:   ()                    => req<Novel[]>('/api/novels'),
+    list:   ()                    => req<{ data: Novel[]; total: number; page: number; perPage: number }>('/api/novels'),
     /** 获取单个小说详情 */
     get:    (id: string)          => req<Novel>(`/api/novels/${id}`),
     /** 创建新小说 */

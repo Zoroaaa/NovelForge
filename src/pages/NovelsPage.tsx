@@ -40,10 +40,12 @@ export default function NovelsPage() {
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Novel | null>(null)
 
-  const { data: novels, isLoading } = useQuery({
+  const { data: novelsData, isLoading } = useQuery({
     queryKey: ['novels'],
     queryFn: api.novels.list,
   })
+
+  const novels = novelsData?.data
 
   const createMutation = useMutation({
     mutationFn: api.novels.create,
