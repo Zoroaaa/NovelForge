@@ -60,12 +60,14 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
     category: string
     name: string
     content: string
+    attributes: string
     importance: 'high' | 'normal' | 'low'
   }>({
     type: 'worldview',
     category: '',
     name: '',
     content: '',
+    attributes: '',
     importance: 'normal',
   })
 
@@ -77,8 +79,14 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
   const settings = settingsData?.settings || []
 
   const createMutation = useMutation({
-    mutationFn: (data: typeof formData) => 
-      api.settings.create({ ...data, novelId }),
+    mutationFn: (data: typeof formData) => {
+      const { attributes, ...rest } = data
+      return api.settings.create({
+        ...rest,
+        novelId,
+        attributes: attributes.trim() || undefined,
+      })
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] })
       toast.success('✅ 设定创建成功')
@@ -89,8 +97,13 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<NovelSetting> }) =>
-      api.settings.update(id, data as any),
+    mutationFn: ({ id, data }: { id: string; data: Partial<NovelSetting> & { attributes?: string } }) => {
+      const { attributes, ...rest } = data
+      return api.settings.update(id, {
+        ...rest,
+        attributes: attributes?.trim() || undefined,
+      } as any)
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] })
       toast.success('✅ 设定更新成功')
@@ -130,6 +143,7 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
       category: setting.category || '',
       name: setting.name,
       content: setting.content || '',
+      attributes: setting.attributes || '',
       importance: setting.importance,
     })
     setDialogOpen(true)
@@ -151,7 +165,7 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
   }
 
   const resetForm = () => {
-    setFormData({ type: 'worldview', category: '', name: '', content: '', importance: 'normal' })
+    setFormData({ type: 'worldview', category: '', name: '', content: '', attributes: '', importance: 'normal' })
     setEditingId(null)
   }
 
@@ -249,6 +263,19 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
                   onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
                   required
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  属性扩展（可选，JSON格式）
+                </Label>
+                <Textarea
+                  placeholder='如：{"levels": ["练气期", "筑基期", "金丹期"], "maxLevel": 9}'
+                  rows={2}
+                  value={formData.attributes}
+                  onChange={(e) => setFormData(prev => ({ ...prev, attributes: e.target.value }))}
+                />
+                <p className="text-[10px] text-muted-foreground">用于存储境界等级列表、技能体系等结构化数据（选填）</p>
               </div>
 
               <div className="flex justify-end gap-2">

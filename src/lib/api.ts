@@ -136,12 +136,12 @@ export const api = {
   // v2.0: 小说设定管理
   settings: {
     list:   (novelId: string, params?: { type?: string; importance?: string }) =>
-                                   req<{ settings: NovelSetting[]; total: number }>(`/api/settings/${novelId}${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+                                  req<{ settings: NovelSetting[]; total: number }>(`/api/settings/${novelId}${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
     get:    (novelId: string, id: string) => req<{ setting: NovelSetting }>(`/api/settings/${novelId}/${id}`),
-    create: (body: { novelId: string; type: string; name: string; content: string }) =>
-                                   req<NovelSetting>('/api/settings', { method: 'POST', body: j(body) }),
-    update: (id: string, body: Partial<Pick<NovelSetting, 'type' | 'category' | 'name' | 'content' | 'importance' | 'sortOrder'>>) =>
-                                   req<NovelSetting>(`/api/settings/${id}`, { method: 'PUT', body: j(body) }),
+    create: (body: { novelId: string; type: string; name: string; content: string; attributes?: string }) =>
+                                  req<NovelSetting>('/api/settings', { method: 'POST', body: j(body) }),
+    update: (id: string, body: Partial<Pick<NovelSetting, 'type' | 'category' | 'name' | 'content' | 'importance' | 'sortOrder' | 'attributes'>>) =>
+                                  req<NovelSetting>(`/api/settings/${id}`, { method: 'PUT', body: j(body) }),
     delete: (id: string)          => req(`/api/settings/${id}`, { method: 'DELETE' }),
     tree:   (novelId: string)     => req<{ tree: any[]; stats: Record<string, number>; total: number }>(`/api/settings/tree/${novelId}`),
   },

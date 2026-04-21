@@ -40,6 +40,7 @@ const CreateSchema = z.object({
   role: z.string().nullish(),
   description: z.string().nullish(),
   attributes: z.string().nullish(),
+  powerLevel: z.string().nullish(),
 })
 
 /**

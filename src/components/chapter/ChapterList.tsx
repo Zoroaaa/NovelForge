@@ -48,6 +48,7 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
   const [title, setTitle] = useState('')
   const [volumeId, setVolumeId] = useState('')
   const [expandedVolumes, setExpandedVolumes] = useState<Set<string>>(new Set(['uncategorized']))
+  const [expandedChapters, setExpandedChapters] = useState<Set<string>>(new Set())
 
   const { data: chapters, isLoading } = useQuery({
     queryKey: ['chapters', novelId],
@@ -116,57 +117,108 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
     })
   }
 
+  const toggleChapter = (chapterId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setExpandedChapters(prev => {
+      const next = new Set(prev)
+      if (next.has(chapterId)) next.delete(chapterId)
+      else next.add(chapterId)
+      return next
+    })
+  }
+
   const renderChapter = (chapter: Chapter, idx: number) => {
     const statusInfo = chapterStatusConfig[chapter.status] || chapterStatusConfig.draft
+    const isExpanded = expandedChapters.has(chapter.id)
+
     return (
       <div
         key={chapter.id}
-        className="flex items-center gap-3 py-2.5 px-3 hover:bg-muted/60 rounded-md cursor-pointer group transition-colors"
-        onClick={() => onChapterSelect?.(chapter.id)}
+        className="hover:bg-muted/60 rounded-md transition-colors"
       >
-        <span className="text-[11px] text-muted-foreground/40 w-5 text-right shrink-0 font-mono tabular-nums">
-          {String(idx + 1).padStart(2, '0')}
-        </span>
-        <div className="flex-1 min-w-0 space-y-1">
-          <p className="text-sm truncate leading-tight">{chapter.title}</p>
-          <div className="flex items-center gap-2">
-            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${statusInfo.color}`}>
-              {statusInfo.icon}
-              {statusInfo.label}
-            </span>
-            {chapter.wordCount > 0 && (
-              <span className="text-[11px] text-muted-foreground/60">
-                {chapter.wordCount.toLocaleString()} 字
+        <div
+          className="flex items-center gap-3 py-2.5 px-3 cursor-pointer group"
+          onClick={() => onChapterSelect?.(chapter.id)}
+        >
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5 shrink-0"
+            onClick={(e) => toggleChapter(chapter.id, e)}
+          >
+            {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          </Button>
+          <span className="text-[11px] text-muted-foreground/40 w-5 text-right shrink-0 font-mono tabular-nums">
+            {String(idx + 1).padStart(2, '0')}
+          </span>
+          <div className="flex-1 min-w-0 space-y-1">
+            <p className="text-sm truncate leading-tight">{chapter.title}</p>
+            <div className="flex items-center gap-2">
+              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${statusInfo.color}`}>
+                {statusInfo.icon}
+                {statusInfo.label}
               </span>
-            )}
+              {chapter.wordCount > 0 && (
+                <span className="text-[11px] text-muted-foreground/60">
+                  {chapter.wordCount.toLocaleString()} 字
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center opacity-0 group-hover:opacity-100 shrink-0 transition-opacity">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={(e) => {
+                e.stopPropagation()
+                navigate(`/novels/${novelId}/read/${chapter.id}`)
+              }}
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-destructive"
+              onClick={(e) => {
+                e.stopPropagation()
+                if (confirm('确定要删除这个章节吗？')) {
+                  deleteMutation.mutate(chapter.id)
+                }
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
           </div>
         </div>
-        <div className="flex items-center opacity-0 group-hover:opacity-100 shrink-0 transition-opacity">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={(e) => {
-              e.stopPropagation()
-              navigate(`/novels/${novelId}/read/${chapter.id}`)
-            }}
-          >
-            <BookOpen className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-destructive"
-            onClick={(e) => {
-              e.stopPropagation()
-              if (confirm('确定要删除这个章节吗？')) {
-                deleteMutation.mutate(chapter.id)
-              }
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </div>
+        {isExpanded && (
+          <div className="border-t bg-muted/30 px-3 py-2 space-y-1.5">
+            {chapter.summary && (
+              <div className="flex items-start gap-2">
+                <FileText className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground/70 line-clamp-2 leading-relaxed">
+                  摘要：{chapter.summary}
+                </p>
+              </div>
+            )}
+            {chapter.modelUsed && (
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground/60">
+                <Sparkles className="h-3 w-3" />
+                <span>生成模型：{chapter.modelUsed}</span>
+                {chapter.generationTime && (
+                  <span>· 耗时 {chapter.generationTime}ms</span>
+                )}
+              </div>
+            )}
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground/60">
+              <span>创建于 {new Date(chapter.createdAt * 1000).toLocaleDateString()}</span>
+              {chapter.summaryAt && (
+                <span>摘要更新于 {new Date(chapter.summaryAt * 1000).toLocaleDateString()}</span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -189,7 +241,7 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
           ) : (
             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           )}
-          
+
           {volume ? (
             <>
               <Library className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -201,7 +253,7 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
               <span className="text-xs text-muted-foreground truncate flex-1">未分类</span>
             </>
           )}
-          
+
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-[11px] text-muted-foreground/70 tabular-nums">
               {volumeChapters.length} 章

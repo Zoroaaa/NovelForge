@@ -36,6 +36,7 @@ const CreateSchema = z.object({
   blueprint: z.string().optional().nullable(),
   summary: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
+  status: z.string().optional(),
   targetWordCount: z.number().optional().nullable(),
 })
 
