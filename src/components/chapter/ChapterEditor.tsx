@@ -1,14 +1,15 @@
 /**
  * @file ChapterEditor.tsx
- * @description 章节编辑器组件，基于Tipoff实现富文本编辑，支持自动保存和内容注入
- * @version 1.0.0
- * @modified 2026-04-21 - 添加规范化注释
+ * @description 章节编辑器组件，基于 novel/tiptap 实现富文本编辑，支持自动保存和内容注入
+ * @version 2.0.0
+ * @modified 2026-04-22 - 重构内容注入逻辑，用 onCreate ref 替代 useEditor() 轮询，彻底解决时序问题
  */
 import { useMutation } from '@tanstack/react-query'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { EditorRoot, EditorContent, useEditor } from 'novel'
+import { useEffect, useRef, useState } from 'react'
+import { EditorRoot, EditorContent } from 'novel'
 import StarterKit from '@tiptap/starter-kit'
 import { useDebouncedCallback } from 'use-debounce'
+import type { Editor } from '@tiptap/react'
 import type { Chapter } from '@/lib/types'
 import { api } from '@/lib/api'
 import { htmlToMarkdown } from '@/lib/html-to-markdown'
@@ -29,210 +30,11 @@ interface ChapterEditorProps {
 }
 
 /**
- * 章节编辑器内部组件，用于访问useCurrentEditor钩子
- */
-function ChapterEditorInner({ chapter, injectedContent, onContentInserted, onSave }: ChapterEditorProps & { onSave: (content: string) => void }) {
-  const { editor } = useEditor()
-  const [showInsertBanner, setShowInsertBanner] = useState(false)
-  const [lastInjectedContent, setLastInjectedContent] = useState<string>('')
-  const [pendingContent, setPendingContent] = useState<string>('')
-
-  const isEditorReady = useMemo(() => !!editor, [editor])
-
-  const editorRef = useRef(editor)
-  const onContentInsertedRef = useRef(onContentInserted)
-  const onSaveRef = useRef(onSave)
-
-  editorRef.current = editor
-  onContentInsertedRef.current = onContentInserted
-  onSaveRef.current = onSave
-
-  const lastProcessedRef = useRef<string>('')
-
-  useEffect(() => {
-    console.log('[ChapterEditor] Editor state changed:', {
-      hasEditor: !!editor,
-      isReady: !!editor,
-      hasPendingContent: !!pendingContent
-    })
-  }, [editor, pendingContent])
-
-  const performInsert = useCallback((content: string) => {
-    const currentEditor = editorRef.current
-    if (!currentEditor) return false
-
-    try {
-      currentEditor.commands.insertContent(content)
-      setShowInsertBanner(true)
-      onContentInsertedRef.current?.()
-      setLastInjectedContent(content)
-      setTimeout(() => setShowInsertBanner(false), 3000)
-      toast.success('内容已注入编辑器')
-      console.log('[ChapterEditor] ✅ Content successfully inserted into editor')
-      return true
-    } catch (error) {
-      console.error('[ChapterEditor] Failed to insert content:', error)
-      toast.error('内容注入失败，请重试')
-      return false
-    }
-  }, [])
-
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  const startPollingForEditor = useCallback((content: string) => {
-    if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current)
-    }
-
-    console.log('[ChapterEditor] ⏳ Starting to poll for editor readiness...')
-
-    let attempts = 0
-    const maxAttempts = 100
-
-    pollTimerRef.current = setInterval(() => {
-      attempts++
-      const currentEditor = editorRef.current
-
-      console.log(`[ChapterEditor] Polling attempt ${attempts}/${maxAttempts}:`, {
-        hasEditor: !!currentEditor,
-        isReady: !!currentEditor
-      })
-
-      if (currentEditor && content !== lastProcessedRef.current) {
-        console.log('[ChapterEditor] ✅ Editor is ready! Inserting cached content now.')
-        clearInterval(pollTimerRef.current!)
-        pollTimerRef.current = null
-        lastProcessedRef.current = content
-        performInsert(content)
-        setPendingContent('')
-        return
-      }
-
-      if (attempts >= maxAttempts) {
-        console.warn('[ChapterEditor] ⚠️ Max polling attempts reached. Editor may not be initializing.')
-        clearInterval(pollTimerRef.current!)
-        pollTimerRef.current = null
-        toast.error('编辑器初始化超时，请刷新页面后重试')
-      }
-    }, 100)
-  }, [performInsert])
-
-  useEffect(() => {
-    return () => {
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current)
-        pollTimerRef.current = null
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    if (isEditorReady && pendingContent && pendingContent !== lastProcessedRef.current) {
-      console.log('[ChapterEditor] Auto-injecting pending content:', pendingContent.substring(0, 50) + '...')
-      lastProcessedRef.current = pendingContent
-      performInsert(pendingContent)
-      setPendingContent('')
-    }
-  }, [isEditorReady, pendingContent, performInsert])
-
-  useEffect(() => {
-    if (!injectedContent || injectedContent === lastInjectedContent) return
-
-    console.log('[ChapterEditor] Received new injectedContent:', injectedContent.substring(0, 50) + '...')
-    console.log('[ChapterEditor] isEditorReady:', isEditorReady, 'editor exists:', !!editor)
-
-    if (isEditorReady && editor) {
-      lastProcessedRef.current = injectedContent
-      performInsert(injectedContent)
-    } else {
-      setPendingContent(injectedContent)
-      toast.info('编辑器准备中，内容将在就绪后自动写入')
-      console.log('[ChapterEditor] Content cached in pendingContent, waiting for editor...')
-      startPollingForEditor(injectedContent)
-    }
-  }, [injectedContent, lastInjectedContent, isEditorReady, editor, performInsert, startPollingForEditor])
-
-  const handleInsertContent = () => {
-    if (!injectedContent) {
-      toast.error('没有可写入的生成内容')
-      return
-    }
-
-    const currentEditor = editorRef.current
-
-    if (!isEditorReady || !currentEditor) {
-      setPendingContent(injectedContent)
-      toast.info('编辑器准备中，内容将在就绪后自动写入')
-      console.log('[ChapterEditor] Manual insert: Editor not ready, caching content')
-      startPollingForEditor(injectedContent)
-      return
-    }
-
-    try {
-      console.log('[ChapterEditor] Manual insert: Editor ready, inserting now')
-
-      if (currentEditor.getText().trim()) {
-        currentEditor.commands.insertContent('\n\n' + injectedContent)
-      } else {
-        currentEditor.commands.insertContent(injectedContent)
-      }
-
-      onSaveRef.current(htmlToMarkdown(currentEditor.getHTML()))
-      setShowInsertBanner(true)
-      onContentInsertedRef.current?.()
-      setLastInjectedContent(injectedContent)
-      setTimeout(() => setShowInsertBanner(false), 3000)
-      toast.success('内容已成功写入')
-    } catch (error) {
-      console.error('[ChapterEditor] Failed to insert content:', error)
-      toast.error('内容写入失败，请重试')
-    }
-  }
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold">{chapter.title}</h1>
-        {injectedContent && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={handleInsertContent}
-          >
-            <PenLine className="h-4 w-4" />
-            写入生成内容
-          </Button>
-        )}
-      </div>
-
-      {showInsertBanner && (
-        <div className="mb-4 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg flex items-center justify-between animate-in slide-in-from-top-2">
-          <span className="text-sm text-green-700 dark:text-green-300">✓ 内容已成功写入编辑器</span>
-          <Button variant="ghost" size="sm" onClick={() => setShowInsertBanner(false)}>
-            <RotateCcw className="h-3 w-3" />
-          </Button>
-        </div>
-      )}
-
-      <EditorContent
-        extensions={[StarterKit]}
-        initialContent={chapter.content || '<p></p>' as any}
-        onUpdate={({ editor: updatedEditor }: any) => {
-          const html = updatedEditor.getHTML()
-          if (html !== '<p></p>') onSave(htmlToMarkdown(html))
-        }}
-        className="font-serif text-base leading-relaxed focus:outline-none min-h-[500px]"
-      />
-    </div>
-  )
-}
-
-/**
  * 章节编辑器组件
- * @description 基于Tipoff的富文本编辑器，支持自动保存、内容注入和撤销功能
- * @param {ChapterEditorProps} props - 组件属性
- * @returns {JSX.Element} 编辑器组件
+ * @description 基于 novel/tiptap 的富文本编辑器，支持自动保存、内容注入
+ *
+ * 核心设计：通过 EditorContent 的 onCreate 回调直接获取 editor 实例并存入 ref，
+ * 避免依赖 useEditor() hook 的异步 re-render 时序，从根本上解决内容注入竞态问题。
  */
 export function ChapterEditor({ chapter, injectedContent, onContentInserted }: ChapterEditorProps) {
   const mutation = useMutation({
@@ -243,15 +45,130 @@ export function ChapterEditor({ chapter, injectedContent, onContentInserted }: C
     mutation.mutate(content)
   }, 1500)
 
+  // 直接持有 editor 实例，通过 onCreate 赋值，不依赖 useEditor() 的 re-render 时序
+  const editorRef = useRef<Editor | null>(null)
+  // 存储在 editor ready 之前到达的内容
+  const pendingContentRef = useRef<string | null>(null)
+
+  const [showInsertBanner, setShowInsertBanner] = useState(false)
+  // 用于去重：记录最后一次成功处理的内容，避免同一内容重复注入
+  const lastInsertedRef = useRef<string>('')
+
+  const onContentInsertedRef = useRef(onContentInserted)
+  onContentInsertedRef.current = onContentInserted
+
+  /**
+   * 核心注入函数：向编辑器写入内容并触发保存
+   */
+  const doInsert = (editor: Editor, content: string) => {
+    try {
+      // 有已有内容时在末尾另起段落插入，空编辑器直接设置
+      if (editor.getText().trim()) {
+        editor.commands.insertContentAt(editor.state.doc.content.size, content)
+      } else {
+        editor.commands.setContent(content)
+      }
+      // 插入后立即触发保存
+      save(htmlToMarkdown(editor.getHTML()))
+
+      lastInsertedRef.current = content
+      setShowInsertBanner(true)
+      setTimeout(() => setShowInsertBanner(false), 3000)
+      onContentInsertedRef.current?.()
+      toast.success('内容已成功写入')
+    } catch (error) {
+      console.error('[ChapterEditor] Insert failed:', error)
+      toast.error('内容写入失败，请重试')
+    }
+  }
+
+  /**
+   * 监听 injectedContent 变化
+   * - editor 已就绪：直接注入
+   * - editor 尚未就绪：缓存到 pendingContentRef，等 onCreate 触发时处理
+   */
+  useEffect(() => {
+    if (!injectedContent || injectedContent === lastInsertedRef.current) return
+
+    const editor = editorRef.current
+    if (editor) {
+      doInsert(editor, injectedContent)
+    } else {
+      // editor 还没初始化，先缓存
+      pendingContentRef.current = injectedContent
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [injectedContent])
+
+  /**
+   * 手动点击"写入生成内容"按钮
+   */
+  const handleInsertContent = () => {
+    if (!injectedContent) {
+      toast.error('没有可写入的生成内容')
+      return
+    }
+    const editor = editorRef.current
+    if (!editor) {
+      // editor 还没好，缓存起来等 onCreate
+      pendingContentRef.current = injectedContent
+      toast.info('编辑器准备中，内容将在就绪后自动写入')
+      return
+    }
+    doInsert(editor, injectedContent)
+  }
+
   return (
     <div className="max-w-3xl mx-auto px-8 py-12">
       <EditorRoot>
-        <ChapterEditorInner
-          chapter={chapter}
-          injectedContent={injectedContent}
-          onContentInserted={onContentInserted}
-          onSave={save}
-        />
+        <div>
+          <div className="flex items-center justify-between mb-8">
+            <h1 className="text-2xl font-bold">{chapter.title}</h1>
+            {injectedContent && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={handleInsertContent}
+              >
+                <PenLine className="h-4 w-4" />
+                写入生成内容
+              </Button>
+            )}
+          </div>
+
+          {showInsertBanner && (
+            <div className="mb-4 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg flex items-center justify-between animate-in slide-in-from-top-2">
+              <span className="text-sm text-green-700 dark:text-green-300">✓ 内容已成功写入编辑器</span>
+              <Button variant="ghost" size="sm" onClick={() => setShowInsertBanner(false)}>
+                <RotateCcw className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
+
+          <EditorContent
+            extensions={[StarterKit]}
+            initialContent={chapter.content || '<p></p>' as any}
+            onCreate={({ editor: createdEditor }: { editor: Editor }) => {
+              // 编辑器实例就绪，存入 ref
+              editorRef.current = createdEditor
+              // 如果此前有待注入的内容，立即处理
+              if (pendingContentRef.current && pendingContentRef.current !== lastInsertedRef.current) {
+                const pending = pendingContentRef.current
+                pendingContentRef.current = null
+                doInsert(createdEditor, pending)
+              }
+            }}
+            onUpdate={({ editor: updatedEditor }: any) => {
+              const html = updatedEditor.getHTML()
+              if (html !== '<p></p>') save(htmlToMarkdown(html))
+            }}
+            onDestroy={() => {
+              editorRef.current = null
+            }}
+            className="font-serif text-base leading-relaxed focus:outline-none min-h-[500px]"
+          />
+        </div>
       </EditorRoot>
 
       <div className="text-xs text-muted-foreground mt-4 flex items-center gap-2">
