@@ -5,8 +5,9 @@
  * @modified 2026-04-21 - 添加规范化注释
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Search, Filter, BookOpen, Sparkles, Trash2 } from 'lucide-react'
+import { Search, Filter, BookOpen, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { NovelCard } from '@/components/novel/NovelCard'
 import { CreateNovelDialog } from '@/components/novel/CreateNovelDialog'
@@ -175,7 +176,15 @@ export default function NovelsPage() {
                 </p>
               </div>
             </div>
-            <CreateNovelDialog onCreate={handleCreate} />
+            <div className="flex items-center gap-3">
+              <CreateNovelDialog onCreate={handleCreate} />
+              <Button variant="outline" className="gap-2" asChild>
+                <Link to="/workshop">
+                  <Wand2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">AI 创作工坊</span>
+                </Link>
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -251,7 +260,15 @@ export default function NovelsPage() {
                 </div>
                 <p className="text-xl font-medium mb-2">开始你的创作之旅</p>
                 <p className="text-sm text-muted-foreground mb-6">创建第一部小说，让AI助力你的写作</p>
-                <CreateNovelDialog onCreate={handleCreate} />
+                <div className="flex items-center justify-center gap-3">
+                  <CreateNovelDialog onCreate={handleCreate} />
+                  <Button variant="outline" className="gap-2" asChild>
+                    <Link to="/workshop">
+                      <Wand2 className="h-4 w-4" />
+                      AI 创作工坊
+                    </Link>
+                  </Button>
+                </div>
               </>
             )}
           </div>

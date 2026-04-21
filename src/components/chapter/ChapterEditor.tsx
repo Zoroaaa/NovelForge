@@ -5,7 +5,7 @@
  * @modified 2026-04-21 - 添加规范化注释
  */
 import { useMutation } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { EditorRoot, EditorContent, useEditor } from 'novel'
 import StarterKit from '@tiptap/starter-kit'
 import { useDebouncedCallback } from 'use-debounce'
@@ -35,26 +35,55 @@ function ChapterEditorInner({ chapter, injectedContent, onContentInserted, onSav
   const { editor } = useEditor()
   const [showInsertBanner, setShowInsertBanner] = useState(false)
   const [lastInjectedContent, setLastInjectedContent] = useState<string>('')
+  const [pendingContent, setPendingContent] = useState<string>('')
 
-  useEffect(() => {
-    if (!injectedContent || !editor || injectedContent === lastInjectedContent) return
+  const isEditorReady = useMemo(() => !!editor, [editor])
+
+  const insertContentToEditor = (content: string) => {
+    if (!editor) return false
 
     try {
-      editor.commands.insertContent(injectedContent)
+      editor.commands.insertContent(content)
       setShowInsertBanner(true)
       onContentInserted?.()
-      setLastInjectedContent(injectedContent)
+      setLastInjectedContent(content)
       setTimeout(() => setShowInsertBanner(false), 3000)
       toast.success('内容已注入编辑器')
+      return true
     } catch (error) {
       console.error('[ChapterEditor] Failed to insert content:', error)
       toast.error('内容注入失败，请重试')
+      return false
     }
-  }, [injectedContent, editor, lastInjectedContent, onContentInserted])
+  }
+
+  useEffect(() => {
+    if (isEditorReady && pendingContent) {
+      insertContentToEditor(pendingContent)
+      setPendingContent('')
+    }
+  }, [isEditorReady, pendingContent, insertContentToEditor])
+
+  useEffect(() => {
+    if (!injectedContent || injectedContent === lastInjectedContent) return
+
+    if (isEditorReady) {
+      insertContentToEditor(injectedContent)
+    } else {
+      setPendingContent(injectedContent)
+      toast.info('编辑器准备中，内容将在就绪后自动写入')
+    }
+  }, [injectedContent, lastInjectedContent, isEditorReady, insertContentToEditor])
 
   const handleInsertContent = () => {
-    if (!injectedContent || !editor) {
-      toast.error('编辑器未就绪，无法写入')
+    if (!injectedContent) {
+      toast.error('没有可写入的生成内容')
+      return
+    }
+
+    if (!isEditorReady || !editor) {
+      setPendingContent(injectedContent)
+      toast.info('编辑器准备中，内容将在就绪后自动写入')
       return
     }
 

@@ -51,14 +51,19 @@ export function GeneratePanel({
 }: GeneratePanelProps) {
   const { output, status, generate, stop, contextInfo, toolCalls, usage } = useGenerate()
   const [showConsistencyCheck, setShowConsistencyCheck] = useState(false)
-  
+  const [isInserting, setIsInserting] = useState(false)
+
   // Phase 1.6: 生成模式状态
   const [mode, setMode] = useState<GenerationMode>('generate')
   const [selectedText, setSelectedText] = useState<string>('')  // 重写模式的选中文本
 
   const handleInsert = () => {
-    if (output) {
+    if (output && !isInserting) {
+      setIsInserting(true)
       onInsertContent(output)
+      setTimeout(() => {
+        setIsInserting(false)
+      }, 2000)
     }
   }
 
@@ -217,9 +222,19 @@ export function GeneratePanel({
             size="sm"
             className="w-full gap-2"
             onClick={handleInsert}
+            disabled={isInserting}
           >
-            <PenLine className="h-4 w-4" />
-            写入编辑器
+            {isInserting ? (
+              <>
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                写入中...
+              </>
+            ) : (
+              <>
+                <PenLine className="h-4 w-4" />
+                写入编辑器
+              </>
+            )}
           </Button>
 
           {/* 一致性检查按钮 */}
