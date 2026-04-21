@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -182,15 +183,16 @@ export function MasterOutlinePanel({ novelId }: MasterOutlinePanelProps) {
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>📜 版本历史</DialogTitle>
+                <DialogDescription>查看和管理总纲的历史版本</DialogDescription>
               </DialogHeader>
               
               <div className="space-y-2 max-h-[60vh] overflow-y-auto">
-                {(historyData || []).length === 0 ? (
+                {(historyData?.history || []).length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     暂无历史版本
                   </div>
                 ) : (
-                  (historyData || []).map((version: MasterOutline) => (
+                  (historyData?.history || []).map((version: MasterOutline) => (
                     <div key={version.id} className={`p-3 border rounded-lg ${version.id === currentOutline?.id ? 'bg-primary/5 border-primary' : ''}`}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
@@ -242,6 +244,7 @@ export function MasterOutlinePanel({ novelId }: MasterOutlinePanelProps) {
             <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{currentOutline ? `新建总纲 v${currentOutline.version + 1}` : '创建总纲'}</DialogTitle>
+                <DialogDescription>填写总纲标题和内容，创建新的版本</DialogDescription>
               </DialogHeader>
               
               <form onSubmit={handleSubmit} className="space-y-4">

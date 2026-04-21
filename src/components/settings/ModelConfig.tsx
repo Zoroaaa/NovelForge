@@ -41,11 +41,11 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
 
   const { data: configs, isLoading } = useQuery({
     queryKey: ['model-configs', novelId],
-    queryFn: () => novelId ? api.settings.list(novelId) : Promise.resolve({ settings: [], total: 0 }),
+    queryFn: () => api.modelConfigs.list(novelId ? { novelId } : undefined),
   })
 
   const createMutation = useMutation({
-    mutationFn: api.settings.create,
+    mutationFn: api.modelConfigs.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['model-configs', novelId] })
       toast.success('配置已添加')
@@ -58,7 +58,7 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: api.settings.delete,
+    mutationFn: api.modelConfigs.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['model-configs', novelId] })
       toast.success('已删除')
@@ -87,11 +87,12 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
       stage,
       provider,
       modelId,
+      scope: novelId ? 'novel' : 'global',
       apiBase: apiBase || selectedProvider?.apiBase || undefined,
       apiKeyEnv: selectedProvider?.keyEnv || 'CUSTOM_API_KEY',
       apiKey: apiKey || undefined,
       ...(novelId ? { novelId } : {}),
-    } as any)
+    })
   }
 
   const handleTest = async () => {
@@ -236,8 +237,8 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
       )}
 
       <div className="space-y-2">
-        {configs && configs.settings && configs.settings.length > 0 ? (
-          configs.settings.map((config: any) => (
+        {configs && configs.length > 0 ? (
+          configs.map((config) => (
             <Card key={config.id}>
               <CardContent className="py-3">
                 <div className="flex items-center justify-between">

@@ -18,6 +18,7 @@ const CreateSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().optional(),
   genre: z.string().optional(),
+  status: z.enum(['draft', 'writing', 'completed', 'archived']).optional(),
 })
 
 /**

@@ -10,6 +10,7 @@ import { Search, Filter, BookOpen, Sparkles } from 'lucide-react'
 import { api } from '@/lib/api'
 import { NovelCard } from '@/components/novel/NovelCard'
 import { CreateNovelDialog } from '@/components/novel/CreateNovelDialog'
+import { EditNovelDialog } from '@/components/novel/EditNovelDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -25,6 +26,8 @@ export default function NovelsPage() {
   const queryClient = useQueryClient()
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string | null>(null)
+  const [editingNovel, setEditingNovel] = useState<Novel | null>(null)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
 
   const { data: novels, isLoading } = useQuery({
     queryKey: ['novels'],
@@ -86,13 +89,15 @@ export default function NovelsPage() {
   }
 
   const handleEdit = (novel: Novel) => {
-    const newTitle = prompt('编辑标题:', novel.title)
-    if (newTitle && newTitle !== novel.title) {
-      api.novels.update(novel.id, { title: newTitle }).then(() => {
-        queryClient.invalidateQueries({ queryKey: ['novels'] })
-        toast.success('已更新')
-      }).catch((error) => toast.error(error.message))
-    }
+    setEditingNovel(novel)
+    setEditDialogOpen(true)
+  }
+
+  const handleSaveEdit = (id: string, data: { title: string; description?: string; genre?: string }) => {
+    api.novels.update(id, data).then(() => {
+      queryClient.invalidateQueries({ queryKey: ['novels'] })
+      toast.success('已更新')
+    }).catch((error) => toast.error(error.message))
   }
 
   const handleStatusChange = (id: string, newStatus: string) => {
@@ -234,6 +239,19 @@ export default function NovelsPage() {
           </div>
         )}
       </div>
+
+      {editingNovel && (
+        <EditNovelDialog
+          key={editingNovel.id}
+          novelId={editingNovel.id}
+          initialTitle={editingNovel.title}
+          initialDescription={editingNovel.description || ''}
+          initialGenre={editingNovel.genre || ''}
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          onSave={handleSaveEdit}
+        />
+      )}
     </div>
   )
 }

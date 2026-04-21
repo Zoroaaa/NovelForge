@@ -128,7 +128,7 @@ export const api = {
     update: (id: string, body: { title?: string; content?: string; summary?: string }) =>
                                    req<MasterOutline>(`/api/master-outline/${id}`, { method: 'PUT', body: j(body) }),
     /** 获取历史版本列表 */
-    history: (novelId: string)     => req<MasterOutline[]>(`/api/master-outline/${novelId}/history`),
+    history: (novelId: string)     => req<{ history: MasterOutline[] }>(`/api/master-outline/${novelId}/history`),
     /** 删除总纲版本 */
     delete: (id: string)          => req(`/api/master-outline/${id}`, { method: 'DELETE' }),
   },
@@ -207,6 +207,9 @@ export const api = {
       const searchParams = params ? '?' + new URLSearchParams(params as any).toString() : ''
       return req<ModelConfig[]>(`/api/config${searchParams}`)
     },
+    create: (body: { stage: string; provider: string; modelId: string; scope: string; apiBase?: string; apiKeyEnv?: string; apiKey?: string; novelId?: string }) =>
+                                   req<ModelConfig>('/api/config', { method: 'POST', body: j(body) }),
+    delete: (id: string)          => req<{ ok: boolean }>(`/api/config/${id}`, { method: 'DELETE' }),
   },
 
   generate: {

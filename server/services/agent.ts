@@ -174,7 +174,7 @@ export async function generateChapter(
     const messages = buildMessages(chapter.title, contextBundle, options, llmConfig.params?.systemPromptOverride)
 
     // 5. Phase 1.4: ReAct 多轮循环（真正实现）
-    await runReActLoop(
+    const usageResult = await runReActLoop(
       env,
       llmConfig,
       messages,
@@ -187,8 +187,8 @@ export async function generateChapter(
     // 6. 触发自动摘要
     if (agentConfig.enableAutoSummary) {
       await triggerAutoSummary(env, chapterId, novelId, {
-        prompt_tokens: 0,
-        completion_tokens: 0,
+        prompt_tokens: usageResult.promptTokens,
+        completion_tokens: usageResult.completionTokens,
       })
     }
 
@@ -213,7 +213,7 @@ export async function generateChapter(
     }
 
     onDone(
-      { prompt_tokens: 0, completion_tokens: 0 },
+      { prompt_tokens: usageResult.promptTokens, completion_tokens: usageResult.completionTokens },
       llmConfig.modelId
     )
   } catch (error) {
@@ -234,8 +234,10 @@ async function runReActLoop(
   onChunk: (text: string) => void,
   onToolCall: (event: ToolCallEvent) => void,
   maxIterations: number
-): Promise<void> {
+): Promise<{ promptTokens: number; completionTokens: number }> {
   let iteration = 0
+  let totalPromptTokens = 0
+  let totalCompletionTokens = 0
 
   while (iteration < maxIterations) {
     iteration++
@@ -244,14 +246,15 @@ async function runReActLoop(
     let iterationContent = ''
     let toolCallsInThisIteration: Array<any> = []
 
-    // 调用 LLM 流式生成，传入 tools 定义
     await streamGenerate(llmConfig, messages, {
       onChunk: (text) => {
         iterationContent += text
         onChunk(text)
       },
-      onDone: () => {
-        console.log(`✅ Iteration ${iteration} streaming complete`)
+      onDone: (usage) => {
+        totalPromptTokens += usage.prompt_tokens
+        totalCompletionTokens += usage.completion_tokens
+        console.log(`✅ Iteration ${iteration} streaming complete, tokens: ${usage.prompt_tokens}/${usage.completion_tokens}`)
       },
       onError: (err) => {
         throw err
@@ -334,6 +337,8 @@ async function runReActLoop(
   if (iteration >= maxIterations) {
     console.warn(`⚠️ Reached maximum iterations (${maxIterations}), stopping loop`)
   }
+
+  return { promptTokens: totalPromptTokens, completionTokens: totalCompletionTokens }
 }
 
 /**
