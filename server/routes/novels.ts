@@ -9,7 +9,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { drizzle } from 'drizzle-orm/d1'
 import { novels as t } from '../db/schema'
-import { eq, isNull, desc, sql } from 'drizzle-orm'
+import { eq, isNull, desc, and, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 
 const router = new Hono<{ Bindings: Env }>()
@@ -22,16 +22,48 @@ const CreateSchema = z.object({
 })
 
 /**
- * GET / - 获取小说列表
+ * GET / - 获取小说列表（支持分页和过滤）
  * @description 获取所有未删除的小说，按更新时间倒序排列
- * @returns {Array} 小说数组
+ * @query {number} [page=1] - 页码
+ * @query {number} [perPage=20] - 每页数量（1-100）
+ * @query {string} [status] - 状态过滤：draft | writing | completed | archived
+ * @query {string} [genre] - 类型过滤
+ * @returns {Object} { data: Array, total: number, page: number, perPage: number }
  */
-router.get('/', async (c) => {
+router.get('/', zValidator('query', z.object({
+  page: z.coerce.number().min(1).default(1),
+  perPage: z.coerce.number().min(1).max(100).default(20),
+  status: z.enum(['draft', 'writing', 'completed', 'archived']).optional(),
+  genre: z.string().optional(),
+})), async (c) => {
+  const { page, perPage, status, genre } = c.req.valid('query')
   const db = drizzle(c.env.DB)
-  const rows = await db.select().from(t)
-    .where(isNull(t.deletedAt))
+  const offset = (page - 1) * perPage
+
+  const validConditions = [
+    isNull(t.deletedAt),
+    status ? eq(t.status, status) : undefined,
+    genre ? eq(t.genre, genre) : undefined,
+  ].filter((c): c is Exclude<typeof c, undefined> => Boolean(c))
+
+  const rows = await db.select()
+    .from(t)
+    .where(and(...validConditions))
     .orderBy(desc(t.updatedAt))
-  return c.json(rows)
+    .limit(perPage)
+    .offset(offset)
+
+  const countResult = await db.select({ count: sql`count(*)` })
+    .from(t)
+    .where(isNull(t.deletedAt))
+    .get()
+
+  return c.json({
+    data: rows,
+    total: Number(countResult?.count ?? 0),
+    page,
+    perPage,
+  })
 })
 
 /**

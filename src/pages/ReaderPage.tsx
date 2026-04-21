@@ -51,9 +51,11 @@ export default function ReaderPage() {
     enabled: !!chapterId,
   })
 
-  const currentIndex = chapters?.findIndex(c => c.id === chapterId) ?? -1
-  const prevChapter = currentIndex > 0 ? chapters?.[currentIndex - 1] : null
-  const nextChapter = currentIndex < (chapters?.length ?? 0) - 1 ? chapters?.[currentIndex + 1] : null
+  const currentIndex = chapterId && chapters ? chapters.findIndex(c => c.id === chapterId) : -1
+  const isValidIndex = currentIndex >= 0 && currentIndex < (chapters?.length ?? 0)
+
+  const prevChapter = isValidIndex && currentIndex > 0 ? chapters![currentIndex - 1] : null
+  const nextChapter = isValidIndex && currentIndex < (chapters!.length - 1) ? chapters![currentIndex + 1] : null
 
   const readerClasses = `reader-${theme} min-h-screen transition-colors duration-200`
 

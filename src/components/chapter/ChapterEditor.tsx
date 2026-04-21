@@ -11,6 +11,7 @@ import StarterKit from '@tiptap/starter-kit'
 import { useDebouncedCallback } from 'use-debounce'
 import type { Chapter } from '@/lib/types'
 import { api } from '@/lib/api'
+import { htmlToMarkdown } from '@/lib/html-to-markdown'
 import { Button } from '@/components/ui/button'
 import { PenLine, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
@@ -64,7 +65,7 @@ function ChapterEditorInner({ chapter, injectedContent, onContentInserted, onSav
         editor.commands.insertContent(injectedContent)
       }
 
-      onSave(editor.getHTML())
+      onSave(htmlToMarkdown(editor.getHTML()))
       setShowInsertBanner(true)
       onContentInserted?.()
       setLastInjectedContent(injectedContent)
@@ -107,7 +108,7 @@ function ChapterEditorInner({ chapter, injectedContent, onContentInserted, onSav
         initialContent={chapter.content || '<p></p>' as any}
         onUpdate={({ editor: updatedEditor }: any) => {
           const html = updatedEditor.getHTML()
-          if (html !== '<p></p>') onSave(html)
+          if (html !== '<p></p>') onSave(htmlToMarkdown(html))
         }}
         className="font-serif text-base leading-relaxed focus:outline-none min-h-[500px]"
       />

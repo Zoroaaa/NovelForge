@@ -9,7 +9,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { drizzle } from 'drizzle-orm/d1'
 import { foreshadowing } from '../db/schema'
-import { eq, and, desc } from 'drizzle-orm'
+import { eq, and, desc, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 
 const router = new Hono<{ Bindings: Env }>()
@@ -46,16 +46,19 @@ router.get('/:novelId', zValidator('query', z.object({
   const { status, limit } = c.req.valid('query')
   const db = drizzle(c.env.DB)
 
-  let query = db
-    .select()
-    .from(foreshadowing)
-    .where(eq(foreshadowing.novelId, novelId))
+  const conditions = [
+    eq(foreshadowing.novelId, novelId),
+    sql`${foreshadowing.deletedAt} IS NULL`
+  ]
 
   if (status) {
-    query = (query as any).where(and(eq(foreshadowing.novelId, novelId), eq(foreshadowing.status, status)))
+    conditions.push(eq(foreshadowing.status, status))
   }
 
-  const list = await query
+  const list = await db
+    .select()
+    .from(foreshadowing)
+    .where(and(...conditions))
     .orderBy(desc(foreshadowing.createdAt))
     .limit(limit)
     .all()
@@ -117,11 +120,14 @@ router.put('/:id', zValidator('json', UpdateForeshadowingSchema), async (c) => {
       return c.json({ error: '伏笔不存在' }, 404)
     }
 
-    const updateData: any = {}
+    const updateData: Record<string, unknown> = {}
     if (body.title !== undefined) updateData.title = body.title
     if (body.description !== undefined) updateData.description = body.description
     if (body.importance !== undefined) updateData.importance = body.importance
     if (body.status !== undefined) {
+      if (body.status === 'resolved' && !body.resolvedChapterId) {
+        return c.json({ error: '解决伏笔时必须提供收尾章节ID' }, 400)
+      }
       updateData.status = body.status
       if (body.status === 'resolved' && body.resolvedChapterId) {
         updateData.resolvedChapterId = body.resolvedChapterId

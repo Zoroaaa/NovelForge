@@ -33,7 +33,7 @@ import type { Novel } from '@/lib/types'
 interface NovelCardProps {
   novel: Novel
   onEdit: (novel: Novel) => void
-  onDelete: (id: string) => void
+  onDelete: (novel: Novel) => void
   onStatusChange?: (id: string, status: string) => void
 }
 
@@ -262,7 +262,7 @@ export function NovelCard({ novel, onEdit, onDelete, onStatusChange }: NovelCard
             </>
           )}
           <div className="h-px bg-border my-1" />
-          <DropdownMenuItem onClick={() => onDelete(novel.id)} className="text-destructive">
+          <DropdownMenuItem onClick={() => onDelete(novel)} className="text-destructive">
             <Trash2 className="mr-2 h-4 w-4" />
             删除
           </DropdownMenuItem>

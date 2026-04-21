@@ -18,7 +18,7 @@ const router = new Hono<{ Bindings: Env }>()
 
 const ExportSchema = z.object({
   novelId: z.string().min(1),
-  format: z.enum(['md', 'txt', 'epub', 'pdf', 'zip']),
+  format: z.enum(['md', 'txt', 'epub', 'html', 'zip']),
   volumeIds: z.array(z.string()).optional(),
   includeTOC: z.boolean().optional(),
   includeMeta: z.boolean().optional(),
@@ -122,10 +122,10 @@ router.get('/formats', (c) => {
         mimeType: 'application/epub+zip',
       },
       {
-        id: 'pdf',
-        name: 'PDF 文档',
-        description: 'PDF 格式，适合打印和分享（生成可打印HTML）',
-        extension: '.pdf',
+        id: 'html',
+        name: '可打印 HTML',
+        description: 'HTML 格式，适合浏览器打印，支持样式和排版',
+        extension: '.html',
         mimeType: 'text/html',
       },
       {

@@ -9,7 +9,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { drizzle } from 'drizzle-orm/d1'
 import { modelConfigs as t } from '../db/schema'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 
 const router = new Hono<{ Bindings: Env }>()
@@ -101,7 +101,7 @@ router.post('/', zValidator('json', CreateSchema), async (c) => {
 router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
   const db = drizzle(c.env.DB)
   const [row] = await db.update(t)
-    .set(c.req.valid('json'))
+    .set({ ...c.req.valid('json'), updatedAt: sql`(unixepoch())` })
     .where(eq(t.id, c.req.param('id')))
     .returning()
   return c.json(row)

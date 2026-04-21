@@ -12,4 +12,5 @@ export type Env = {
   VOLCENGINE_API_KEY: string
   ANTHROPIC_API_KEY: string
   OPENAI_API_KEY: string
+  API_KEY?: string
 }

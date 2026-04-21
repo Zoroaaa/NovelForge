@@ -127,7 +127,7 @@ router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
 router.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB)
   await db.update(t)
-    .set({ deletedAt: new Date().getTime() })
+    .set({ deletedAt: Math.floor(Date.now() / 1000) })
     .where(eq(t.id, c.req.param('id')))
   return c.json({ ok: true })
 })

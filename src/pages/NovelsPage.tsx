@@ -6,7 +6,7 @@
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Search, Filter, BookOpen, Sparkles } from 'lucide-react'
+import { Search, Filter, BookOpen, Sparkles, Trash2 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { NovelCard } from '@/components/novel/NovelCard'
 import { CreateNovelDialog } from '@/components/novel/CreateNovelDialog'
@@ -14,6 +14,16 @@ import { EditNovelDialog } from '@/components/novel/EditNovelDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import type { Novel, NovelInput } from '@/lib/types'
 import { useState, useMemo } from 'react'
 
@@ -28,6 +38,7 @@ export default function NovelsPage() {
   const [statusFilter, setStatusFilter] = useState<string | null>(null)
   const [editingNovel, setEditingNovel] = useState<Novel | null>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Novel | null>(null)
 
   const { data: novels, isLoading } = useQuery({
     queryKey: ['novels'],
@@ -82,9 +93,14 @@ export default function NovelsPage() {
     createMutation.mutate(data)
   }
 
-  const handleDelete = (id: string) => {
-    if (confirm('确定要删除这个小说吗？')) {
-      deleteMutation.mutate(id)
+  const handleDelete = (novel: Novel) => {
+    setDeleteTarget(novel)
+  }
+
+  const confirmDelete = () => {
+    if (deleteTarget) {
+      deleteMutation.mutate(deleteTarget.id)
+      setDeleteTarget(null)
     }
   }
 
@@ -252,6 +268,29 @@ export default function NovelsPage() {
           onSave={handleSaveEdit}
         />
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open: boolean) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-destructive" />
+              确认删除
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除小说《{deleteTarget?.title}》吗？此操作可以撤销，删除后数据将进入回收站。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

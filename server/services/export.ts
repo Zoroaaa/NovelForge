@@ -10,7 +10,7 @@ import { eq, and, isNull, asc } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 
 export interface ExportOptions {
-  format: 'md' | 'txt' | 'epub' | 'pdf' | 'zip'
+  format: 'md' | 'txt' | 'epub' | 'html' | 'zip'
   novelId: string
   volumeIds?: string[]  // 按卷范围导出（可选）
   includeTOC?: boolean  // 是否包含目录
@@ -236,7 +236,7 @@ export async function exportAsEpub(env: Env, options: ExportOptions): Promise<Bl
  * 注意：此实现生成可打印的 HTML，实际 PDF 转换需要浏览器渲染
  * 生产环境建议使用 Cloudflare Browser Rendering API
  */
-export async function exportAsPdf(env: Env, options: ExportOptions): Promise<Blob> {
+export async function exportAsHtml(env: Env, options: ExportOptions): Promise<Blob> {
   const db = drizzle(env.DB)
   const data = await loadNovelData(db, options)
 
@@ -412,8 +412,8 @@ export async function exportAsZip(env: Env, options: ExportOptions): Promise<Blo
     }
 
     try {
-      const pdfBlob = await exportAsPdf(env, options)
-      zip.file(`${title}-print.html`, await pdfBlob.text())
+      const htmlBlob = await exportAsHtml(env, options)
+      zip.file(`${title}-print.html`, await htmlBlob.text())
     } catch (e) {
       console.warn('Failed to add PDF/HTML to zip:', e)
     }
@@ -553,8 +553,8 @@ export async function performExport(
     case 'epub':
       blob = await exportAsEpub(env, options)
       break
-    case 'pdf':
-      blob = await exportAsPdf(env, options)
+    case 'html':
+      blob = await exportAsHtml(env, options)
       break
     case 'zip':
       blob = await exportAsZip(env, options)
@@ -575,7 +575,7 @@ function getContentType(format: string): string {
       return 'text/plain; charset=utf-8'
     case 'epub':
       return 'application/epub+zip'
-    case 'pdf':
+    case 'html':
       return 'text/html; charset=utf-8'
     case 'zip':
       return 'application/zip'
@@ -586,6 +586,6 @@ function getContentType(format: string): string {
 
 function getFileExtension(format: string): string {
   if (format === 'epub') return 'epub'
-  if (format === 'pdf') return 'html'
+  if (format === 'html') return 'html'
   return format
 }

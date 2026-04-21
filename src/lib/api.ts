@@ -4,31 +4,44 @@
  * @version 1.0.0
  * @modified 2026-04-21 - 添加规范化注释
  */
-import type { 
-  Novel, Volume, Chapter, Character, SortItem, 
-  NovelInput, ChapterInput, VolumeInput, ModelConfig, GenerateOptions,
+import type {
+  Novel, Volume, Chapter, Character, SortItem,
+  NovelInput, ChapterInput, VolumeInput, CharacterInput, ModelConfig, GenerateOptions,
   MasterOutline, WritingRule, NovelSetting, ForeshadowingItem
 } from './types'
 
 /**
  * 通用请求函数
- * @description 封装fetch请求，统一处理响应和错误
+ * @description 封装fetch请求，统一处理响应和错误，支持超时控制和请求取消
  * @template T - 响应数据类型
  * @param {string} path - API路径
- * @param {RequestInit} [init] - fetch初始化选项
+ * @param {RequestInit & { timeout?: number; signal?: AbortSignal }} [init] - fetch初始化选项，支持自定义超时时间和取消信号
  * @returns {Promise<T>} 响应数据
- * @throws {Error} 请求失败时抛出错误
+ * @throws {Error} 请求失败或超时时抛出错误
  */
-async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...init,
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error((err as any).error ?? res.statusText)
+async function req<T>(
+  path: string,
+  init?: RequestInit & { timeout?: number; signal?: AbortSignal }
+): Promise<T> {
+  const controller = new AbortController()
+  const timeout = init?.timeout ?? 30000
+
+  const timer = setTimeout(() => controller.abort(), timeout)
+
+  try {
+    const res = await fetch(path, {
+      headers: { 'Content-Type': 'application/json' },
+      signal: init?.signal || controller.signal,
+      ...init,
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }))
+      throw new Error((err as any).error ?? res.statusText)
+    }
+    return res.json()
+  } finally {
+    clearTimeout(timer)
   }
-  return res.json()
 }
 
 const j = (body: unknown) => JSON.stringify(body)
@@ -178,8 +191,9 @@ export const api = {
 
   characters: {
     list:   (novelId: string)     => req<Character[]>(`/api/characters?novelId=${novelId}`),
-    create: (body: any)           => req<Character>('/api/characters', { method: 'POST', body: j(body) }),
-    update: (id: string, body: any) => req<Character>(`/api/characters/${id}`, { method: 'PATCH', body: j(body) }),
+    create: (body: CharacterInput) => req<Character>('/api/characters', { method: 'POST', body: j(body) }),
+    update: (id: string, body: Partial<CharacterInput>) =>
+                                   req<Character>(`/api/characters/${id}`, { method: 'PATCH', body: j(body) }),
     delete: (id: string)          => req(`/api/characters/${id}`, { method: 'DELETE' }),
   },
 

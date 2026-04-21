@@ -205,7 +205,7 @@ router.delete('/:id', async (c) => {
 
   await db
     .update(t)
-    .set({ deletedAt: new Date().getTime() })
+    .set({ deletedAt: Math.floor(Date.now() / 1000) })
     .where(eq(t.id, id))
 
   return c.json({ ok: true })

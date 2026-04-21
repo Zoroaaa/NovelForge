@@ -48,21 +48,21 @@ router.get('/:novelId', zValidator('query', z.object({
   const { category, activeOnly } = c.req.valid('query')
   const db = drizzle(c.env.DB)
 
-  let query = db.select()
-    .from(writingRules)
-    .where(and(
-      eq(writingRules.novelId, novelId),
-      sql`${writingRules.deletedAt} IS NULL`
-    ))
+  const conditions = [
+    eq(writingRules.novelId, novelId),
+    sql`${writingRules.deletedAt} IS NULL`
+  ]
 
   if (category) {
-    query = (query as any).where(eq(writingRules.category, category))
+    conditions.push(eq(writingRules.category, category))
   }
   if (activeOnly) {
-    query = (query as any).where(eq(writingRules.isActive, 1))
+    conditions.push(eq(writingRules.isActive, 1))
   }
 
-  const rules = await query
+  const rules = await db.select()
+    .from(writingRules)
+    .where(and(...conditions))
     .orderBy(writingRules.priority, writingRules.sortOrder)
     .all()
 

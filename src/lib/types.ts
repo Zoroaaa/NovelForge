@@ -123,7 +123,7 @@ export interface ExportRecord {
 export interface VectorIndexRecord {
   id: string
   novelId: string
-  sourceType: 'outline' | 'chapter' | 'summary' | 'character'
+  sourceType: 'outline' | 'chapter' | 'summary' | 'character' | 'setting'
   sourceId: string
   chunkIndex: number
   contentHash: string | null
@@ -200,7 +200,7 @@ export interface ContextBundle {
 }
 
 // Export types
-export type ExportFormat = 'md' | 'txt' | 'epub' | 'pdf' | 'zip'
+export type ExportFormat = 'md' | 'txt' | 'epub' | 'html' | 'zip'
 
 export interface ExportOptions {
   novelId: string
@@ -322,6 +322,7 @@ export interface EntityIndexNode {
   meta: string | null          // JSON: 元数据
   createdAt: number
   updatedAt: number
+  deletedAt: number | null
 }
 
 /**

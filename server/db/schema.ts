@@ -1,14 +1,18 @@
 /**
  * @file schema.ts
- * @description 数据库Schema定义文件，使用Drizzle ORM定义所有数据表结构
- * @version 2.0.0
- * @modified 2026-04-21 - 添加规范化注释
+ * @description 数据库Schema定义文件，使用Drizzle ORM定义所有数据表结构和索引
+ * @version 2.1.0
+ * @modified 2026-04-21 - P0修复：统一ID策略、补全索引、软删除一致性
  */
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core'
 import { sql } from 'drizzle-orm'
 
 const id = () =>
-  text('id').primaryKey().$defaultFn(() => crypto.randomUUID().slice(0, 16))
+  text('id').primaryKey().$defaultFn(() =>
+    Array.from(crypto.getRandomValues(new Uint8Array(8)))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('')
+  )
 const timestamps = {
   createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
   updatedAt: integer('updated_at').notNull().default(sql`(unixepoch())`),
@@ -28,11 +32,13 @@ export const novels = sqliteTable('novels', {
   chapterCount: integer('chapter_count').notNull().default(0),
   ...timestamps,
   deletedAt: integer('deleted_at'),
-})
+}, (table) => [
+  index('idx_novels_status').on(table.status).where(sql`${table.deletedAt} IS NULL`),
+  index('idx_novels_updated').on(sql`${table.updatedAt} DESC`).where(sql`${table.deletedAt} IS NULL`),
+])
 
 // ============================================================
 // 2. 总纲表（替代原 outlines 多层结构）
-// 用途：记录小说的整体总纲，不再有 world/volume/chapter 的层级
 // ============================================================
 export const masterOutline = sqliteTable('master_outline', {
   id: id(),
@@ -46,37 +52,40 @@ export const masterOutline = sqliteTable('master_outline', {
   indexedAt: integer('indexed_at'),
   ...timestamps,
   deletedAt: integer('deleted_at'),
-})
+}, (table) => [
+  index('idx_master_outline_novel').on(table.novelId).where(sql`${table.deletedAt} IS NULL`),
+])
 
 // ============================================================
 // 3. 创作规则表（最高准则）
-// 用途：规范小说创作的最高准则，包括文风、节奏、禁忌等
 // ============================================================
 export const writingRules = sqliteTable('writing_rules', {
   id: id(),
   novelId: text('novel_id').notNull(),
-  category: text('category').notNull(),     // style | pacing | character | plot | world | taboo | custom
+  category: text('category').notNull(),
   title: text('title').notNull(),
   content: text('content').notNull(),
-  priority: integer('priority').notNull().default(3),  // 1=最高 5=最低
+  priority: integer('priority').notNull().default(3),
   isActive: integer('is_active').notNull().default(1),
   sortOrder: integer('sort_order').notNull().default(0),
   ...timestamps,
   deletedAt: integer('deleted_at'),
-})
+}, (table) => [
+  index('idx_writing_rules_novel').on(table.novelId, table.category).where(sql`${table.deletedAt} IS NULL`),
+  index('idx_writing_rules_priority').on(table.priority).where(sql`${table.isActive} = 1`),
+])
 
 // ============================================================
 // 4. 小说设定表（统一管理所有世界设定）
-// 包含：世界观、境界体系、势力组织、地理、宝物功法杂录等
 // ============================================================
 export const novelSettings = sqliteTable('novel_settings', {
   id: id(),
   novelId: text('novel_id').notNull(),
-  type: text('type').notNull(),             // worldview | power_system | faction | geography | item_skill | misc
-  category: text('category'),              // 子分类
+  type: text('type').notNull(),
+  category: text('category'),
   name: text('name').notNull(),
   content: text('content').notNull(),
-  attributes: text('attributes'),           // JSON
+  attributes: text('attributes'),
   parentId: text('parent_id'),
   importance: text('importance').notNull().default('normal'),
   relatedIds: text('related_ids'),
@@ -85,11 +94,14 @@ export const novelSettings = sqliteTable('novel_settings', {
   sortOrder: integer('sort_order').notNull().default(0),
   ...timestamps,
   deletedAt: integer('deleted_at'),
-})
+}, (table) => [
+  index('idx_novel_settings_novel').on(table.novelId, table.type).where(sql`${table.deletedAt} IS NULL`),
+  index('idx_novel_settings_type').on(table.type, table.category),
+  index('idx_novel_settings_parent').on(table.parentId),
+])
 
 // ============================================================
 // 5. 卷表（增强版）
-// 支持记载卷大纲、卷蓝图、卷概要等丰富信息
 // ============================================================
 export const volumes = sqliteTable('volumes', {
   id: id(),
@@ -97,19 +109,21 @@ export const volumes = sqliteTable('volumes', {
   title: text('title').notNull(),
   sortOrder: integer('sort_order').notNull().default(0),
   
-  outline: text('outline'),                // 卷大纲 (Markdown)
-  blueprint: text('blueprint'),            // 卷蓝图 (JSON)
-  summary: text('summary'),               // 卷概要/摘要
+  outline: text('outline'),
+  blueprint: text('blueprint'),
+  summary: text('summary'),
   status: text('status').notNull().default('draft'),
   
   wordCount: integer('word_count').notNull().default(0),
   chapterCount: integer('chapter_count').notNull().default(0),
   targetWordCount: integer('target_word_count'),
-  notes: text('notes'),                   // 作者笔记
+  notes: text('notes'),
   
   ...timestamps,
   deletedAt: integer('deleted_at'),
-})
+}, (table) => [
+  index('idx_volumes_novel').on(table.novelId).where(sql`${table.deletedAt} IS NULL`),
+])
 
 // ============================================================
 // 6. 章节表
@@ -135,7 +149,11 @@ export const chapters = sqliteTable('chapters', {
   snapshotKeys: text('snapshot_keys'),
   ...timestamps,
   deletedAt: integer('deleted_at'),
-})
+}, (table) => [
+  index('idx_chapters_novel').on(table.novelId, table.sortOrder).where(sql`${table.deletedAt} IS NULL`),
+  index('idx_chapters_volume').on(table.volumeId, table.sortOrder).where(sql`${table.deletedAt} IS NULL`),
+  index('idx_chapters_status').on(table.novelId, table.status).where(sql`${table.deletedAt} IS NULL`),
+])
 
 // ============================================================
 // 7. 角色表
@@ -149,11 +167,14 @@ export const characters = sqliteTable('characters', {
   description: text('description'),
   imageR2Key: text('image_r2_key'),
   attributes: text('attributes'),
-  powerLevel: text('power_level'),          // JSON 格式存储境界信息
+  powerLevel: text('power_level'),
   vectorId: text('vector_id'),
   ...timestamps,
   deletedAt: integer('deleted_at'),
-})
+}, (table) => [
+  index('idx_characters_novel').on(table.novelId).where(sql`${table.deletedAt} IS NULL`),
+  index('idx_characters_role').on(table.novelId, table.role).where(sql`${table.deletedAt} IS NULL`),
+])
 
 // ============================================================
 // 8. 伏笔追踪表
@@ -169,7 +190,11 @@ export const foreshadowing = sqliteTable('foreshadowing', {
   importance: text('importance').notNull().default('normal'),
   ...timestamps,
   deletedAt: integer('deleted_at'),
-})
+}, (table) => [
+  index('idx_foreshadowing_novel').on(table.novelId, table.status).where(sql`${table.deletedAt} IS NULL`),
+  index('idx_foreshadowing_chapter').on(table.chapterId),
+  index('idx_foreshadowing_importance').on(table.importance).where(sql`${table.status} = 'open'`),
+])
 
 // ============================================================
 // 9. 模型配置表
@@ -187,7 +212,9 @@ export const modelConfigs = sqliteTable('model_configs', {
   params: text('params'),
   isActive: integer('is_active').notNull().default(1),
   ...timestamps,
-})
+}, (table) => [
+  index('idx_model_configs_lookup').on(table.scope, table.stage, table.novelId),
+])
 
 // ============================================================
 // 10. 生成任务日志
@@ -205,7 +232,10 @@ export const generationLogs = sqliteTable('generation_logs', {
   status: text('status').notNull().default('success'),
   errorMsg: text('error_msg'),
   createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
-})
+}, (table) => [
+  index('idx_gen_logs_chapter').on(table.chapterId),
+  index('idx_gen_logs_novel').on(table.novelId, sql`${table.createdAt} DESC`),
+])
 
 // ============================================================
 // 11. 导出记录
@@ -222,7 +252,9 @@ export const exports = sqliteTable('exports', {
   errorMsg: text('error_msg'),
   createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
   expiresAt: integer('expires_at'),
-})
+}, (table) => [
+  index('idx_exports_novel').on(table.novelId, sql`${table.createdAt} DESC`),
+])
 
 // ============================================================
 // 12. 向量索引追踪
@@ -235,14 +267,17 @@ export const vectorIndex = sqliteTable('vector_index', {
   chunkIndex: integer('chunk_index').notNull().default(0),
   contentHash: text('content_hash'),
   createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
-})
+}, (table) => [
+  index('idx_vector_source').on(table.sourceType, table.sourceId, table.chunkIndex),
+  index('idx_vector_novel').on(table.novelId),
+])
 
 // ============================================================
 // 13. 总索引表（串联所有实体形成树形结构）
 // ============================================================
 export const entityIndex = sqliteTable('entity_index', {
   id: id(),
-  entityType: text('entity_type').notNull(),   // novel | volume | chapter | character | setting | rule | foreshadowing
+  entityType: text('entity_type').notNull(),
   entityId: text('entity_id').notNull(),
   novelId: text('novel_id').notNull(),
   parentId: text('parent_id'),
@@ -251,18 +286,28 @@ export const entityIndex = sqliteTable('entity_index', {
   depth: integer('depth').notNull().default(0),
   meta: text('meta'),
   ...timestamps,
-})
+  deletedAt: integer('deleted_at'),
+}, (table) => [
+  index('idx_entity_lookup').on(table.entityType, table.entityId),
+  index('idx_entity_novel').on(table.novelId).where(sql`${table.deletedAt} IS NULL`),
+  index('idx_entity_parent').on(table.parentId),
+  index('idx_entity_depth').on(table.novelId, table.depth),
+])
 
 // ============================================================
 // 14. 创作工坊会话表（Phase 3 - 对话式创作引擎）
-// 用途：记录用户与 AI 的多轮对话，提取结构化小说数据
 // ============================================================
 export const workshopSessions = sqliteTable('workshop_sessions', {
   id: id(),
-  novelId: text('novel_id'),                    // 关联的小说ID（可选，创建时可为空）
-  stage: text('stage').notNull(),               // 当前阶段：concept | worldbuild | characters | volumes | chapters
-  messages: text('messages').notNull(),          // JSON 对话历史 [{role, content, timestamp}]
-  extractedData: text('extracted_data'),        // JSON 当前提取的结构化数据 {title, genre, outline, characters, ...}
-  status: text('status').notNull().default('active'), // active | committed | abandoned
+  novelId: text('novel_id'),
+  stage: text('stage').notNull(),
+  messages: text('messages').notNull().default('[]'),
+  extractedData: text('extracted_data').notNull().default('{}'),
+  status: text('status').notNull().default('active'),
   ...timestamps,
-})
+  deletedAt: integer('deleted_at'),
+}, (table) => [
+  index('idx_workshop_status').on(table.status),
+  index('idx_workshop_novel').on(table.novelId),
+  index('idx_workshop_stage').on(table.stage),
+])

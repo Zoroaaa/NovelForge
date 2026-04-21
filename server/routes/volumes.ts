@@ -9,7 +9,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { drizzle } from 'drizzle-orm/d1'
 import { volumes as t } from '../db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, and, isNull } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 
 /**
@@ -52,7 +52,7 @@ router.get('/', async (c) => {
   if (!novelId) return c.json({ error: 'novelId required' }, 400)
   const db = drizzle(c.env.DB)
   const rows = await db.select().from(t)
-    .where(eq(t.novelId, novelId))
+    .where(and(eq(t.novelId, novelId), isNull(t.deletedAt)))
     .orderBy(t.sortOrder)
   return c.json(rows)
 })
@@ -105,7 +105,9 @@ router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
  */
 router.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB)
-  await db.delete(t).where(eq(t.id, c.req.param('id')))
+  await db.update(t)
+    .set({ deletedAt: Math.floor(Date.now() / 1000) })
+    .where(eq(t.id, c.req.param('id')))
   return c.json({ ok: true })
 })
 
