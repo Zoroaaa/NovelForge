@@ -1,3 +1,9 @@
+/**
+ * @file providers.ts
+ * @description AI模型提供商配置文件，定义支持的LLM提供商和模型列表
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 export const PROVIDERS = [
   {
     id: 'volcengine',

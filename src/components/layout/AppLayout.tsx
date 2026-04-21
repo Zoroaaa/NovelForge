@@ -1,3 +1,9 @@
+/**
+ * @file AppLayout.tsx
+ * @description 应用布局组件，提供三栏式响应式布局（左侧栏、中间内容、右侧面板）
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { useState, useEffect } from 'react'
 import { PanelRightClose, PanelRightOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'

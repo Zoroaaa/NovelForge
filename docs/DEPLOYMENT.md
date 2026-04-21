@@ -661,7 +661,10 @@ pnpm update
 # 3. 运行新迁移
 wrangler d1 migrations apply novelforge --remote
 
-# 4. 重新部署
+# 4. 创建 Vectorize 索引（如果尚未创建）
+wrangler vectorize create novelforge-index --dimensions=768 --metric=cosine
+
+# 5. 重新部署
 pnpm build
 wrangler pages deploy dist
 ```
@@ -670,8 +673,16 @@ wrangler pages deploy dist
 
 | 版本 | Node.js | Wrangler | Drizzle |
 |------|---------|----------|---------|
+| v1.4+ | >= 18 | >= 3.0 | >= 0.45 |
+| v1.3+ | >= 18 | >= 3.0 | >= 0.40 |
 | v1.0+ | >= 18 | >= 3.0 | >= 0.30 |
-| v2.0+ | >= 20 | >= 3.6 | >= 0.31 |
+
+### 重要变更说明 (v1.4.0)
+
+- 数据库 Schema 重构为扁平化结构
+- 原 `outlines` 表被 `master_outline` 和 `novel_settings` 替代
+- 新增 `foreshadowing`、`writing_rules`、`vector_index`、`entity_index` 等表
+- 需要 Vectorize 索引支持
 
 ---
 
@@ -698,6 +709,10 @@ bucket_name = "novelforge-storage"
 [ai]
 binding = "AI"
 
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "novelforge-index"
+
 # .env (前端)
 VITE_APP_NAME=NovelForge
 ```
@@ -716,6 +731,10 @@ pnpm build                        # 生产构建
 wrangler d1 migrations apply novelforge --local
 wrangler d1 migrations apply novelforge --remote
 
+# Vectorize
+wrangler vectorize create novelforge-index --dimensions=768 --metric=cosine
+wrangler vectorize list
+
 # 部署
 wrangler pages deploy dist
 
@@ -730,6 +749,7 @@ wrangler secret list              # 查看 Secrets
 - [Hono Docs](https://hono.dev/)
 - [Drizzle Docs](https://orm.drizzle.team/)
 - [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/commands/)
+- [Vectorize Docs](https://developers.cloudflare.com/vectorize/)
 
 ---
 

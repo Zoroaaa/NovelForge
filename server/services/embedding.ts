@@ -1,14 +1,13 @@
 /**
- * NovelForge · Embedding 向量化服务
- *
- * 使用 Cloudflare Workers AI (@cf/baai/bge-base-zh-v1.5) 进行中文文本嵌入
- * 支持 Vectorize 索引的增删改查
+ * @file embedding.ts
+ * @description 向量化服务模块，使用Cloudflare Workers AI进行中文文本嵌入，支持Vectorize索引管理
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { drizzle } from 'drizzle-orm/d1'
 import { eq, and } from 'drizzle-orm'
 import type { Env } from '../lib/types'
-import { vectorIndex } from '../db/schema'
+import { vectorIndex, masterOutline, chapters } from '../db/schema'
 
 export interface VectorMetadata {
   novelId: string
@@ -29,6 +28,10 @@ const DIMENSIONS = 768
 
 /**
  * 对单个文本进行向量化
+ * @param {Env['AI']} ai - Cloudflare AI绑定对象
+ * @param {string} text - 要向量化的文本
+ * @returns {Promise<number[]>} 向量数组
+ * @throws {Error} 文本为空或API返回无效响应
  */
 export async function embedText(
   ai: Env['AI'],
@@ -52,6 +55,10 @@ export async function embedText(
 
 /**
  * 批量向量化（用于长文档分块）
+ * @param {Env['AI']} ai - Cloudflare AI绑定对象
+ * @param {string[]} chunks - 文本块数组
+ * @param {number} [concurrency=5] - 并发数量
+ * @returns {Promise<number[][]>} 向量数组
  */
 export async function embedBatch(
   ai: Env['AI'],
@@ -71,7 +78,12 @@ export async function embedBatch(
 }
 
 /**
- * 将向量插入到 Vectorize 索引
+ * 将向量插入到Vectorize索引
+ * @param {any} vectorize - Vectorize绑定对象
+ * @param {string} id - 向量ID
+ * @param {number[]} values - 向量值数组
+ * @param {VectorMetadata} metadata - 元数据对象
+ * @returns {Promise<void>}
  */
 export async function upsertVector(
   vectorize: any,
@@ -107,6 +119,12 @@ export async function deleteVector(
 
 /**
  * 语义相似度搜索
+ * @param {any} vectorize - Vectorize绑定对象
+ * @param {number[]} queryVector - 查询向量
+ * @param {Object} [options] - 搜索选项
+ * @param {number} [options.topK=10] - 返回结果数量
+ * @param {Partial<VectorMetadata>} [options.filter] - 元数据过滤条件
+ * @returns {Promise<Array<{id: string, score: number, metadata: VectorMetadata}>>} 搜索结果
  */
 export async function searchSimilar(
   vectorize: any,
@@ -192,6 +210,13 @@ function hashContent(content: string): string {
 
 /**
  * 为大纲/章节等内容生成向量并索引
+ * @param {Env} env - 环境变量对象
+ * @param {VectorMetadata['sourceType']} sourceType - 内容类型
+ * @param {string} sourceId - 内容ID
+ * @param {string} novelId - 小说ID
+ * @param {string} title - 内容标题
+ * @param {string | null} content - 内容文本
+ * @returns {Promise<string[]>} 创建的向量ID数组
  */
 export async function indexContent(
   env: Env,
@@ -304,4 +329,30 @@ export async function deindexContent(
   }
 
   await db.delete(vectorIndex).where(eq(vectorIndex.sourceId, sourceId))
+}
+
+export async function fetchContentForIndexing(
+  env: Env,
+  sourceType: 'outline' | 'chapter',
+  sourceId: string
+): Promise<{ content: string | null; title: string }> {
+  const db = drizzle(env.DB)
+
+  if (sourceType === 'outline') {
+    const row = await db
+      .select({ content: masterOutline.content, title: masterOutline.title })
+      .from(masterOutline)
+      .where(eq(masterOutline.id, sourceId))
+      .get()
+    return { content: row?.content || null, title: row?.title || '' }
+  } else if (sourceType === 'chapter') {
+    const row = await db
+      .select({ content: chapters.content, title: chapters.title })
+      .from(chapters)
+      .where(eq(chapters.id, sourceId))
+      .get()
+    return { content: row?.content || null, title: row?.title || '' }
+  }
+
+  return { content: null, title: '' }
 }

@@ -10,13 +10,19 @@
 - [认证方式](#认证方式)
 - [通用响应格式](#通用响应格式)
 - [小说管理 (Novels)](#小说管理-novels)
-- [大纲管理 (Outlines)](#大纲管理-outlines)
+- [总纲管理 (Master Outline)](#总纲管理-master-outline)
+- [创作规则 (Writing Rules)](#创作规则-writing-rules)
+- [小说设定 (Novel Settings)](#小说设定-novel-settings)
 - [卷管理 (Volumes)](#卷管理-volumes)
 - [章节管理 (Chapters)](#章节管理-chapters)
 - [角色管理 (Characters)](#角色管理-characters)
+- [伏笔管理 (Foreshadowing)](#伏笔管理-foreshadowing)
 - [AI 生成 (Generate)](#ai-生成-generate)
 - [导出服务 (Export)](#导出服务-export)
+- [内容搜索 (Search)](#内容搜索-search)
+- [向量化索引 (Vectorize)](#向量化索引-vectorize)
 - [设置服务 (Settings)](#设置服务-settings)
+- [MCP 服务 (MCP)](#mcp-服务-mcp)
 - [错误码参考](#错误码参考)
 
 ---
@@ -215,102 +221,266 @@ Authorization: Bearer <token>  # 如需认证
 
 ---
 
-## 大纲管理 (Outlines)
+## 总纲管理 (Master Outline)
 
-### 获取大纲列表
+### 获取总纲
 
-**GET** `/api/outlines`
-
-**查询参数**:
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| novelId | string | 是 | 小说 ID |
-| type | string | 否 | 按类型过滤 |
-| parentId | string | 否 | 父节点 ID |
+**GET** `/api/v1/master-outline/:novelId`
 
 **响应示例**:
 ```json
-[
-  {
-    "id": "outline123",
+{
+  "exists": true,
+  "outline": {
+    "id": "mo123",
     "novelId": "novel456",
-    "parentId": null,
-    "type": "world_setting",
-    "title": "世界观设定",
-    "content": "在这个世界中...",
-    "sortOrder": 0,
+    "title": "混沌元尊总纲",
+    "content": "# 故事概述\n\n主角林风从一个偏僻小村庄走出...",
+    "version": 3,
+    "summary": "一个少年从凡人成长为元尊的故事",
+    "wordCount": 5000,
     "vectorId": "vec789",
     "indexedAt": 1713571200,
     "createdAt": 1713571200,
-    "updatedAt": 1713571200,
-    "deletedAt": null
-  },
-  {
-    "id": "outline124",
-    "novelId": "novel456",
-    "parentId": "outline123",
-    "type": "volume",
-    "title": "第一卷：初出茅庐",
-    "content": "主角从一个小村庄开始...",
-    "sortOrder": 1,
-    "vectorId": null,
-    "indexedAt": null,
-    "createdAt": 1713571200,
-    "updatedAt": 1713571200,
-    "deletedAt": null
+    "updatedAt": 1713657600
   }
-]
-```
-
----
-
-### 创建大纲节点
-
-**POST** `/api/outlines`
-
-**请求体**:
-```json
-{
-  "novelId": "novel456",        // 必填
-  "parentId": "outline123",     // 可选，父节点 ID
-  "type": "chapter_outline",    // 必填：world_setting/volume/chapter_outline/custom
-  "title": "第三章：突破",       // 必填
-  "content": "林风深吸一口气...", // 可选
-  "sortOrder": 2                // 可选，默认 0
 }
 ```
 
 ---
 
-### 批量更新排序
+### 获取总纲历史版本
 
-**PATCH** `/api/outlines/sort`
+**GET** `/api/v1/master-outline/:novelId/history`
 
-**请求体**:
+**响应示例**:
 ```json
-[
-  {
-    "id": "outline123",
-    "sortOrder": 0,
-    "parentId": null
-  },
-  {
-    "id": "outline124",
-    "sortOrder": 1,
-    "parentId": "outline123"
-  }
-]
+{
+  "history": [
+    {
+      "id": "mo123",
+      "version": 3,
+      "title": "混沌元尊总纲",
+      "summary": "一个少年从凡人成长为元尊的故事",
+      "wordCount": 5000,
+      "createdAt": 1713657600
+    },
+    {
+      "id": "mo122",
+      "version": 2,
+      "title": "混沌元尊总纲",
+      "summary": "修订版总纲",
+      "wordCount": 4500,
+      "createdAt": 1713571200
+    }
+  ]
+}
 ```
-
-**说明**: 用于拖拽排序后批量更新
 
 ---
 
-### 删除大纲节点
+### 创建/更新总纲
 
-**DELETE** `/api/outlines/:id`
+**POST** `/api/v1/master-outline`
 
-**说明**: 软删除，会级联删除子节点
+**请求体**:
+```json
+{
+  "novelId": "novel456",        // 必填
+  "title": "混沌元尊总纲",       // 必填
+  "content": "# 故事概述\n\n...", // 必填，至少10字符
+  "summary": "简短摘要"          // 可选，最多500字符
+}
+```
+
+**说明**: 每次创建会自动递增版本号
+
+---
+
+### 更新总纲内容
+
+**PUT** `/api/v1/master-outline/:id`
+
+**请求体**:
+```json
+{
+  "title": "新标题",            // 可选
+  "content": "新内容...",       // 可选
+  "summary": "新摘要"           // 可选
+}
+```
+
+---
+
+### 删除总纲版本
+
+**DELETE** `/api/v1/master-outline/:id`
+
+**说明**: 软删除
+
+---
+
+## 创作规则 (Writing Rules)
+
+### 获取创作规则
+
+**GET** `/api/v1/rules/:novelId`
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| category | string | 否 | 按类别过滤：style/pacing/character/plot/world/taboo/custom |
+| activeOnly | boolean | 否 | 仅返回启用的规则 |
+
+**响应示例**:
+```json
+{
+  "rules": [
+    {
+      "id": "rule123",
+      "novelId": "novel456",
+      "category": "style",
+      "title": "文风要求",
+      "content": "使用古风语言，避免现代词汇",
+      "priority": 1,
+      "isActive": 1,
+      "sortOrder": 0,
+      "createdAt": 1713571200,
+      "updatedAt": 1713657600
+    }
+  ]
+}
+```
+
+---
+
+### 创建创作规则
+
+**POST** `/api/v1/rules`
+
+**请求体**:
+```json
+{
+  "novelId": "novel456",                              // 必填
+  "category": "style",                                // 必填：style/pacing/character/plot/world/taboo/custom
+  "title": "文风要求",                                 // 必填，最多100字符
+  "content": "使用古风语言，避免现代词汇...",           // 必填
+  "priority": 1,                                      // 可选，1-5，默认3
+  "sortOrder": 0                                      // 可选，默认0
+}
+```
+
+---
+
+### 更新创作规则
+
+**PUT** `/api/v1/rules/:id`
+
+**请求体**:
+```json
+{
+  "category": "style",
+  "title": "新标题",
+  "content": "新内容",
+  "priority": 2,
+  "isActive": 1
+}
+```
+
+---
+
+### 删除创作规则
+
+**DELETE** `/api/v1/rules/:id`
+
+**说明**: 软删除
+
+---
+
+### 启用/禁用规则
+
+**PATCH** `/api/v1/rules/:id/toggle`
+
+**响应示例**:
+```json
+{
+  "ok": true,
+  "isActive": 0
+}
+```
+
+---
+
+## 小说设定 (Novel Settings)
+
+### 获取小说设定
+
+**GET** `/api/v1/settings/:novelId`
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| type | string | 否 | 按类型过滤：worldview/power_system/faction/geography/item_skill/misc |
+
+**响应示例**:
+```json
+{
+  "settings": [
+    {
+      "id": "set123",
+      "novelId": "novel456",
+      "type": "power_system",
+      "category": "修仙境界",
+      "name": "境界体系",
+      "content": "炼气期 → 筑基期 → 金丹期 → 元婴期...",
+      "attributes": "{\"levels\": 9}",
+      "parentId": null,
+      "importance": "high",
+      "relatedIds": null,
+      "vectorId": "vec789",
+      "sortOrder": 0,
+      "createdAt": 1713571200,
+      "updatedAt": 1713657600
+    }
+  ]
+}
+```
+
+---
+
+### 创建小说设定
+
+**POST** `/api/v1/settings`
+
+**请求体**:
+```json
+{
+  "novelId": "novel456",                              // 必填
+  "type": "power_system",                             // 必填：worldview/power_system/faction/geography/item_skill/misc
+  "category": "修仙境界",                              // 可选
+  "name": "境界体系",                                  // 必填
+  "content": "炼气期 → 筑基期 → 金丹期...",            // 必填
+  "attributes": {"levels": 9},                        // 可选，JSON对象
+  "parentId": null,                                   // 可选，父设定ID
+  "importance": "high",                               // 可选：high/normal/low
+  "relatedIds": ["set124", "set125"],                 // 可选，关联设定ID
+  "sortOrder": 0                                      // 可选
+}
+```
+
+---
+
+### 更新小说设定
+
+**PUT** `/api/v1/settings/:id`
+
+---
+
+### 删除小说设定
+
+**DELETE** `/api/v1/settings/:id`
+
+**说明**: 软删除
 
 ---
 
@@ -326,12 +496,16 @@ Authorization: Bearer <token>  # 如需认证
   {
     "id": "vol123",
     "novelId": "novel456",
-    "outlineId": "outline789",
     "title": "第一卷：初出茅庐",
     "sortOrder": 1,
+    "outline": "# 第一卷大纲\n\n本卷讲述主角的出身...",
+    "blueprint": "{\"chapters\": 20, \"targetWords\": 50000}",
     "summary": "本章讲述了主角的出身...",
     "wordCount": 50000,
+    "chapterCount": 20,
+    "targetWordCount": 60000,
     "status": "writing",
+    "notes": "作者笔记",
     "createdAt": 1713571200,
     "updatedAt": 1713657600
   }
@@ -841,6 +1015,260 @@ X-Export-Meta: {"wordCount":125000,"chapterCount":42}
 
 ---
 
+## 伏笔管理 (Foreshadowing)
+
+### 获取伏笔列表
+
+**GET** `/api/foreshadowing/:novelId`
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| status | string | 否 | 按状态过滤：open/resolved/abandoned |
+| limit | number | 否 | 返回数量限制，默认50 |
+
+**响应示例**:
+```json
+{
+  "foreshadowing": [
+    {
+      "id": "fs123",
+      "novelId": "novel456",
+      "chapterId": "chap789",
+      "title": "神秘玉佩的来历",
+      "description": "主角捡到的玉佩似乎隐藏着重大秘密",
+      "status": "open",
+      "resolvedChapterId": null,
+      "importance": "high",
+      "createdAt": 1713571200,
+      "updatedAt": 1713657600
+    }
+  ]
+}
+```
+
+---
+
+### 创建伏笔
+
+**POST** `/api/foreshadowing`
+
+**请求体**:
+```json
+{
+  "novelId": "novel456",                              // 必填
+  "chapterId": "chap789",                             // 可选，埋下伏笔的章节
+  "title": "神秘玉佩的来历",                           // 必填，最多100字符
+  "description": "主角捡到的玉佩似乎隐藏着重大秘密",    // 可选，最多1000字符
+  "importance": "high"                                // 可选：high/normal/low，默认normal
+}
+```
+
+---
+
+### 更新伏笔
+
+**PUT** `/api/foreshadowing/:id`
+
+**请求体**:
+```json
+{
+  "title": "新标题",
+  "description": "新描述",
+  "importance": "normal",
+  "status": "resolved",
+  "resolvedChapterId": "chap800"
+}
+```
+
+---
+
+### 删除伏笔
+
+**DELETE** `/api/foreshadowing/:id`
+
+**说明**: 软删除
+
+---
+
+## 内容搜索 (Search)
+
+### 搜索章节内容
+
+**GET** `/api/search`
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| q | string | 是 | 搜索关键词，至少2字符 |
+| novelId | string | 否 | 限定小说范围 |
+| limit | number | 否 | 返回数量限制，默认20 |
+
+**响应示例**:
+```json
+{
+  "query": "林风",
+  "total": 15,
+  "results": [
+    {
+      "id": "chap123",
+      "novelId": "novel456",
+      "title": "第一章：少年林风",
+      "chapterNumber": 1,
+      "summary": "本章介绍了主角林风的背景...",
+      "snippet": "...林风深吸一口气，体内的灵力开始..."
+    }
+  ]
+}
+```
+
+---
+
+## 向量化索引 (Vectorize)
+
+### 创建向量化索引
+
+**POST** `/api/vectorize/index`
+
+**请求体**:
+```json
+{
+  "sourceType": "chapter",         // 必填：outline/chapter/character/summary
+  "sourceId": "chap123",           // 必填
+  "novelId": "novel456",           // 必填
+  "title": "第一章：少年林风",      // 必填
+  "content": "章节内容..."          // 可选，不提供时自动从数据库获取
+}
+```
+
+**响应示例**:
+```json
+{
+  "ok": true,
+  "vectorIds": ["vec123", "vec124"],
+  "message": "Indexed 2 vectors for chapter:chap123"
+}
+```
+
+---
+
+### 删除向量化索引
+
+**DELETE** `/api/vectorize/:type/:id`
+
+**说明**: 删除指定内容的向量索引
+
+---
+
+### 相似度搜索
+
+**GET** `/api/vectorize/search`
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| q | string | 是 | 搜索文本 |
+| novelId | string | 否 | 限定小说范围 |
+
+**响应示例**:
+```json
+{
+  "ok": true,
+  "query": "主角突破境界",
+  "resultsCount": 5,
+  "results": [
+    {
+      "id": "vec123",
+      "score": 0.892,
+      "title": "第三章：突破筑基",
+      "sourceType": "chapter",
+      "preview": "林风终于突破了筑基期的瓶颈..."
+    }
+  ]
+}
+```
+
+---
+
+### 检查向量化状态
+
+**GET** `/api/vectorize/status`
+
+**响应示例**:
+```json
+{
+  "status": "ok",
+  "message": "Vectorize service is operational",
+  "embeddingModel": "@cf/baai/bge-base-zh-v1.5",
+  "dimensions": 768
+}
+```
+
+---
+
+## MCP 服务 (MCP)
+
+### MCP 端点
+
+**POST** `/api/mcp`
+
+**Content-Type**: `application/json`
+
+**支持的 MCP 方法**:
+- `tools/list` - 列出可用工具
+- `tools/call` - 调用工具
+
+**可用工具**:
+| 工具名 | 描述 |
+|--------|------|
+| `queryNovels` | 查询小说列表 |
+| `queryOutlines` | 查询指定小说的大纲结构 |
+| `queryChapters` | 查询指定小说的章节列表 |
+| `getChapterContent` | 获取指定章节的完整内容 |
+| `searchSemantic` | 语义搜索相关大纲、章节或角色 |
+
+**请求示例 - 列出工具**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list"
+}
+```
+
+**请求示例 - 调用工具**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "queryNovels",
+    "arguments": {
+      "limit": 10
+    }
+  }
+}
+```
+
+**响应示例**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "[{\"id\":\"novel456\",\"title\":\"混沌元尊\",...}]"
+      }
+    ]
+  }
+}
+```
+
+---
+
 ## 健康检查
 
 ### 检查服务状态
@@ -852,7 +1280,7 @@ X-Export-Meta: {"wordCount":125000,"chapterCount":42}
 {
   "ok": true,
   "ts": 1713571234567,
-  "phase": 3
+  "phase": 4
 }
 ```
 
@@ -884,14 +1312,16 @@ X-Export-Meta: {"wordCount":125000,"chapterCount":42}
 | 错误码 | HTTP 状态码 | 说明 |
 |--------|------------|------|
 | `NOVEL_NOT_FOUND` | 404 | 小说不存在 |
-| `OUTLINE_NOT_FOUND` | 404 | 大纲不存在 |
+| `MASTER_OUTLINE_NOT_FOUND` | 404 | 总纲不存在 |
 | `CHAPTER_NOT_FOUND` | 404 | 章节不存在 |
 | `CHARACTER_NOT_FOUND` | 404 | 角色不存在 |
+| `FORESHADOWING_NOT_FOUND` | 404 | 伏笔不存在 |
 | `MODEL_CONFIG_MISSING` | 400 | 未配置模型 |
 | `AI_GENERATION_FAILED` | 500 | AI 生成失败 |
 | `EXPORT_FAILED` | 500 | 导出失败 |
 | `UPLOAD_FAILED` | 500 | 文件上传失败 |
 | `VECTORIZE_ERROR` | 500 | 向量数据库错误 |
+| `VECTORIZE_NOT_CONFIGURED` | 503 | Vectorize 服务未配置 |
 
 ### 错误响应示例
 
@@ -1036,6 +1466,6 @@ novel = client.novels.create(
 
 <div align="center">
 
-**API Version: 1.0.0**
+**API Version: 1.4.0**
 
 </div>

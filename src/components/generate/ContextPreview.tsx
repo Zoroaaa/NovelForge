@@ -1,12 +1,9 @@
 /**
- * NovelForge · ContextPreview 组件
- *
- * 展示 AI 生成时使用的 RAG 上下文信息：
- * - 强制注入内容（大纲、摘要、角色）
- * - RAG 检索到的相关片段
- * - Token 使用统计
+ * @file ContextPreview.tsx
+ * @description 上下文预览组件，展示AI生成时使用的RAG上下文信息和Token统计
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { useState } from 'react'
 import {
   Collapsible,

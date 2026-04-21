@@ -1,3 +1,9 @@
+/**
+ * @file index.ts
+ * @description 后端服务入口文件，配置Hono应用和所有API路由
+ * @version 2.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { Hono } from 'hono'
 import type { Env } from './lib/types'
 

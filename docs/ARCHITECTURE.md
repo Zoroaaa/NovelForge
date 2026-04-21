@@ -39,11 +39,20 @@
 │  │  ┌─────────────────────────────────────────────────────────┐  │  │
 │  │  │         Hono Application (server/index.ts)               │  │  │
 │  │  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐       │  │  │
-│  │  │  │ novels  │ │outlines │ │chapters │ │characters│      │  │  │
+│  │  │  │ novels  │ │volumes  │ │chapters │ │characters│      │  │  │
 │  │  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘       │  │  │
 │  │  │  ┌─────────┐ ┌──────────┐ ┌─────────┐ ┌──────────┐    │  │  │
 │  │  │  │generate │ │  export  │ │settings │ │  health  │    │  │  │
 │  │  │  └─────────┘ └──────────┘ └─────────┘ └──────────┘    │  │  │
+│  │  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐      │  │  │
+│  │  │  │foreshadowing│ │writing-rules│ │master-outline│     │  │  │
+│  │  │  └─────────────┘ └─────────────┘ └─────────────┘      │  │  │
+│  │  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐      │  │  │
+│  │  │  │novel-settings│ │   search   │ │  vectorize  │      │  │  │
+│  │  │  └─────────────┘ └─────────────┘ └─────────────┘      │  │  │
+│  │  │  ┌─────────────┐                                        │  │  │
+│  │  │  │     mcp     │  (MCP Server for Claude Desktop)      │  │  │
+│  │  │  └─────────────┘                                        │  │  │
 │  │  └─────────────────────────────────────────────────────────┘  │  │
 │  └───────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
@@ -55,12 +64,18 @@
 │  (SQLite Edge)   │            │ (Vector Search) │        │  (Object Store)│
 ├──────────────────┤            ├─────────────────┤        ├────────────────┤
 │ - novels         │            │ - embeddings    │        │ - character    │
-│ - outlines       │            │   (768 dim)     │        │   images       │
-│ - chapters       │            │ - metadata      │        │ - exports      │
-│ - characters     │            │   indexing      │        │ - covers       │
+│ - master_outline │            │   (768 dim)     │        │   images       │
+│ - writing_rules  │            │ - metadata      │        │ - exports      │
+│ - novel_settings │            │   indexing      │        │ - covers       │
 │ - volumes        │            └─────────────────┘        └────────────────┘
+│ - chapters       │
+│ - characters     │
+│ - foreshadowing  │
 │ - model_configs  │
-│ - generation_... │
+│ - generation_logs│
+│ - exports        │
+│ - vector_index   │
+│ - entity_index   │
 └──────────────────┘
         │
         ▼
@@ -91,6 +106,12 @@
    - Drizzle ORM 提供数据库类型安全
    - Zod 运行时验证
 
+4. **扁平化数据模型 (v2.0)**
+   - 避免深层嵌套的树形结构
+   - 总纲表替代多层大纲树
+   - 设定表统一管理世界观/境界/势力/地理/宝物功法
+   - 总索引表串联所有实体形成树形结构
+
 ---
 
 ## 技术栈详解
@@ -99,25 +120,25 @@
 
 | 技术 | 版本 | 用途 | 选择理由 |
 |------|------|------|----------|
-| **React** | 18.3 | UI 框架 | 成熟的组件生态，Hooks 模式 |
-| **TypeScript** | 5.x | 类型系统 | 端到端类型安全 |
-| **Vite** | 5 | 构建工具 | 极速 HMR，生产优化 |
-| **React Router** | 6 | 路由 | 声明式路由，嵌套布局 |
-| **Zustand** | 4 | 状态管理 | 轻量级，无需 Provider 嵌套 |
-| **TanStack Query** | 5 | 服务端状态 | 缓存、重试、乐观更新 |
+| **React** | 19.2 | UI 框架 | 成熟的组件生态，Hooks 模式 |
+| **TypeScript** | 6.0 | 类型系统 | 端到端类型安全 |
+| **Vite** | 8.0 | 构建工具 | 极速 HMR，生产优化 |
+| **React Router** | 7.14 | 路由 | 声明式路由，嵌套布局 |
+| **Zustand** | 5.0 | 状态管理 | 轻量级，无需 Provider 嵌套 |
+| **TanStack Query** | 5.99 | 服务端状态 | 缓存、重试、乐观更新 |
 | **shadcn/ui** | - | UI 组件 | 可定制，基于 Radix |
-| **Tailwind CSS** | 3 | 样式 | 原子化 CSS，开发效率 |
-| **Novel.js** | 0.5 | 编辑器 | Tiptap 封装，AI 友好 |
-| **Lucide React** | - | 图标 | 统一图标库，Tree-shaking |
+| **Tailwind CSS** | 3.4 | 样式 | 原子化 CSS，开发效率 |
+| **Novel.js** | 1.0 | 编辑器 | Tiptap 封装，AI 友好 |
+| **Lucide React** | 1.8 | 图标 | 统一图标库，Tree-shaking |
 
 ### 后端技术栈
 
 | 技术 | 版本 | 用途 | 选择理由 |
 |------|------|------|----------|
-| **Hono** | 4 | Web 框架 | 超轻量，Cloudflare 原生 |
-| **Drizzle ORM** | 0.30 | ORM | SQL-like 语法，Type-safe |
-| **Zod** | 3.22 | 验证 | 运行时类型安全 |
-| **@hono/zod-validator** | 0.2 | 验证中间件 | Hono + Zod 集成 |
+| **Hono** | 4.12 | Web 框架 | 超轻量，Cloudflare 原生 |
+| **Drizzle ORM** | 0.45 | ORM | SQL-like 语法，Type-safe |
+| **Zod** | 4.3 | 验证 | 运行时类型安全 |
+| **@hono/zod-validator** | 0.7 | 验证中间件 | Hono + Zod 集成 |
 
 ### 基础设施
 
@@ -141,55 +162,80 @@
 ├─────────────┤       ├──────────────┤       ├─────────────┤
 │ id          │       │ id           │       │ id          │
 │ title       │       │ novelId      │◄──────┤ novelId     │
-│ description │       │ outlineId    │       │ volumeId    │
-│ genre       │       │ title        │       │ outlineId   │
-│ status      │       │ sortOrder    │       │ title       │
-│ coverR2Key  │       │ summary      │       │ content     │
-│ wordCount   │       │ wordCount    │       │ summary     │
-│ chapterCount│       │ status       │       │ modelUsed   │
-│ created_at  │       │ created_at   │       │ tokens...   │
+│ description │       │ title        │       │ volumeId    │
+│ genre       │       │ outline      │       │ title       │
+│ status      │       │ blueprint    │       │ content     │
+│ coverR2Key  │       │ summary      │       │ wordCount   │
+│ wordCount   │       │ wordCount    │       │ status      │
+│ chapterCount│       │ status       │       │ summary     │
+│ created_at  │       │ created_at   │       │ vectorId    │
 │ updated_at  │       │ updated_at   │       │ created_at  │
 │ deletedAt   │       └──────────────┘       │ updated_at  │
 └─────────────┘                              │ deletedAt   │
      │                                       └─────────────┘
-     │                                                   │
-     │ n                                                 │ n
-     │                        ┌──────────────┐           │
-     └───────────────────────►│  characters  │           │
-                              ├──────────────┤           │
-                              │ id           │           │
-                              │ novelId      │◄──────────┘
+     │                                                    │
+     │ n                                                  │ n
+     │                        ┌──────────────┐            │
+     └───────────────────────►│  characters  │            │
+                              ├──────────────┤            │
+                              │ id           │            │
+                              │ novelId      │◄───────────┘
                               │ name         │
                               │ aliases      │
                               │ role         │
                               │ description  │
                               │ imageR2Key   │
-                              │ attributes   │
+                              │ powerLevel   │◄── 境界信息 (JSON)
                               │ vectorId     │
                               │ created_at   │
                               │ deletedAt    │
                               └──────────────┘
-                                   ▲
-                                   │
-     ┌─────────────────────────────┘
-     │ n
-     │
-┌────┴────────────┐       ┌────────────────┐
-│   outlines      │       │  model_configs │
-├─────────────────┤       ├────────────────┤
-│ id              │       │ id             │
-│ novelId         │       │ novelId        │
-│ parentId        │       │ scope          │
-│ type            │       │ stage          │
-│ title           │       │ provider       │
-│ content         │       │ modelId        │
-│ sortOrder       │       │ apiBase        │
-│ vectorId        │       │ apiKeyEnv      │
-│ indexedAt       │       │ params         │
-│ created_at      │       │ isActive       │
-│ updated_at      │       │ created_at     │
-│ deletedAt       │       │ updated_at     │
-└─────────────────┘       └────────────────┘
+
+┌─────────────────┐       ┌────────────────┐       ┌─────────────────┐
+│ master_outline  │       │ writing_rules  │       │ novel_settings  │
+├─────────────────┤       ├────────────────┤       ├─────────────────┤
+│ id              │       │ id             │       │ id              │
+│ novelId         │       │ novelId        │       │ novelId         │
+│ title           │       │ category       │       │ type            │
+│ content         │       │ title          │       │ category        │
+│ version         │       │ content        │       │ name            │
+│ summary         │       │ priority       │       │ content         │
+│ wordCount       │       │ isActive       │       │ attributes      │
+│ vectorId        │       │ sortOrder      │       │ parentId        │
+│ created_at      │       │ created_at     │       │ importance      │
+│ deletedAt       │       │ deletedAt      │       │ vectorId        │
+└─────────────────┘       └────────────────┘       └─────────────────┘
+
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│ foreshadowing   │       │ generation_logs │       │   vector_index  │
+├─────────────────┤       ├─────────────────┤       ├─────────────────┤
+│ id              │       │ id              │       │ id              │
+│ novelId         │       │ novelId         │       │ novelId         │
+│ chapterId       │       │ chapterId       │       │ sourceType      │
+│ title           │       │ stage           │       │ sourceId        │
+│ description     │       │ modelId         │       │ chunkIndex      │
+│ status          │       │ promptTokens    │       │ contentHash     │
+│ resolvedChapterId│      │ completionTokens│       │ created_at      │
+│ importance      │       │ durationMs      │       └─────────────────┘
+│ created_at      │       │ status          │
+│ deletedAt       │       │ created_at      │
+└─────────────────┘       └─────────────────┘
+
+┌─────────────────┐       ┌─────────────────┐
+│  entity_index   │       │  model_configs  │
+├─────────────────┤       ├─────────────────┤
+│ id              │       │ id              │
+│ entityType      │       │ novelId         │
+│ entityId        │       │ scope           │
+│ novelId         │       │ stage           │
+│ parentId        │       │ provider        │
+│ title           │       │ modelId         │
+│ sortOrder       │       │ apiBase         │
+│ depth           │       │ apiKeyEnv       │
+│ meta            │       │ params          │
+│ created_at      │       │ isActive        │
+│ updated_at      │       │ created_at      │
+└─────────────────┘       └─────────────────┘
 ```
 
 ### 核心表说明
@@ -211,18 +257,78 @@ CREATE TABLE novels (
 );
 ```
 
-#### `outlines` - 大纲节点
+#### `master_outline` - 总纲表（v2.0 新增）
 ```sql
-CREATE TABLE outlines (
+CREATE TABLE master_outline (
   id TEXT PRIMARY KEY,
   novel_id TEXT NOT NULL,
-  parent_id TEXT,                -- 父节点 ID（树形结构）
-  type TEXT NOT NULL,            -- world_setting/volume/chapter_outline/custom
   title TEXT NOT NULL,
-  content TEXT,                  -- 大纲详细内容
-  sort_order INTEGER DEFAULT 0,  -- 排序权重
+  content TEXT,                  -- 总纲内容 (Markdown)
+  version INTEGER DEFAULT 1,     -- 版本号
+  summary TEXT,                  -- 摘要
+  word_count INTEGER DEFAULT 0,
   vector_id TEXT,                -- Vectorize 索引 ID
-  indexed_at INTEGER,            -- 向量化时间
+  indexed_at INTEGER,
+  created_at INTEGER,
+  updated_at INTEGER,
+  deletedAt INTEGER
+);
+```
+
+#### `writing_rules` - 创作规则表（v2.0 新增）
+```sql
+CREATE TABLE writing_rules (
+  id TEXT PRIMARY KEY,
+  novel_id TEXT NOT NULL,
+  category TEXT NOT NULL,        -- style/pacing/character/plot/world/taboo/custom
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  priority INTEGER DEFAULT 3,    -- 1=最高 5=最低
+  is_active INTEGER DEFAULT 1,
+  sort_order INTEGER DEFAULT 0,
+  created_at INTEGER,
+  updated_at INTEGER,
+  deletedAt INTEGER
+);
+```
+
+#### `novel_settings` - 小说设定表（v2.0 新增）
+```sql
+CREATE TABLE novel_settings (
+  id TEXT PRIMARY KEY,
+  novel_id TEXT NOT NULL,
+  type TEXT NOT NULL,            -- worldview/power_system/faction/geography/item_skill/misc
+  category TEXT,                 -- 子分类
+  name TEXT NOT NULL,
+  content TEXT NOT NULL,
+  attributes TEXT,               -- JSON
+  parent_id TEXT,                -- 层级结构
+  importance TEXT DEFAULT 'normal',
+  related_ids TEXT,              -- JSON 关联 ID 列表
+  vector_id TEXT,
+  indexed_at INTEGER,
+  sort_order INTEGER DEFAULT 0,
+  created_at INTEGER,
+  updated_at INTEGER,
+  deletedAt INTEGER
+);
+```
+
+#### `volumes` - 卷表（增强版）
+```sql
+CREATE TABLE volumes (
+  id TEXT PRIMARY KEY,
+  novel_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  sort_order INTEGER DEFAULT 0,
+  outline TEXT,                  -- 卷大纲 (Markdown)
+  blueprint TEXT,                -- 卷蓝图 (JSON)
+  summary TEXT,                  -- 卷概要/摘要
+  status TEXT DEFAULT 'draft',
+  word_count INTEGER DEFAULT 0,
+  chapter_count INTEGER DEFAULT 0,
+  target_word_count INTEGER,
+  notes TEXT,                    -- 作者笔记
   created_at INTEGER,
   updated_at INTEGER,
   deletedAt INTEGER
@@ -234,21 +340,22 @@ CREATE TABLE outlines (
 CREATE TABLE chapters (
   id TEXT PRIMARY KEY,
   novel_id TEXT NOT NULL,
-  volume_id TEXT,                -- 所属卷
-  outline_id TEXT,               -- 关联大纲
+  volume_id TEXT,
   title TEXT NOT NULL,
   sort_order INTEGER DEFAULT 0,
   content TEXT,                  -- 正文内容 (HTML)
   word_count INTEGER DEFAULT 0,
   status TEXT DEFAULT 'draft',   -- draft/generated/revised
-  model_used TEXT,               -- 使用的模型 ID
-  prompt_tokens INTEGER,         -- Prompt token 数
-  completion_tokens INTEGER,     -- Completion token 数
-  generation_time INTEGER,       -- 生成耗时 (ms)
-  summary TEXT,                  -- 自动生成摘要
-  summary_at INTEGER,            -- 摘要生成时间
-  vector_id TEXT,                -- 向量化 ID
+  model_used TEXT,
+  prompt_tokens INTEGER,
+  completion_tokens INTEGER,
+  generation_time INTEGER,
+  summary TEXT,
+  summary_model TEXT,
+  summary_at INTEGER,
+  vector_id TEXT,
   indexed_at INTEGER,
+  snapshot_keys TEXT,            -- 快照存储路径
   created_at INTEGER,
   updated_at INTEGER,
   deletedAt INTEGER
@@ -263,11 +370,29 @@ CREATE TABLE characters (
   name TEXT NOT NULL,
   aliases TEXT,                  -- JSON string[]
   role TEXT,                     -- protagonist/antagonist/supporting
-  description TEXT,              -- 角色描述（可由 AI 生成）
-  image_r2_key TEXT,             -- 头像 R2 路径
+  description TEXT,
+  image_r2_key TEXT,
   attributes TEXT,               -- JSON 属性对象
-  vector_id TEXT,                -- 向量化 ID
+  power_level TEXT,              -- JSON 境界信息 (v2.0 新增)
+  vector_id TEXT,
   created_at INTEGER,
+  deletedAt INTEGER
+);
+```
+
+#### `foreshadowing` - 伏笔追踪表（v2.0 新增）
+```sql
+CREATE TABLE foreshadowing (
+  id TEXT PRIMARY KEY,
+  novel_id TEXT NOT NULL,
+  chapter_id TEXT,               -- 埋下伏笔的章节
+  title TEXT NOT NULL,
+  description TEXT,
+  status TEXT DEFAULT 'open',    -- open/resolved/abandoned
+  resolved_chapter_id TEXT,      -- 收尾章节
+  importance TEXT DEFAULT 'normal', -- high/normal/low
+  created_at INTEGER,
+  updated_at INTEGER,
   deletedAt INTEGER
 );
 ```
@@ -281,10 +406,59 @@ CREATE TABLE model_configs (
   stage TEXT NOT NULL,           -- outline_gen/chapter_gen/summary_gen/vision
   provider TEXT NOT NULL,        -- volcengine/anthropic/openai
   model_id TEXT NOT NULL,
-  api_base TEXT,                 -- API 基础 URL
+  api_base TEXT,
   api_key_env TEXT,              -- 环境变量名（不存明文）
+  api_key TEXT,                  -- 可选：直接存储（不推荐）
   params TEXT,                   -- JSON {temperature, max_tokens...}
   is_active INTEGER DEFAULT 1,
+  created_at INTEGER,
+  updated_at INTEGER
+);
+```
+
+#### `generation_logs` - 生成任务日志（v2.0 新增）
+```sql
+CREATE TABLE generation_logs (
+  id TEXT PRIMARY KEY,
+  novel_id TEXT NOT NULL,
+  chapter_id TEXT,
+  stage TEXT NOT NULL,
+  model_id TEXT NOT NULL,
+  context_snapshot TEXT,         -- 上下文快照
+  prompt_tokens INTEGER,
+  completion_tokens INTEGER,
+  duration_ms INTEGER,
+  status TEXT DEFAULT 'success',
+  error_msg TEXT,
+  created_at INTEGER
+);
+```
+
+#### `vector_index` - 向量索引追踪（v2.0 新增）
+```sql
+CREATE TABLE vector_index (
+  id TEXT PRIMARY KEY,
+  novel_id TEXT NOT NULL,
+  source_type TEXT NOT NULL,     -- outline/chapter/character/summary
+  source_id TEXT NOT NULL,
+  chunk_index INTEGER DEFAULT 0,
+  content_hash TEXT,
+  created_at INTEGER
+);
+```
+
+#### `entity_index` - 总索引表（v2.0 新增）
+```sql
+CREATE TABLE entity_index (
+  id TEXT PRIMARY KEY,
+  entity_type TEXT NOT NULL,     -- novel/volume/chapter/character/setting/rule/foreshadowing
+  entity_id TEXT NOT NULL,
+  novel_id TEXT NOT NULL,
+  parent_id TEXT,
+  title TEXT NOT NULL,
+  sort_order INTEGER DEFAULT 0,
+  depth INTEGER DEFAULT 0,
+  meta TEXT,                     -- JSON 元数据
   created_at INTEGER,
   updated_at INTEGER
 );
@@ -375,10 +549,12 @@ Total: 12,000 tokens
 ```
 
 **强制注入内容**:
-- 本章大纲（来自 `outlines.content`）
+- 总纲内容（来自 `master_outline.content`）
+- 创作规则（来自 `writing_rules`，按优先级排序）
+- 本章大纲（来自 `novel_settings` 或卷大纲）
 - 上一章摘要（来自 `chapters.summary`）
 - 当前卷概要（来自 `volumes.summary`）
-- 主角卡片（来自 `characters`，包含描述和属性）
+- 主角卡片（来自 `characters`，包含描述、属性和境界信息）
 
 **RAG 检索**:
 - 使用本章大纲作为 query
@@ -456,7 +632,54 @@ const results = await searchSimilar(vectorize, queryVector, {
   author: config.author || 'Unknown',
   language: 'zh-CN',
   creator: 'NovelForge',
-  generator: 'NovelForge v1.0'
+  generator: 'NovelForge v1.4.0'
+}
+```
+
+---
+
+### 7. 伏笔追踪服务 (`/server/services/foreshadowing.ts`) (v2.0 新增)
+
+**职责**: 自动从章节内容中提取伏笔，追踪伏笔状态
+
+**核心功能**:
+- `extractForeshadowingFromChapter()` - 从章节提取伏笔
+- 自动检测已收尾的伏笔
+- 支持重要性分级（high/normal/low）
+
+**工作流程**:
+```
+1. 章节生成完成后触发
+2. 获取章节内容和当前未收尾伏笔列表
+3. 调用 LLM 分析章节内容
+4. 识别新伏笔和已收尾伏笔
+5. 写入数据库并更新状态
+```
+
+---
+
+### 8. 境界追踪服务 (`/server/services/powerLevel.ts`) (v2.0 新增)
+
+**职责**: 自动检测角色境界突破事件，记录成长历程
+
+**核心功能**:
+- `detectPowerLevelBreakthrough()` - 检测境界突破
+- 自动更新角色 `powerLevel` 字段
+- 记录突破历史
+
+**PowerLevel 数据结构**:
+```typescript
+interface PowerLevelData {
+  system: string           // 境界体系名称（如"修仙境界"）
+  current: string          // 当前境界（如"金丹期初期"）
+  breakthroughs: Array<{
+    chapterId: string
+    from: string           // 突破前境界
+    to: string             // 突破后境界
+    note?: string          // 突破说明
+    timestamp?: number     // 突破时间戳
+  }>
+  nextMilestone?: string   // 下一阶段目标
 }
 ```
 
@@ -482,7 +705,7 @@ sequenceDiagram
     FE->>BE: POST /api/generate/chapter
     BE->>Agent: generateChapter()
     Agent->>CB: buildChapterContext()
-    CB->>DB: 查询大纲/摘要/角色
+    CB->>DB: 查询总纲/规则/摘要/角色
     DB-->>CB: 返回强制注入内容
     CB->>V: 语义检索 (topK=20)
     V-->>CB: 返回相关片段
@@ -499,15 +722,18 @@ sequenceDiagram
     Agent->>LLM: 生成摘要 (非流式)
     LLM-->>Agent: 摘要文本
     Agent->>DB: UPDATE chapters SET summary
+    Agent->>Agent: extractForeshadowingFromChapter()
+    Agent->>Agent: detectPowerLevelBreakthrough()
 ```
 
 ### 自动向量化流程
 
 ```
 触发时机:
-- 大纲内容更新 (onOutlineSave)
+- 总纲内容更新 (onMasterOutlineSave)
 - 章节摘要生成 (onSummaryComplete)
 - 角色描述更新 (onCharacterUpdate)
+- 小说设定更新 (onNovelSettingsUpdate)
 
 流程:
 1. 检测内容变化
@@ -516,13 +742,14 @@ sequenceDiagram
      id: content.id,
      values: vector,
      metadata: {
-       sourceType: 'outline'|'chapter'|'character',
+       sourceType: 'master_outline'|'chapter'|'character'|'setting',
        novelId,
        title,
        content
      }
    })
 4. 更新数据库 vectorId 字段
+5. 更新 vector_index 追踪表
 ```
 
 ---

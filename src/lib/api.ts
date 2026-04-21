@@ -1,9 +1,24 @@
+/**
+ * @file api.ts
+ * @description API客户端模块，封装所有后端API调用，提供类型安全的请求方法
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import type { 
   Novel, Volume, Chapter, Character, SortItem, 
   NovelInput, ChapterInput, VolumeInput, ModelConfig, GenerateOptions,
   MasterOutline, WritingRule, NovelSetting, ForeshadowingItem
 } from './types'
 
+/**
+ * 通用请求函数
+ * @description 封装fetch请求，统一处理响应和错误
+ * @template T - 响应数据类型
+ * @param {string} path - API路径
+ * @param {RequestInit} [init] - fetch初始化选项
+ * @returns {Promise<T>} 响应数据
+ * @throws {Error} 请求失败时抛出错误
+ */
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     headers: { 'Content-Type': 'application/json' },
@@ -20,6 +35,12 @@ const j = (body: unknown) => JSON.stringify(body)
 
 /**
  * 流式生成章节内容（SSE）
+ * @description 通过Server-Sent Events接收AI生成的内容流
+ * @param {GenerateOptions} payload - 生成选项
+ * @param {Function} onChunk - 每次收到内容块的回调
+ * @param {Function} onDone - 生成完成的回调
+ * @param {Function} onError - 发生错误的回调
+ * @returns {Function} 取消生成的函数
  */
 export function streamGenerate(
   payload: GenerateOptions,
@@ -72,24 +93,43 @@ export function streamGenerate(
   return () => controller.abort()
 }
 
+/**
+ * API客户端对象
+ * @description 封装所有后端API调用的命名空间对象
+ */
 export const api = {
+  /**
+   * 小说相关API
+   */
   novels: {
+    /** 获取小说列表 */
     list:   ()                    => req<Novel[]>('/api/novels'),
+    /** 获取单个小说详情 */
     get:    (id: string)          => req<Novel>(`/api/novels/${id}`),
+    /** 创建新小说 */
     create: (body: NovelInput)    => req<Novel>('/api/novels', { method: 'POST', body: j(body) }),
+    /** 更新小说信息 */
     update: (id: string, body: Partial<NovelInput>) =>
                                    req<Novel>(`/api/novels/${id}`, { method: 'PATCH', body: j(body) }),
+    /** 删除小说 */
     delete: (id: string)          => req(`/api/novels/${id}`, { method: 'DELETE' }),
   },
   
-  // v2.0: 总纲管理（替代原 outlines）
+  /**
+   * 总纲管理API（v2.0）
+   */
   masterOutline: {
+    /** 获取最新版本总纲 */
     get:    (novelId: string)      => req<{ exists: boolean; outline: MasterOutline | null }>(`/api/master-outline/${novelId}`),
+    /** 创建新版本总纲 */
     create: (body: { novelId: string; title: string; content: string; summary?: string }) =>
                                    req<MasterOutline>('/api/master-outline', { method: 'POST', body: j(body) }),
+    /** 更新总纲内容 */
     update: (id: string, body: { title?: string; content?: string; summary?: string }) =>
                                    req<MasterOutline>(`/api/master-outline/${id}`, { method: 'PUT', body: j(body) }),
+    /** 获取历史版本列表 */
     history: (novelId: string)     => req<MasterOutline[]>(`/api/master-outline/${novelId}/history`),
+    /** 删除总纲版本 */
     delete: (id: string)          => req(`/api/master-outline/${id}`, { method: 'DELETE' }),
   },
 

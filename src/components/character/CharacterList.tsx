@@ -1,3 +1,9 @@
+/**
+ * @file CharacterList.tsx
+ * @description 角色列表组件，提供角色的展示、创建、编辑和删除功能
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { toast } from 'sonner'

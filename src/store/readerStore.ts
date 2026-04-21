@@ -1,3 +1,9 @@
+/**
+ * @file readerStore.ts
+ * @description 阅读器状态管理Store，管理阅读器的字号、主题、字体等设置
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 

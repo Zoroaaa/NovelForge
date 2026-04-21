@@ -1,3 +1,9 @@
+/**
+ * @file chapters.ts
+ * @description 章节管理路由模块，提供章节CRUD、快照保存与恢复、自动向量化等功能
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
@@ -22,6 +28,8 @@ const CreateSchema = z.object({
 
 /**
  * 异步触发向量化（不阻塞主流程）
+ * @param {any} c - Hono上下文对象
+ * @param {Promise<void> | void} fn - 要异步执行的函数
  */
 async function safeWaitUntil(c: any, fn: Promise<void> | void) {
   const ctx = (c as any).executionContext
@@ -32,6 +40,15 @@ async function safeWaitUntil(c: any, fn: Promise<void> | void) {
   }
 }
 
+/**
+ * 触发内容向量化索引
+ * @param {Env} env - 环境变量对象
+ * @param {string} sourceType - 内容类型
+ * @param {string} sourceId - 内容ID
+ * @param {string} novelId - 小说ID
+ * @param {string} title - 内容标题
+ * @param {string | null | undefined} content - 要索引的内容
+ */
 async function triggerVectorization(
   env: Env,
   sourceType: 'outline' | 'chapter' | 'character' | 'summary',
@@ -50,6 +67,13 @@ async function triggerVectorization(
   }
 }
 
+/**
+ * GET / - 获取章节列表
+ * @description 获取指定小说的所有章节，按排序顺序返回
+ * @param {string} novelId - 小说ID（查询参数）
+ * @returns {Array} 章节数组
+ * @throws {400} 缺少novelId参数
+ */
 router.get('/', async (c) => {
   const novelId = c.req.query('novelId')
   if (!novelId) return c.json({ error: 'novelId required' }, 400)
@@ -60,6 +84,12 @@ router.get('/', async (c) => {
   return c.json(rows)
 })
 
+/**
+ * GET /:id - 获取单个章节详情
+ * @param {string} id - 章节ID
+ * @returns {Object} 章节对象
+ * @throws {404} 章节不存在
+ */
 router.get('/:id', async (c) => {
   const db = drizzle(c.env.DB)
   const row = await db.select().from(t).where(eq(t.id, c.req.param('id'))).get()
@@ -67,6 +97,17 @@ router.get('/:id', async (c) => {
   return c.json(row)
 })
 
+/**
+ * POST / - 创建新章节
+ * @description 创建新章节并自动触发向量化索引
+ * @param {string} novelId - 所属小说ID
+ * @param {string} [volumeId] - 所属卷ID
+ * @param {string} [outlineId] - 关联大纲ID
+ * @param {string} title - 章节标题
+ * @param {number} [sortOrder] - 排序顺序
+ * @param {string} [content] - 章节内容
+ * @returns {Object} 创建的章节对象
+ */
 router.post('/', zValidator('json', CreateSchema), async (c) => {
   const db = drizzle(c.env.DB)
   const body = c.req.valid('json')
@@ -85,6 +126,13 @@ router.post('/', zValidator('json', CreateSchema), async (c) => {
   return c.json(row, 201)
 })
 
+/**
+ * PATCH /:id - 更新章节
+ * @description 更新章节内容，自动保存快照、更新字数统计、重新向量化
+ * @param {string} id - 章节ID
+ * @param {Object} body - 更新内容
+ * @returns {Object} 更新后的章节对象
+ */
 router.patch(
   '/:id',
   zValidator(
@@ -139,6 +187,12 @@ router.patch(
   }
 )
 
+/**
+ * DELETE /:id - 删除章节（软删除）
+ * @description 软删除章节，同时删除相关的向量索引
+ * @param {string} id - 章节ID
+ * @returns {Object} { ok: boolean }
+ */
 router.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB)
   const id = c.req.param('id')
@@ -159,6 +213,13 @@ router.delete('/:id', async (c) => {
   return c.json({ ok: true })
 })
 
+/**
+ * GET /:id/snapshots - 获取章节快照列表
+ * @description 获取章节的历史快照列表，用于版本恢复
+ * @param {string} id - 章节ID
+ * @returns {Object} { snapshots: Array<{ key, timestamp, preview }> }
+ * @throws {404} 章节不存在
+ */
 router.get('/:id/snapshots', async (c) => {
   const id = c.req.param('id')
   const db = drizzle(c.env.DB)
@@ -182,6 +243,14 @@ router.get('/:id/snapshots', async (c) => {
   return c.json({ snapshots: snapshots.filter(Boolean) })
 })
 
+/**
+ * POST /:id/restore - 恢复章节快照
+ * @description 从历史快照恢复章节内容
+ * @param {string} id - 章节ID
+ * @param {string} key - 快照存储键
+ * @returns {Object} { ok: boolean, content: string }
+ * @throws {404} 章节或快照不存在
+ */
 router.post('/:id/restore', zValidator('json', z.object({ key: z.string() })), async (c) => {
   const id = c.req.param('id')
   const { key } = c.req.valid('json')
@@ -199,6 +268,14 @@ router.post('/:id/restore', zValidator('json', z.object({ key: z.string() })), a
   return c.json({ ok: true, content })
 })
 
+/**
+ * 保存章节快照到R2存储
+ * @param {Env} env - 环境变量对象
+ * @param {string} novelId - 小说ID
+ * @param {string} chapterId - 章节ID
+ * @param {string} content - 章节内容
+ * @returns {Promise<string | null>} 快照存储键，失败返回null
+ */
 async function saveSnapshot(env: Env, novelId: string, chapterId: string, content: string): Promise<string | null> {
   if (!content || !env.STORAGE) return null
 

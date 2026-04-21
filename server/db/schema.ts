@@ -1,15 +1,9 @@
 /**
- * NovelForge · 数据库 Schema（v2.0 重构版）
- *
- * 设计原则：
- * 1. 扁平化结构，避免深层嵌套
- * 2. 总纲表替代多层大纲树
- * 3. 设定表统一管理世界观/境界/势力/地理/宝物功法
- * 4. 创作规则作为最高准则独立存储
- * 5. 卷表增强支持卷级详细规划
- * 6. 总索引表串联所有实体形成树形结构
+ * @file schema.ts
+ * @description 数据库Schema定义文件，使用Drizzle ORM定义所有数据表结构
+ * @version 2.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
 import { sql } from 'drizzle-orm'
 

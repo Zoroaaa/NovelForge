@@ -1,3 +1,9 @@
+/**
+ * @file RulesPanel.tsx
+ * @description 创作规则面板组件，管理写作风格、禁忌等创作规则
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { toast } from 'sonner'

@@ -1,9 +1,9 @@
 /**
- * NovelForge · 前端类型定义
- *
- * 与后端数据库schema保持一致
+ * @file types.ts
+ * @description 前端类型定义文件，与后端数据库schema保持一致
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 export interface Novel {
   id: string
   title: string

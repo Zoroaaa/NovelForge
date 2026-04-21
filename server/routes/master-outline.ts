@@ -1,13 +1,9 @@
 /**
- * NovelForge · 总纲路由（v2.0）
- *
- * API 端点：
- * GET    /api/v1/master-outline/:novelId      - 获取总纲
- * POST   /api/v1/master-outline               - 创建/更新总纲
- * PUT    /api/v1/master-outline/:id           - 更新总纲内容
- * DELETE /api/v1/master-outline/:id           - 删除总纲版本
+ * @file master-outline.ts
+ * @description 总纲管理路由模块，提供总纲版本管理和历史记录功能
+ * @version 2.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
@@ -25,7 +21,12 @@ const CreateMasterOutlineSchema = z.object({
   summary: z.string().max(500).optional(),
 })
 
-// GET /master-outline/:novelId - 获取最新版本的总纲
+/**
+ * GET /:novelId - 获取最新版本的总纲
+ * @description 获取指定小说的最新版本总纲
+ * @param {string} novelId - 小说ID
+ * @returns {Object} { exists: boolean, outline?: Object }
+ */
 router.get('/:novelId', async (c) => {
   const novelId = c.req.param('novelId')
   const db = drizzle(c.env.DB)
@@ -48,7 +49,12 @@ router.get('/:novelId', async (c) => {
   return c.json({ exists: true, outline })
 })
 
-// GET /master-outline/:novelId/history - 获取所有历史版本
+/**
+ * GET /:novelId/history - 获取所有历史版本
+ * @description 获取指定小说的总纲历史版本列表
+ * @param {string} novelId - 小说ID
+ * @returns {Object} { history: Array }
+ */
 router.get('/:novelId/history', async (c) => {
   const novelId = c.req.param('novelId')
   const db = drizzle(c.env.DB)
@@ -73,7 +79,16 @@ router.get('/:novelId/history', async (c) => {
   return c.json({ history })
 })
 
-// POST /master-outline - 创建新版本的总纲（自动递增版本号）
+/**
+ * POST / - 创建新版本的总纲
+ * @description 创建新版本总纲，自动递增版本号
+ * @param {string} novelId - 小说ID
+ * @param {string} title - 总纲标题（1-200字符）
+ * @param {string} content - 总纲内容（至少10字符）
+ * @param {string} [summary] - 总纲摘要（最多500字符）
+ * @returns {Object} { ok: boolean, outline: Object }
+ * @throws {500} 创建失败
+ */
 router.post('/', zValidator('json', CreateMasterOutlineSchema), async (c) => {
   const body = c.req.valid('json')
   const db = drizzle(c.env.DB)
@@ -125,6 +140,16 @@ const UpdateMasterOutlineSchema = z.object({
   summary: z.string().max(500).optional(),
 })
 
+/**
+ * PUT /:id - 更新总纲内容
+ * @description 更新总纲内容（不增加版本号）
+ * @param {string} id - 总纲ID
+ * @param {string} [title] - 总纲标题
+ * @param {string} [content] - 总纲内容
+ * @param {string} [summary] - 总纲摘要
+ * @returns {Object} { ok: boolean, outline: Object }
+ * @throws {500} 更新失败
+ */
 router.put('/:id', zValidator('json', UpdateMasterOutlineSchema), async (c) => {
   const id = c.req.param('id')
   const body = c.req.valid('json')
@@ -160,7 +185,11 @@ router.put('/:id', zValidator('json', UpdateMasterOutlineSchema), async (c) => {
   }
 })
 
-// DELETE /master-outline/:id - 删除某个版本的总纲（软删除）
+/**
+ * DELETE /:id - 删除总纲版本（软删除）
+ * @param {string} id - 总纲ID
+ * @returns {Object} { ok: boolean }
+ */
 router.delete('/:id', async (c) => {
   const id = c.req.param('id')
   const db = drizzle(c.env.DB)

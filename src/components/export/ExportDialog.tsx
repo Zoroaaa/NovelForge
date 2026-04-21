@@ -1,19 +1,9 @@
 /**
- * NovelForge · ExportDialog 导出对话框组件
- *
- * 支持多格式导出：
- * - Markdown (.md)
- * - 纯文本 (.txt)
- * - EPUB 电子书 (.epub)
- * - ZIP 打包下载 (.zip)
- *
- * 特性：
- * - 格式选择与预览
- * - 导出选项配置（目录、元数据）
- * - 下载进度显示
- * - 卷范围选择
+ * @file ExportDialog.tsx
+ * @description 导出对话框组件，支持Markdown、TXT、EPUB、ZIP等多格式导出
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'

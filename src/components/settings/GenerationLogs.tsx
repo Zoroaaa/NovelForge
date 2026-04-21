@@ -1,9 +1,9 @@
 /**
- * NovelForge · 生成日志面板
- *
- * 展示最近生成记录、token 消耗统计
+ * @file GenerationLogs.tsx
+ * @description 生成日志面板组件，展示AI生成记录和token消耗统计
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'

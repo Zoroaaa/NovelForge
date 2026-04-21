@@ -3,13 +3,13 @@
 <div align="center">
 
 ![NovelForge Logo](https://img.shields.io/badge/NovelForge-AI%20Writing%20Studio-blue?style=for-the-badge)
-![Phase](https://img.shields.io/badge/Phase-3%20Complete-success?style=for-the-badge)
+![Phase](https://img.shields.io/badge/Phase-4%20Complete-success?style=for-the-badge)
 ![Cloudflare](https://img.shields.io/badge/Cloudflare-Pages%2BWorkers-orange?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
 </div>
 
-> 一个基于 Cloudflare 边缘平台的智能小说创作工具，支持 RAG 增强生成、多模态角色设计和多格式导出。
+> 一个基于 Cloudflare 边缘平台的智能小说创作工具，支持 RAG 增强生成、创作辅助系统、多模态角色设计和多格式导出。
 
 ---
 
@@ -34,6 +34,15 @@
 - **AI 视觉分析** - LLaVA 视觉模型自动生成角色描述
 - **多格式导出** - 支持 Markdown/TXT/EPUB/ZIP 多种格式
 - **卷范围选择** - 按卷导出部分章节内容
+
+### Phase 4 · 创作辅助系统 ✅
+- **伏笔管理** - 自动提取伏笔、状态追踪、AI 检测收尾
+- **创作规则** - 定义写作风格、节奏、禁忌等规则
+- **总纲管理** - 版本化总纲、替代多层大纲结构
+- **小说设定** - 统一管理世界观、境界体系、势力、地理等
+- **境界追踪** - 自动检测角色境界突破、记录成长历程
+- **内容搜索** - 章节内容关键词搜索与预览
+- **MCP 集成** - Claude Desktop 直接访问小说数据
 
 ---
 

@@ -1,3 +1,9 @@
+/**
+ * @file ModelConfig.tsx
+ * @description 模型配置组件，管理AI模型的API配置和参数设置
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'

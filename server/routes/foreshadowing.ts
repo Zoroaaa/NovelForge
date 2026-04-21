@@ -1,14 +1,9 @@
 /**
- * NovelForge · 伏笔管理路由（Phase 1.2）
- *
- * API 端点：
- * GET    /api/foreshadowing/:novelId          - 获取小说的所有伏笔
- * POST   /api/foreshadowing                    - 创建新伏笔
- * PUT    /api/foreshadowing/:id                - 更新伏笔
- * DELETE /api/foreshadowing/:id                - 删除伏笔
- * PATCH  /api/foreshadowing/:id/status         - 更新伏笔状态（收尾/放弃）
+ * @file foreshadowing.ts
+ * @description 伏笔管理路由模块，提供伏笔的CRUD操作和状态管理
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
@@ -36,9 +31,12 @@ const UpdateForeshadowingSchema = z.object({
 })
 
 /**
- * GET /api/foreshadowing/:novelId
- *
- * 获取小说的所有伏笔（支持按状态筛选）
+ * GET /:novelId - 获取小说的所有伏笔
+ * @description 获取指定小说的伏笔列表，支持按状态筛选
+ * @param {string} novelId - 小说ID
+ * @param {string} [status] - 状态过滤：open | resolved | abandoned
+ * @param {number} [limit=50] - 返回数量限制
+ * @returns {Object} { foreshadowing: Array }
  */
 router.get('/:novelId', zValidator('query', z.object({
   status: z.enum(['open', 'resolved', 'abandoned']).optional(),
@@ -66,9 +64,14 @@ router.get('/:novelId', zValidator('query', z.object({
 })
 
 /**
- * POST /api/foreshadowing
- *
- * 创建新伏笔
+ * POST / - 创建新伏笔
+ * @param {string} novelId - 小说ID
+ * @param {string} [chapterId] - 章节ID
+ * @param {string} title - 伏笔标题（1-100字符）
+ * @param {string} [description] - 伏笔描述
+ * @param {string} [importance='normal'] - 重要程度：high | normal | low
+ * @returns {Object} { ok: boolean, foreshadowing: Object }
+ * @throws {500} 创建失败
  */
 router.post('/', zValidator('json', CreateForeshadowingSchema), async (c) => {
   const body = c.req.valid('json')
@@ -92,9 +95,16 @@ router.post('/', zValidator('json', CreateForeshadowingSchema), async (c) => {
 })
 
 /**
- * PUT /api/foreshadowing/:id
- *
- * 更新伏笔信息
+ * PUT /:id - 更新伏笔信息
+ * @param {string} id - 伏笔ID
+ * @param {string} [title] - 伏笔标题
+ * @param {string} [description] - 伏笔描述
+ * @param {string} [importance] - 重要程度
+ * @param {string} [status] - 状态：open | resolved | abandoned
+ * @param {string} [resolvedChapterId] - 收尾章节ID
+ * @returns {Object} { ok: boolean, foreshadowing: Object }
+ * @throws {404} 伏笔不存在
+ * @throws {500} 更新失败
  */
 router.put('/:id', zValidator('json', UpdateForeshadowingSchema), async (c) => {
   const id = c.req.param('id')
@@ -133,9 +143,10 @@ router.put('/:id', zValidator('json', UpdateForeshadowingSchema), async (c) => {
 })
 
 /**
- * DELETE /api/foreshadowing/:id
- *
- * 删除伏笔（软删除）
+ * DELETE /:id - 删除伏笔（软删除）
+ * @param {string} id - 伏笔ID
+ * @returns {Object} { ok: boolean }
+ * @throws {500} 删除失败
  */
 router.delete('/:id', async (c) => {
   const id = c.req.param('id')

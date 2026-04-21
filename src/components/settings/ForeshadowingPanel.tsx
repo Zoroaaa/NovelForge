@@ -1,3 +1,9 @@
+/**
+ * @file ForeshadowingPanel.tsx
+ * @description 伏笔管理面板组件，提供伏笔的创建、编辑、状态管理功能
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { toast } from 'sonner'

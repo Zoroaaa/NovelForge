@@ -1,3 +1,9 @@
+/**
+ * @file ReaderPage.tsx
+ * @description 阅读器页面组件，提供小说章节的阅读功能，支持主题、字号、字体设置
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { useQuery } from '@tanstack/react-query'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
@@ -15,6 +21,11 @@ import {
 import { ArrowLeft, ChevronLeft, ChevronRight, Settings2 } from 'lucide-react'
 import { useState } from 'react'
 
+/**
+ * 阅读器页面组件
+ * @description 提供小说章节的阅读功能，支持主题切换、字号调整、字体选择等个性化设置
+ * @returns {JSX.Element} 阅读器页面
+ */
 export default function ReaderPage() {
   const { id, chapterId } = useParams<{ id: string; chapterId?: string }>()
   const navigate = useNavigate()

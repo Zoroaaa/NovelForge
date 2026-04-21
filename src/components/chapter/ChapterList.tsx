@@ -1,3 +1,9 @@
+/**
+ * @file ChapterList.tsx
+ * @description 章节列表组件，提供章节的展示、创建、排序和删除功能
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'

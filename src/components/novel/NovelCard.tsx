@@ -1,3 +1,9 @@
+/**
+ * @file NovelCard.tsx
+ * @description 小说卡片组件，展示单个小说的信息和操作入口
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'

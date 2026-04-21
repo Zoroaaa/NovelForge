@@ -1,3 +1,9 @@
+/**
+ * @file search.ts
+ * @description 搜索路由模块，提供章节内容全文搜索功能
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { Hono } from 'hono'
 import { drizzle } from 'drizzle-orm/d1'
 import { sql } from 'drizzle-orm'
@@ -5,6 +11,15 @@ import type { Env } from '../lib/types'
 
 const router = new Hono<{ Bindings: Env }>()
 
+/**
+ * GET / - 搜索章节内容
+ * @description 在章节内容中进行全文搜索，返回匹配结果
+ * @param {string} q - 搜索关键词（至少2个字符）
+ * @param {string} [novelId] - 小说ID（可选过滤）
+ * @param {number} [limit=20] - 返回结果数量限制
+ * @returns {Object} { query: string, total: number, results: Array }
+ * @throws {400} 查询参数过短
+ */
 router.get('/', async (c) => {
   const db = drizzle(c.env.DB)
   const q = c.req.query('q')

@@ -1,3 +1,9 @@
+/**
+ * @file novels.ts
+ * @description 小说管理路由模块，提供小说CRUD、封面上传等功能
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
@@ -14,6 +20,11 @@ const CreateSchema = z.object({
   genre: z.string().optional(),
 })
 
+/**
+ * GET / - 获取小说列表
+ * @description 获取所有未删除的小说，按更新时间倒序排列
+ * @returns {Array} 小说数组
+ */
 router.get('/', async (c) => {
   const db = drizzle(c.env.DB)
   const rows = await db.select().from(t)
@@ -22,6 +33,12 @@ router.get('/', async (c) => {
   return c.json(rows)
 })
 
+/**
+ * GET /:id - 获取单个小说详情
+ * @param {string} id - 小说ID
+ * @returns {Object} 小说对象
+ * @throws {404} 小说不存在
+ */
 router.get('/:id', async (c) => {
   const db = drizzle(c.env.DB)
   const row = await db.select().from(t).where(eq(t.id, c.req.param('id'))).get()
@@ -29,12 +46,25 @@ router.get('/:id', async (c) => {
   return c.json(row)
 })
 
+/**
+ * POST / - 创建新小说
+ * @param {string} title - 小说标题（必填，1-200字符）
+ * @param {string} [description] - 小说简介
+ * @param {string} [genre] - 小说类型
+ * @returns {Object} 创建的小说对象
+ */
 router.post('/', zValidator('json', CreateSchema), async (c) => {
   const db = drizzle(c.env.DB)
   const [row] = await db.insert(t).values(c.req.valid('json')).returning()
   return c.json(row, 201)
 })
 
+/**
+ * PATCH /:id - 更新小说信息
+ * @param {string} id - 小说ID
+ * @param {Object} body - 更新内容
+ * @returns {Object} 更新后的小说对象
+ */
 router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
   const db = drizzle(c.env.DB)
   const [row] = await db.update(t)
@@ -44,6 +74,11 @@ router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
   return c.json(row)
 })
 
+/**
+ * DELETE /:id - 删除小说（软删除）
+ * @param {string} id - 小说ID
+ * @returns {Object} { ok: boolean }
+ */
 router.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB)
   await db.update(t)
@@ -52,6 +87,14 @@ router.delete('/:id', async (c) => {
   return c.json({ ok: true })
 })
 
+/**
+ * POST /:id/cover - 上传小说封面
+ * @description 上传封面图片到R2存储，自动删除旧封面
+ * @param {string} id - 小说ID
+ * @param {File} body - 图片文件（Content-Type: image/*）
+ * @returns {Object} { ok: boolean, coverUrl: string }
+ * @throws {400} 非图片文件
+ */
 router.post('/:id/cover', async (c) => {
   const id = c.req.param('id')
   const db = drizzle(c.env.DB)
@@ -77,6 +120,13 @@ router.post('/:id/cover', async (c) => {
   return c.json({ ok: true, coverUrl: `/api/novels/${id}/cover` })
 })
 
+/**
+ * GET /:id/cover - 获取小说封面
+ * @description 从R2存储获取封面图片
+ * @param {string} id - 小说ID
+ * @returns {Blob} 封面图片二进制数据
+ * @throws {404} 封面不存在
+ */
 router.get('/:id/cover', async (c) => {
   const id = c.req.param('id')
   const db = drizzle(c.env.DB)

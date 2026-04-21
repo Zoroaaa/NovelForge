@@ -1,12 +1,9 @@
 /**
- * NovelForge · Vision 视觉分析服务
- *
- * 支持功能：
- * - 角色图片上传到 R2 存储
- * - 使用 Cloudflare Workers AI 视觉模型分析图片
- * - 自动生成角色描述（外貌、气质、特征等）
+ * @file vision.ts
+ * @description 视觉分析服务模块，提供角色图片上传和AI视觉分析功能
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import type { Env } from '../lib/types'
 
 export interface ImageAnalysisResult {
@@ -58,12 +55,15 @@ async function uploadToR2(
 }
 
 /**
- * 使用 LLaVA 视觉模型分析图片
- *
- * 针对角色图片，使用专门的 prompt 提取：
- * - 外貌描述（发型、五官、体型、服饰）
- * - 气质特征（冷峻、温柔、霸气等）
- * - 可能的性格标签
+ * 使用LLaVA视觉模型分析图片
+ * @description 针对角色图片，提取外貌描述、气质特征、性格标签等信息
+ * @param {Env} env - 环境变量对象
+ * @param {ArrayBuffer} imageBuffer - 图片二进制数据
+ * @param {Object} [options] - 可选配置
+ * @param {string} [options.characterName] - 角色名称
+ * @param {string} [options.role] - 角色定位
+ * @returns {Promise<ImageAnalysisResult>} 分析结果
+ * @throws {Error} Workers AI未配置或分析失败
  */
 export async function analyzeCharacterImage(
   env: Env,
@@ -102,7 +102,16 @@ export async function analyzeCharacterImage(
 }
 
 /**
- * 完整流程：上传 + 分析
+ * 完整流程：上传图片并可选进行视觉分析
+ * @param {Env} env - 环境变量对象
+ * @param {File | Blob} imageFile - 图片文件
+ * @param {string} novelId - 小说ID
+ * @param {string} characterId - 角色ID
+ * @param {Object} [options] - 可选配置
+ * @param {string} [options.characterName] - 角色名称
+ * @param {string} [options.role] - 角色定位
+ * @param {boolean} [options.skipAnalysis] - 是否跳过AI分析
+ * @returns {Promise<UploadResult>} 上传结果
  */
 export async function uploadAndAnalyzeImage(
   env: Env,

@@ -1,3 +1,9 @@
+/**
+ * @file StreamOutput.tsx
+ * @description 流式输出组件，展示AI生成的内容流和复制功能
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Copy, Check } from 'lucide-react'

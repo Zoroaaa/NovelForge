@@ -1,3 +1,9 @@
+/**
+ * @file CreateNovelDialog.tsx
+ * @description 创建小说对话框组件，提供新建小说的表单界面
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { useState } from 'react'
 import {
   Dialog,

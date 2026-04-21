@@ -1,3 +1,9 @@
+/**
+ * @file settings.ts
+ * @description 模型配置路由模块，提供模型配置的CRUD操作，支持全局配置和小说级配置
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
@@ -20,6 +26,13 @@ const CreateSchema = z.object({
   params: z.string().optional(),
 })
 
+/**
+ * GET / - 获取模型配置列表
+ * @description 获取模型配置，支持按小说ID和阶段过滤，优先返回小说级配置
+ * @param {string} [novelId] - 小说ID（查询参数）
+ * @param {string} [stage] - 生成阶段（查询参数）
+ * @returns {Array} 模型配置数组
+ */
 router.get('/', async (c) => {
   const novelId = c.req.query('novelId')
   const stage = c.req.query('stage')
@@ -57,12 +70,31 @@ router.get('/', async (c) => {
   return c.json(await query.where(eq(t.scope, 'global')))
 })
 
+/**
+ * POST / - 创建模型配置
+ * @param {string} [novelId] - 小说ID（可选，不填则为全局配置）
+ * @param {string} scope - 配置范围：global | novel
+ * @param {string} stage - 生成阶段
+ * @param {string} provider - 模型提供商
+ * @param {string} modelId - 模型ID
+ * @param {string} [apiBase] - API基础URL
+ * @param {string} apiKeyEnv - API密钥环境变量名
+ * @param {string} [apiKey] - API密钥（可选）
+ * @param {string} [params] - 模型参数JSON
+ * @returns {Object} 创建的配置对象
+ */
 router.post('/', zValidator('json', CreateSchema), async (c) => {
   const db = drizzle(c.env.DB)
   const [row] = await db.insert(t).values(c.req.valid('json')).returning()
   return c.json(row, 201)
 })
 
+/**
+ * PATCH /:id - 更新模型配置
+ * @param {string} id - 配置ID
+ * @param {Object} body - 更新内容
+ * @returns {Object} 更新后的配置对象
+ */
 router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
   const db = drizzle(c.env.DB)
   const [row] = await db.update(t)
@@ -72,6 +104,11 @@ router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
   return c.json(row)
 })
 
+/**
+ * DELETE /:id - 删除模型配置
+ * @param {string} id - 配置ID
+ * @returns {Object} { ok: boolean }
+ */
 router.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB)
   await db.delete(t).where(eq(t.id, c.req.param('id')))

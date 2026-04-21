@@ -1,12 +1,9 @@
 /**
- * NovelForge · 伏笔追踪服务（Phase 1.2）
- *
- * 功能：
- * - 章节生成完成后自动提取新埋入的伏笔
- * - 自动检测已收尾的伏笔并更新状态
- * - 提供伏笔 CRUD API 支持
+ * @file foreshadowing.ts
+ * @description 伏笔追踪服务模块，提供伏笔自动提取、状态检测和CRUD功能
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { drizzle } from 'drizzle-orm/d1'
 import { foreshadowing, chapters } from '../db/schema'
 import { eq, and, isNull } from 'drizzle-orm'

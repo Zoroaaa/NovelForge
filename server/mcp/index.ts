@@ -1,17 +1,9 @@
 /**
- * NovelForge · MCP Server
- *
- * Model Context Protocol (MCP) 实现
- * 暴露核心工具供 Claude Desktop 等客户端使用
- *
- * 工具列表:
- * - queryNovels: 查询小说列表
- * - queryOutlines: 查询大纲
- * - queryChapters: 查询章节
- * - generateChapter: 生成章节
- * - searchSemantic: 语义搜索
+ * @file index.ts
+ * @description MCP Server实现，暴露核心工具供Claude Desktop等客户端使用
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { drizzle } from 'drizzle-orm/d1'
 import { eq, and, isNull, desc, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'

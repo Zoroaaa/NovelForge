@@ -1,3 +1,9 @@
+/**
+ * @file useGenerate.ts
+ * @description AI生成Hook，封装章节生成的流式处理逻辑和状态管理
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { useState, useRef } from 'react'
 import { toast } from 'sonner'
 import { streamGenerate } from '@/lib/api'

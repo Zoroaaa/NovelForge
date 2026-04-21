@@ -1,3 +1,9 @@
+/**
+ * @file Sidebar.tsx
+ * @description 侧边栏组件，提供章节、角色、设定、规则等功能的标签页切换
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { ChapterList } from '@/components/chapter/ChapterList'
 import { CharacterList } from '@/components/character/CharacterList'
 import { SettingsPanel } from '@/components/settings/SettingsPanel'

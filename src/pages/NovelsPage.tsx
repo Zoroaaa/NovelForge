@@ -1,3 +1,9 @@
+/**
+ * @file NovelsPage.tsx
+ * @description 小说列表页面组件，提供小说的展示、搜索、筛选和创建功能
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Search, Filter, BookOpen, Sparkles } from 'lucide-react'
@@ -10,6 +16,11 @@ import { Badge } from '@/components/ui/badge'
 import type { Novel, NovelInput } from '@/lib/types'
 import { useState, useMemo } from 'react'
 
+/**
+ * 小说列表页面组件
+ * @description 展示用户的所有小说，支持搜索、筛选、创建、编辑和删除操作
+ * @returns {JSX.Element} 小说列表页面
+ */
 export default function NovelsPage() {
   const queryClient = useQueryClient()
   const [searchQuery, setSearchQuery] = useState('')

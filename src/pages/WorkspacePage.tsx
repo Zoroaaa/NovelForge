@@ -1,3 +1,9 @@
+/**
+ * @file WorkspacePage.tsx
+ * @description 工作台页面组件，提供章节编辑、AI生成、导出等核心功能
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { useState } from 'react'
@@ -13,6 +19,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PenLine, Sparkles, FileDown, AlertTriangle, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
+/**
+ * 工作台页面组件
+ * @description 提供章节编辑、AI内容生成、小说导出等核心功能的工作界面
+ * @returns {JSX.Element} 工作台页面
+ */
 export default function WorkspacePage() {
   const { id } = useParams<{ id: string }>()
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null)

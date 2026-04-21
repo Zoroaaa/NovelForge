@@ -1,13 +1,9 @@
 /**
- * NovelForge · WorkspaceHeader 工作台顶部导航栏
- *
- * 功能：
- * - 返回小说列表
- * - 显示当前小说标题
- * - 进入阅读器
- * - 全局模型配置入口（无需选择章节）
+ * @file WorkspaceHeader.tsx
+ * @description 工作台顶部导航栏组件，提供返回、标题显示、阅读器入口和模型配置功能
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { Link } from 'react-router-dom'
 import { ArrowLeft, BookOpen, Settings2, Home } from 'lucide-react'
 import { Button } from '@/components/ui/button'

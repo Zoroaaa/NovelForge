@@ -1,7 +1,9 @@
 /**
- * NovelForge · 全文搜索组件
+ * @file SearchBar.tsx
+ * @description 全文搜索组件，提供章节内容的全文搜索功能
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'

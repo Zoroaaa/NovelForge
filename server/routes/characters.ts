@@ -1,3 +1,9 @@
+/**
+ * @file characters.ts
+ * @description 角色管理路由模块，提供角色CRUD、图片上传、AI视觉分析等功能
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
@@ -11,6 +17,11 @@ import {
 } from '../services/vision'
 import { indexContent, deindexContent } from '../services/embedding'
 
+/**
+ * 异步执行任务（不阻塞主流程）
+ * @param {any} c - Hono上下文对象
+ * @param {Promise<void> | void} fn - 要异步执行的函数
+ */
 async function safeWaitUntil(c: any, fn: Promise<void> | void) {
   const ctx = (c as any).executionContext
   if (ctx?.waitUntil) {
@@ -31,6 +42,13 @@ const CreateSchema = z.object({
   attributes: z.string().optional(),
 })
 
+/**
+ * GET / - 获取角色列表
+ * @description 获取指定小说的所有角色
+ * @param {string} novelId - 小说ID（查询参数）
+ * @returns {Array} 角色数组
+ * @throws {400} 缺少novelId参数
+ */
 router.get('/', async (c) => {
   const novelId = c.req.query('novelId')
   if (!novelId) return c.json({ error: 'novelId required' }, 400)
@@ -40,6 +58,12 @@ router.get('/', async (c) => {
   return c.json(rows)
 })
 
+/**
+ * GET /:id - 获取单个角色详情
+ * @param {string} id - 角色ID
+ * @returns {Object} 角色对象
+ * @throws {404} 角色不存在
+ */
 router.get('/:id', async (c) => {
   const db = drizzle(c.env.DB)
   const row = await db.select().from(t).where(eq(t.id, c.req.param('id'))).get()
@@ -47,12 +71,29 @@ router.get('/:id', async (c) => {
   return c.json(row)
 })
 
+/**
+ * POST / - 创建新角色
+ * @param {string} novelId - 所属小说ID
+ * @param {string} name - 角色名称
+ * @param {string} [aliases] - 角色别名
+ * @param {string} [role] - 角色定位
+ * @param {string} [description] - 角色描述
+ * @param {string} [attributes] - 角色属性
+ * @returns {Object} 创建的角色对象
+ */
 router.post('/', zValidator('json', CreateSchema), async (c) => {
   const db = drizzle(c.env.DB)
   const [row] = await db.insert(t).values(c.req.valid('json')).returning()
   return c.json(row, 201)
 })
 
+/**
+ * PATCH /:id - 更新角色信息
+ * @description 更新角色信息，描述更新时自动触发向量化
+ * @param {string} id - 角色ID
+ * @param {Object} body - 更新内容
+ * @returns {Object} 更新后的角色对象
+ */
 router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
   const db = drizzle(c.env.DB)
   const id = c.req.param('id')
@@ -77,6 +118,11 @@ router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
   return c.json(row)
 })
 
+/**
+ * DELETE /:id - 删除角色（软删除）
+ * @param {string} id - 角色ID
+ * @returns {Object} { ok: boolean }
+ */
 router.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB)
   await db.update(t)

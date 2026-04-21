@@ -1,10 +1,9 @@
 /**
- * NovelForge · Agent 上下文组装器（v2.0 重构版）
- *
- * 章节生成时，决定注入哪些内容作为 LLM 上下文。
- * 策略：强制注入（小体积高相关）+ RAG 检索（语义相关设定/大纲片段）
+ * @file contextBuilder.ts
+ * @description Agent上下文组装器模块，负责章节生成时的上下文构建，包括强制注入和RAG检索
+ * @version 2.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { drizzle } from 'drizzle-orm/d1'
 import { chapters, volumes, characters, modelConfigs, foreshadowing, novelSettings, masterOutline } from '../db/schema'
 import { eq, and, sql, desc } from 'drizzle-orm'
@@ -49,20 +48,30 @@ export const DEFAULT_BUDGET = {
   systemPrompt: 2000,
 }
 
+/**
+ * 构建章节上下文
+ * @description 组装章节生成所需的上下文，包括强制注入内容和RAG检索结果
+ * @param {Env} env - 环境变量对象
+ * @param {string} novelId - 小说ID
+ * @param {string} chapterId - 章节ID
+ * @param {Object} [budget] - Token预算配置
+ * @param {Object} [options] - 可选配置
+ * @param {number} [options.summaryChainLength] - 摘要链长度（0-15）
+ * @returns {Promise<ContextBundle>} 上下文包
+ */
 export async function buildChapterContext(
   env: Env,
   novelId: string,
   chapterId: string,
   budget = DEFAULT_BUDGET,
   options?: {
-    summaryChainLength?: number  // Phase 1.1: 摘要链长度（默认5，最大15）
+    summaryChainLength?: number
   }
 ): Promise<ContextBundle> {
   const startTime = Date.now()
   const db = drizzle(env.DB)
 
-  // Phase 1.1: 获取可配置的摘要链长度
-  let summaryChainLength = options?.summaryChainLength || 5
+  const summaryChainLength = options?.summaryChainLength || 5
   summaryChainLength = Math.min(Math.max(summaryChainLength, 0), 15) // 限制范围 0-15
 
   try {

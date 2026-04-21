@@ -1,14 +1,9 @@
 /**
- * NovelForge · 创作规则路由（v2.0）
- *
- * API 端点：
- * GET    /api/v1/rules/:novelId              - 获取所有规则
- * POST   /api/v1/rules                        - 创建新规则
- * PUT    /api/v1/rules/:id                    - 更新规则
- * DELETE /api/v1/rules/:id                    - 删除规则
- * PATCH  /api/v1/rules/:id/toggle             - 启用/禁用规则
+ * @file writing-rules.ts
+ * @description 创作规则路由模块，提供写作风格、禁忌等规则的CRUD操作
+ * @version 2.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
@@ -37,7 +32,14 @@ const UpdateRuleSchema = z.object({
   isActive: z.number().min(0).max(1).optional(),
 })
 
-// GET /rules/:novelId - 获取所有创作规则
+/**
+ * GET /:novelId - 获取所有创作规则
+ * @description 获取指定小说的创作规则列表，支持分类和状态筛选
+ * @param {string} novelId - 小说ID
+ * @param {string} [category] - 规则分类：style | pacing | character | plot | world | taboo | custom
+ * @param {boolean} [activeOnly=false] - 仅返回启用的规则
+ * @returns {Object} { rules: Array }
+ */
 router.get('/:novelId', zValidator('query', z.object({
   category: z.enum(['style', 'pacing', 'character', 'plot', 'world', 'taboo', 'custom']).optional(),
   activeOnly: z.coerce.boolean().optional().default(false),
@@ -67,7 +69,17 @@ router.get('/:novelId', zValidator('query', z.object({
   return c.json({ rules })
 })
 
-// POST /rules - 创建新规则
+/**
+ * POST / - 创建新规则
+ * @param {string} novelId - 小说ID
+ * @param {string} category - 规则分类
+ * @param {string} title - 规则标题（1-100字符）
+ * @param {string} content - 规则内容
+ * @param {number} [priority=3] - 优先级（1-5）
+ * @param {number} [sortOrder=0] - 排序顺序
+ * @returns {Object} { ok: boolean, rule: Object }
+ * @throws {500} 创建失败
+ */
 router.post('/', zValidator('json', CreateRuleSchema), async (c) => {
   const body = c.req.valid('json')
   const db = drizzle(c.env.DB)
@@ -89,7 +101,13 @@ router.post('/', zValidator('json', CreateRuleSchema), async (c) => {
   }
 })
 
-// PUT /rules/:id - 更新规则
+/**
+ * PUT /:id - 更新规则
+ * @param {string} id - 规则ID
+ * @param {Object} body - 更新内容
+ * @returns {Object} { ok: boolean, rule: Object }
+ * @throws {500} 更新失败
+ */
 router.put('/:id', zValidator('json', UpdateRuleSchema), async (c) => {
   const id = c.req.param('id')
   const body = c.req.valid('json')
@@ -118,7 +136,11 @@ router.put('/:id', zValidator('json', UpdateRuleSchema), async (c) => {
   }
 })
 
-// DELETE /rules/:id - 删除规则（软删除）
+/**
+ * DELETE /:id - 删除规则（软删除）
+ * @param {string} id - 规则ID
+ * @returns {Object} { ok: boolean }
+ */
 router.delete('/:id', async (c) => {
   const id = c.req.param('id')
   const db = drizzle(c.env.DB)
@@ -131,7 +153,13 @@ router.delete('/:id', async (c) => {
   return c.json({ ok: true })
 })
 
-// PATCH /rules/:id/toggle - 启用/禁用规则
+/**
+ * PATCH /:id/toggle - 启用/禁用规则
+ * @description 切换规则的启用状态
+ * @param {string} id - 规则ID
+ * @returns {Object} { ok: boolean, isActive: number }
+ * @throws {404} 规则不存在
+ */
 router.patch('/:id/toggle', async (c) => {
   const id = c.req.param('id')
   const db = drizzle(c.env.DB)

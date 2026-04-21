@@ -1,15 +1,9 @@
 /**
- * NovelForge · 小说设定路由（v2.0）
- *
- * API 端点：
- * GET    /api/v1/settings/:novelId           - 获取所有设定
- * GET    /api/v1/settings/:novelId/:id       - 获取单个设定
- * POST   /api/v1/settings                    - 创建新设定
- * PUT    /api/v1/settings/:id                - 更新设定
- * DELETE /api/v1/settings/:id                - 删除设定
- * GET    /api/v1/settings/tree/:novelId      - 获取树形结构
+ * @file novel-settings.ts
+ * @description 小说设定路由模块，提供世界观、力量体系、势力等设定的管理
+ * @version 2.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
@@ -45,7 +39,17 @@ const UpdateSettingSchema = z.object({
   sortOrder: z.number().optional(),
 })
 
-// GET /settings/:novelId - 获取小说的所有设定（支持分页和筛选）
+/**
+ * GET /:novelId - 获取小说的所有设定
+ * @description 获取指定小说的设定列表，支持分页和多条件筛选
+ * @param {string} novelId - 小说ID
+ * @param {string} [type] - 设定类型：worldview | power_system | faction | geography | item_skill | misc
+ * @param {string} [category] - 分类过滤
+ * @param {string} [importance] - 重要程度：high | normal | low
+ * @param {number} [limit=50] - 返回数量限制
+ * @param {number} [offset=0] - 偏移量
+ * @returns {Object} { settings: Array, total: number, limit: number, offset: number }
+ */
 router.get('/:novelId', zValidator('query', z.object({
   type: z.enum(['worldview', 'power_system', 'faction', 'geography', 'item_skill', 'misc']).optional(),
   category: z.string().optional(),
@@ -97,7 +101,13 @@ router.get('/:novelId', zValidator('query', z.object({
   })
 })
 
-// GET /settings/:novelId/:id - 获取单个设定的详细信息
+/**
+ * GET /:novelId/:id - 获取单个设定的详细信息
+ * @param {string} novelId - 小说ID
+ * @param {string} id - 设定ID
+ * @returns {Object} { setting: Object }
+ * @throws {404} 设定不存在
+ */
 router.get('/:novelId/:id', async (c) => {
   const { novelId, id } = c.req.param() as { novelId: string; id: string }
   const db = drizzle(c.env.DB)
@@ -118,7 +128,20 @@ router.get('/:novelId/:id', async (c) => {
   return c.json({ setting })
 })
 
-// POST /settings - 创建新设定
+/**
+ * POST / - 创建新设定
+ * @param {string} novelId - 小说ID
+ * @param {string} type - 设定类型
+ * @param {string} [category] - 分类
+ * @param {string} name - 设定名称（1-100字符）
+ * @param {string} content - 设定内容
+ * @param {string} [attributes] - 属性JSON
+ * @param {string} [parentId] - 父设定ID
+ * @param {string} [importance='normal'] - 重要程度
+ * @param {string} [relatedIds] - 关联ID列表JSON
+ * @returns {Object} { ok: boolean, setting: Object }
+ * @throws {500} 创建失败
+ */
 router.post('/', zValidator('json', CreateSettingSchema), async (c) => {
   const body = c.req.valid('json')
   const db = drizzle(c.env.DB)
@@ -143,7 +166,14 @@ router.post('/', zValidator('json', CreateSettingSchema), async (c) => {
   }
 })
 
-// PUT /settings/:id - 更新设定
+/**
+ * PUT /:id - 更新设定
+ * @param {string} id - 设定ID
+ * @param {Object} body - 更新内容
+ * @returns {Object} { ok: boolean, setting: Object }
+ * @throws {404} 设定不存在
+ * @throws {500} 更新失败
+ */
 router.put('/:id', zValidator('json', UpdateSettingSchema), async (c) => {
   const id = c.req.param('id')
   const body = c.req.valid('json')
@@ -184,7 +214,12 @@ router.put('/:id', zValidator('json', UpdateSettingSchema), async (c) => {
   }
 })
 
-// DELETE /settings/:id - 删除设定（软删除）
+/**
+ * DELETE /:id - 删除设定（软删除）
+ * @param {string} id - 设定ID
+ * @returns {Object} { ok: boolean }
+ * @throws {500} 删除失败
+ */
 router.delete('/:id', async (c) => {
   const id = c.req.param('id')
   const db = drizzle(c.env.DB)
@@ -202,7 +237,12 @@ router.delete('/:id', async (c) => {
   }
 })
 
-// GET /settings/tree/:novelId - 获取树形结构的设定列表
+/**
+ * GET /tree/:novelId - 获取树形结构的设定列表
+ * @description 获取设定树形结构，按父子关系组织
+ * @param {string} novelId - 小说ID
+ * @returns {Object} { tree: Array, stats: Object, total: number }
+ */
 router.get('/tree/:novelId', async (c) => {
   const novelId = c.req.param('novelId')
   const db = drizzle(c.env.DB)

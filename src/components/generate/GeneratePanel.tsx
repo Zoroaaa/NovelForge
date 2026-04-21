@@ -1,3 +1,9 @@
+/**
+ * @file GeneratePanel.tsx
+ * @description AI生成面板组件，提供章节生成、续写、重写等功能，支持上下文预览和角色一致性检查
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Square, PenLine, Brain, Shield, RefreshCw, Play } from 'lucide-react'
@@ -9,17 +15,32 @@ import {
 } from './ContextPreview'
 import { CharacterConsistencyCheck } from './CharacterConsistencyCheck'
 
+/**
+ * AI生成面板组件属性
+ */
 interface GeneratePanelProps {
+  /** 小说ID */
   novelId: string
+  /** 章节ID */
   chapterId: string
+  /** 章节标题 */
   chapterTitle: string
+  /** 内容插入回调 */
   onInsertContent: (content: string) => void
+  /** 上下文更新回调 */
   onContextUpdate?: (context: ContextBundle | null) => void
-  existingContent?: string  // Phase 1.6: 当前编辑器中的已有内容
+  /** 当前编辑器中的已有内容（用于续写/重写模式） */
+  existingContent?: string
 }
 
 type GenerationMode = 'generate' | 'continue' | 'rewrite'
 
+/**
+ * AI生成面板组件
+ * @description 提供章节生成、续写、重写功能，支持上下文预览和角色一致性检查
+ * @param {GeneratePanelProps} props - 组件属性
+ * @returns {JSX.Element} 生成面板组件
+ */
 export function GeneratePanel({
   novelId,
   chapterId,

@@ -2,17 +2,23 @@
 
 ## 概述
 
-NovelForge 现已支持 MCP (Model Context Protocol)，允许 Claude Desktop 直接访问小说数据。
+NovelForge 现已支持 MCP (Model Context Protocol)，允许 Claude Desktop 直接访问小说数据。此功能从 v1.4.0 版本开始提供。
 
 ## 支持的 MCP 工具
 
-| 工具名 | 描述 |
-|--------|------|
-| `queryNovels` | 查询小说列表 |
-| `queryOutlines` | 查询指定小说的大纲结构 |
-| `queryChapters` | 查询指定小说的章节列表 |
-| `getChapterContent` | 获取指定章节的完整内容 |
-| `searchSemantic` | 语义搜索相关大纲、章节或角色 |
+| 工具名 | 描述 | 参数 |
+|--------|------|------|
+| `queryNovels` | 查询小说列表 | `limit` - 返回数量限制 |
+| `queryOutlines` | 查询指定小说的大纲结构 | `novelId` - 小说ID |
+| `queryChapters` | 查询指定小说的章节列表 | `novelId` - 小说ID, `limit` - 返回数量 |
+| `getChapterContent` | 获取指定章节的完整内容 | `chapterId` - 章节ID |
+| `searchSemantic` | 语义搜索相关大纲、章节或角色 | `novelId` - 小说ID, `query` - 搜索文本, `topK` - 返回数量 |
+
+## 前置要求
+
+- NovelForge v1.4.0 或更高版本
+- 已部署的 NovelForge 实例
+- Vectorize 索引已创建（用于语义搜索功能）
 
 ## Claude Desktop 配置
 

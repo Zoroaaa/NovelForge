@@ -1,16 +1,11 @@
 /**
- * NovelForge · 导出服务层
- *
- * 支持多格式导出：
- * - Markdown (.md)
- * - 纯文本 (.txt)
- * - EPUB 电子书 (.epub)
- * - PDF 文档 (.pdf)
- * - ZIP 打包下载 (.zip)
+ * @file export.ts
+ * @description 导出服务模块，支持Markdown、TXT、EPUB、PDF、ZIP等多种格式导出
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { drizzle } from 'drizzle-orm/d1'
-import { novels, chapters, volumes } from '../db/schema'
+import { novels, chapters, volumes, exports } from '../db/schema'
 import { eq, and, isNull, asc } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 
@@ -100,7 +95,10 @@ async function loadNovelData(db: any, options: Omit<ExportOptions, 'format'>): P
 // ========== 导出格式实现 ==========
 
 /**
- * 导出为 Markdown 格式
+ * 导出为Markdown格式
+ * @param {Env} env - 环境变量对象
+ * @param {ExportOptions} options - 导出选项
+ * @returns {Promise<Blob>} Markdown文件Blob
  */
 export async function exportAsMarkdown(env: Env, options: ExportOptions): Promise<Blob> {
   const db = drizzle(env.DB)
@@ -142,6 +140,9 @@ export async function exportAsMarkdown(env: Env, options: ExportOptions): Promis
 
 /**
  * 导出为纯文本格式
+ * @param {Env} env - 环境变量对象
+ * @param {ExportOptions} options - 导出选项
+ * @returns {Promise<Blob>} 纯文本文件Blob
  */
 export async function exportAsTxt(env: Env, options: ExportOptions): Promise<Blob> {
   const db = drizzle(env.DB)
@@ -174,7 +175,12 @@ export async function exportAsTxt(env: Env, options: ExportOptions): Promise<Blo
 }
 
 /**
- * 导出为 EPUB 格式（使用 epub-gen-memory）
+ * 导出为EPUB格式
+ * @description 使用epub-gen-memory库生成EPUB电子书
+ * @param {Env} env - 环境变量对象
+ * @param {ExportOptions} options - 导出选项
+ * @returns {Promise<Blob>} EPUB文件Blob
+ * @throws {Error} EPUB生成失败
  */
 export async function exportAsEpub(env: Env, options: ExportOptions): Promise<Blob> {
   try {
@@ -444,4 +450,114 @@ function sanitizeFilename(name: string): string {
     .replace(/[<>:"/\\|?*]/g, '_')
     .replace(/\s+/g, '_')
     .substring(0, 100)
+}
+
+export interface ExportRecord {
+  id: string
+  novelId: string
+  format: string
+  scope: string
+  scopeMeta: string | null
+  r2Key: string | null
+  fileSize: number | null
+  status: string
+  errorMsg: string | null
+}
+
+export async function createExportRecord(
+  env: Env,
+  data: {
+    novelId: string
+    format: string
+    scope: string
+    scopeMeta?: string | null
+  }
+): Promise<ExportRecord> {
+  const db = drizzle(env.DB)
+  const [record] = await db.insert(exports).values({
+    novelId: data.novelId,
+    format: data.format,
+    scope: data.scope,
+    scopeMeta: data.scopeMeta || null,
+    status: 'processing',
+  }).returning()
+  return record as ExportRecord
+}
+
+export async function updateExportRecord(
+  env: Env,
+  exportId: string,
+  data: {
+    status?: string
+    r2Key?: string
+    fileSize?: number
+    errorMsg?: string
+  }
+): Promise<void> {
+  const db = drizzle(env.DB)
+  await db.update(exports).set(data).where(eq(exports.id, exportId))
+}
+
+/**
+ * 执行导出操作
+ * @description 根据格式类型调用对应的导出函数
+ * @param {Env} env - 环境变量对象
+ * @param {ExportOptions} options - 导出选项
+ * @returns {Promise<{blob: Blob, contentType: string, fileExtension: string, filename: string}>} 导出结果
+ * @throws {Error} 不支持的格式
+ */
+export async function performExport(
+  env: Env,
+  options: ExportOptions
+): Promise<{ blob: Blob; contentType: string; fileExtension: string; filename: string }> {
+  const { format } = options
+  let blob: Blob
+  const contentType = getContentType(format)
+  const fileExtension = getFileExtension(format)
+
+  switch (format) {
+    case 'md':
+      blob = await exportAsMarkdown(env, options)
+      break
+    case 'txt':
+      blob = await exportAsTxt(env, options)
+      break
+    case 'epub':
+      blob = await exportAsEpub(env, options)
+      break
+    case 'pdf':
+      blob = await exportAsPdf(env, options)
+      break
+    case 'zip':
+      blob = await exportAsZip(env, options)
+      break
+    default:
+      throw new Error(`Unsupported format: ${format}`)
+  }
+
+  const filename = `novel_${options.novelId}_${Date.now()}.${fileExtension}`
+  return { blob, contentType, fileExtension, filename }
+}
+
+function getContentType(format: string): string {
+  switch (format) {
+    case 'md':
+      return 'text/markdown; charset=utf-8'
+    case 'txt':
+      return 'text/plain; charset=utf-8'
+    case 'epub':
+      return 'application/epub+zip'
+    case 'pdf':
+      return 'text/html; charset=utf-8'
+    case 'zip':
+      return 'application/zip'
+    default:
+      return 'application/octet-stream'
+  }
+}
+
+function getFileExtension(format: string): string {
+  if (format === 'epub') return 'epub'
+  if (format === 'pdf') return 'html'
+  return format
 }

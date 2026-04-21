@@ -1,16 +1,14 @@
 /**
- * NovelForge · LLM 服务层
- *
- * 支持功能：
- * - 多提供商 LLM API 统一封装 (Volcengine/Anthropic/OpenAI)
- * - 流式生成 (SSE)
- * - 模型配置解析与管理
- * - Token 计数与预算控制
+ * @file llm.ts
+ * @description LLM服务层模块，提供多提供商API统一封装、流式生成、模型配置管理等功能
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { modelConfigs } from '../db/schema'
 import { eq, and, desc } from 'drizzle-orm'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
+import { drizzle } from 'drizzle-orm/d1'
+import type { Env } from '../lib/types'
 
 export interface LLMConfig {
   provider: 'volcengine' | 'anthropic' | 'openai'
@@ -59,11 +57,12 @@ const DEFAULT_PARAMS: ModelParams = {
 
 /**
  * 解析模型配置
- * 
- * 优先级：
- * 1. 小说级别的 stage 配置（如 chapter_gen, summary_gen）
- * 2. 全局默认配置
- * 3. 硬编码 fallback
+ * @description 按优先级获取模型配置：小说级配置 > 全局配置 > 硬编码fallback
+ * @param {DrizzleD1Database} db - 数据库实例
+ * @param {string} stage - 生成阶段（如chapter_gen, summary_gen）
+ * @param {string} novelId - 小说ID
+ * @returns {Promise<LLMConfig>} LLM配置对象
+ * @throws {Error} 未找到对应阶段的配置
  */
 export async function resolveConfig(
   db: DrizzleD1Database,
@@ -128,6 +127,14 @@ export async function resolveConfig(
 
 /**
  * 流式生成文本
+ * @param {LLMConfig} config - LLM配置对象
+ * @param {Message[]} messages - 消息数组
+ * @param {StreamOptions} options - 流式选项
+ * @param {Function} [options.onChunk] - 每次收到内容块的回调
+ * @param {Function} [options.onDone] - 生成完成的回调
+ * @param {Function} [options.onError] - 发生错误的回调
+ * @param {Array} [tools] - 可选的工具定义数组
+ * @returns {Promise<void>}
  */
 export async function streamGenerate(
   config: LLMConfig,
@@ -245,6 +252,11 @@ export async function streamGenerate(
 
 /**
  * 非流式生成（用于摘要等场景）
+ * @param {LLMConfig} config - LLM配置对象
+ * @param {Message[]} messages - 消息数组
+ * @param {Object} [options] - 可选配置
+ * @param {Function} [options.onToken] - 每次收到token的回调
+ * @returns {Promise<{text: string, usage: {prompt_tokens: number, completion_tokens: number}}>} 生成结果
  */
 export async function generate(
   config: LLMConfig,
@@ -336,4 +348,90 @@ function estimateTokens(text: string): number {
   const cjk = (text.match(/[\u4e00-\u9fff]/g) || []).length
   const other = text.length - cjk
   return Math.ceil(cjk * 1.3 + other * 0.3)
+}
+
+export async function generateOutline(
+  env: Env,
+  data: {
+    novelId: string
+    title: string
+    type: string
+    parentTitle?: string
+    context?: string
+  }
+): Promise<string> {
+  const { novelId, title, type, parentTitle, context } = data
+  const db = drizzle(env.DB)
+
+  let llmConfig
+  try {
+    llmConfig = await resolveConfig(db, 'outline_gen', novelId)
+    llmConfig.apiKey = llmConfig.apiKey || (env as any)[llmConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
+  } catch {
+    try {
+      llmConfig = await resolveConfig(db, 'chapter_gen', novelId)
+      llmConfig.apiKey = llmConfig.apiKey || (env as any)[llmConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
+    } catch {
+      llmConfig = {
+        provider: 'volcengine',
+        modelId: 'doubao-seed-2-pro',
+        apiBase: 'https://ark.cn-beijing.volces.com/api/v3',
+        apiKey: (env as any).VOLCENGINE_API_KEY || '',
+        params: { temperature: 0.85, max_tokens: 4096 },
+      }
+    }
+  }
+
+  const typeLabels: Record<string, string> = {
+    world_setting: '世界观设定',
+    volume: '卷纲',
+    chapter_outline: '章节大纲',
+    arc: '故事线',
+    custom: '自定义大纲',
+  }
+
+  const typeLabel = typeLabels[type] || '大纲'
+
+  const outlinePrompt = `请为小说生成${typeLabel}内容。
+
+【标题】：${title}
+【类型】：${typeLabel}
+${parentTitle ? `【上级节点】：${parentTitle}` : ''}
+${context ? `【补充上下文】：\n${context}` : ''}
+
+要求：
+1. 内容详细、结构清晰
+2. 符合${typeLabel}的定位和作用
+3. 如果是章节大纲，包含情节走向、关键冲突、人物动态
+4. 如果是卷纲，包含本卷主线、重要转折点、人物成长
+5. 如果是世界观设定，包含地理、势力、修炼体系、历史背景
+6. 使用 Markdown 格式
+7. 字数 800-2000 字`
+
+  const base = llmConfig.apiBase || getDefaultBase(llmConfig.provider)
+  const resp = await fetch(`${base}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${llmConfig.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: llmConfig.modelId,
+      messages: [
+        { role: 'system', content: '你是一个专业的小说大纲助手，擅长构建世界观、卷纲和章节大纲。' },
+        { role: 'user', content: outlinePrompt },
+      ],
+      stream: false,
+      temperature: 0.85,
+      max_tokens: 4096,
+    }),
+  })
+
+  if (!resp.ok) {
+    const errorText = await resp.text()
+    throw new Error(`生成失败: ${resp.status} ${errorText}`)
+  }
+
+  const result = await resp.json() as any
+  return result.choices?.[0]?.message?.content || ''
 }

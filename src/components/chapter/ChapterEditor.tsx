@@ -1,3 +1,9 @@
+/**
+ * @file ChapterEditor.tsx
+ * @description 章节编辑器组件，基于Tipoff实现富文本编辑，支持自动保存和内容注入
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { useMutation } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { EditorRoot, EditorContent, type EditorInstance } from 'novel'
@@ -8,12 +14,24 @@ import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { PenLine, RotateCcw } from 'lucide-react'
 
+/**
+ * 章节编辑器组件属性
+ */
 interface ChapterEditorProps {
+  /** 章节数据对象 */
   chapter: Chapter
+  /** 可选的注入内容（从AI生成面板插入） */
   injectedContent?: string
+  /** 内容插入完成后的回调 */
   onContentInserted?: () => void
 }
 
+/**
+ * 章节编辑器组件
+ * @description 基于Tipoff的富文本编辑器，支持自动保存、内容注入和撤销功能
+ * @param {ChapterEditorProps} props - 组件属性
+ * @returns {JSX.Element} 编辑器组件
+ */
 export function ChapterEditor({ chapter, injectedContent, onContentInserted }: ChapterEditorProps) {
   const mutation = useMutation({
     mutationFn: (content: string) => api.chapters.update(chapter.id, { content }),

@@ -1,9 +1,9 @@
 /**
- * NovelForge · 角色一致性检查面板
- *
- * 对当前章节内容进行角色设定冲突检测
+ * @file CharacterConsistencyCheck.tsx
+ * @description 角色一致性检查组件，检测章节内容中的角色设定冲突
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'

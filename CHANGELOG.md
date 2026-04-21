@@ -9,14 +9,13 @@
 
 ## [未发布]
 
-### 计划功能 (Phase 4)
+### 计划功能 (Phase 5)
 
 #### 新增
 - [ ] 用户认证系统（Cloudflare Access / JWT）
 - [ ] 多用户数据隔离
 - [ ] 用量统计和计费接口
 - [ ] 公开分享功能（签名 URL）
-- [ ] MCP Server 集成（Claude Desktop）
 - [ ] PDF 导出（Cloudflare Browser Rendering）
 - [ ] 语音朗读（Workers AI TTS）
 
@@ -32,6 +31,97 @@
 - [ ] 数据库查询缓存
 - [ ] CDN 静态资源加速
 - [ ] SSE 连接池管理
+
+---
+
+## [1.4.0] - 2026-04-21
+
+### 新增
+
+#### Phase 4 · 创作辅助系统
+- ✨ **伏笔管理系统**
+  - 自动从章节内容中提取伏笔
+  - 伏笔状态追踪（开放/已收尾/已放弃）
+  - 重要性分级（高/中/低）
+  - AI 自动检测伏笔收尾
+
+- ✨ **创作规则系统**
+  - 定义写作风格、节奏、角色、情节、世界观、禁忌等规则
+  - 规则优先级管理（1-5级）
+  - 规则启用/禁用控制
+  - 规则分类管理（style/pacing/character/plot/world/taboo/custom）
+
+- ✨ **总纲管理**
+  - 替代原多层大纲结构
+  - 版本历史支持
+  - 自动字数统计
+  - 向量化索引支持
+
+- ✨ **小说设定系统**
+  - 统一管理世界观、境界体系、势力组织、地理、宝物功法等
+  - 支持层级结构和关联关系
+  - 重要性标记
+  - 向量化检索支持
+
+- ✨ **境界/战力追踪**
+  - 自动检测角色境界突破事件
+  - 角色成长历程记录
+  - 突破历史追踪
+  - 支持多种境界体系
+
+- ✨ **内容搜索**
+  - 章节内容关键词搜索
+  - 搜索结果高亮预览
+  - 支持限定小说范围
+
+- ✨ **向量化索引API**
+  - 独立的向量化索引管理接口
+  - 支持大纲、章节、角色、摘要等类型
+  - 相似度搜索功能
+  - 索引状态检查
+
+- ✨ **MCP Server 集成**
+  - Claude Desktop 直接访问小说数据
+  - 支持查询小说、大纲、章节、角色
+  - 语义搜索功能
+
+#### 数据库重构 (v2.0)
+- 🔧 扁平化结构设计，避免深层嵌套
+- 🔧 新增 `master_outline` 总纲表
+- 🔧 新增 `writing_rules` 创作规则表
+- 🔧 新增 `novel_settings` 小说设定表
+- 🔧 新增 `foreshadowing` 伏笔追踪表
+- 🔧 新增 `vector_index` 向量索引追踪表
+- 🔧 新增 `entity_index` 总索引表
+- 🔧 增强 `volumes` 卷表（支持卷大纲、蓝图、概要）
+- 🔧 增强 `characters` 角色表（支持境界信息）
+- 🔧 新增 `generation_logs` 生成任务日志表
+- 🔧 新增 `exports` 导出记录表
+
+#### 后端服务
+- `/server/services/foreshadowing.ts` - 伏笔追踪服务
+- `/server/services/powerLevel.ts` - 境界/战力追踪服务
+- `/server/routes/foreshadowing.ts` - 伏笔管理 API
+- `/server/routes/writing-rules.ts` - 创作规则 API
+- `/server/routes/master-outline.ts` - 总纲管理 API
+- `/server/routes/novel-settings.ts` - 小说设定 API
+- `/server/routes/search.ts` - 内容搜索 API
+- `/server/routes/vectorize.ts` - 向量化索引 API
+- `/server/routes/mcp.ts` - MCP Server API
+
+### 改进
+
+- 🔧 优化数据库 Schema，采用扁平化设计
+- 🔧 增强 Agent 系统，集成伏笔提取和境界检测
+- 🔧 改进上下文组装，支持创作规则注入
+- 🔧 优化向量检索，支持多种内容类型
+
+### 文档
+
+- 📝 更新 README.md，反映 Phase 4 功能
+- 📝 更新 ARCHITECTURE.md，新增服务模块说明
+- 📝 更新 API.md，新增 API 端点文档
+- 📝 新增 MCP-SETUP.md 配置指南
 
 ---
 
@@ -254,6 +344,31 @@
 ---
 
 ## 升级指南
+
+### 升级到 1.4.0
+
+```bash
+# 拉取最新代码
+git pull origin main
+
+# 更新依赖
+pnpm update
+
+# 运行数据库迁移（重要：数据库结构有重大变更）
+wrangler d1 migrations apply novelforge --remote
+
+# 创建 Vectorize 索引（如果尚未创建）
+wrangler vectorize create novelforge-index --dimensions=768 --metric=cosine
+
+# 重新部署
+pnpm build
+wrangler pages deploy dist
+```
+
+**重要变更说明**：
+- 数据库 Schema 重构为扁平化结构
+- 原 `outlines` 表被 `master_outline` 和 `novel_settings` 替代
+- 新增多个功能表，需要运行迁移
 
 ### 升级到 1.3.0
 

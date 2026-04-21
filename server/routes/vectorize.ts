@@ -1,32 +1,34 @@
 /**
- * NovelForge · Vectorize 向量化路由
- *
- * 管理向量索引的 CRUD 操作：
- * - POST /api/vectorize/index    - 手动触发内容向量化
- * - DELETE /api/vectorize/:id     - 删除指定内容的向量
- * - GET  /api/vectorize/status   - 查询向量化状态
+ * @file vectorize.ts
+ * @description 向量化索引路由模块，提供内容向量化、相似度搜索和索引管理功能
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { drizzle } from 'drizzle-orm/d1'
-import { masterOutline, chapters } from '../db/schema'
-import { eq } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import {
   indexContent,
   deindexContent,
   searchSimilar,
   embedText,
+  fetchContentForIndexing,
 } from '../services/embedding'
 
 const router = new Hono<{ Bindings: Env }>()
 
 /**
- * POST /api/vectorize/index
- *
- * 手动触发向量化（用于大纲/章节/角色）
+ * POST /index - 创建向量化索引
+ * @description 将内容进行向量化并存储到向量数据库，支持大纲、章节、角色、摘要等类型
+ * @param {string} sourceType - 内容类型：outline | chapter | character | summary
+ * @param {string} sourceId - 内容ID
+ * @param {string} novelId - 所属小说ID
+ * @param {string} title - 内容标题
+ * @param {string} [content] - 可选的内容文本，不提供时自动从数据库获取
+ * @returns {Object} { ok: boolean, vectorIds: string[], message: string }
+ * @throws {503} Vectorize服务未配置
+ * @throws {500} 向量化失败
  */
 router.post(
   '/index',
@@ -44,26 +46,11 @@ router.post(
     const body = c.req.valid('json')
     const { sourceType, sourceId, novelId, title } = body
 
-    // 如果没有提供content，从数据库获取
     let content = body.content
     if (!content) {
-      const db = drizzle(c.env.DB)
-
-      if (sourceType === 'outline') {
-        // v2.0: 从总纲表获取内容（替代原 outlines）
-        const row = await db
-          .select({ content: masterOutline.content })
-          .from(masterOutline)
-          .where(eq(masterOutline.id, sourceId))
-          .get()
-        content = row?.content || null
-      } else if (sourceType === 'chapter') {
-        const row = await db
-          .select({ content: chapters.content })
-          .from(chapters)
-          .where(eq(chapters.id, sourceId))
-          .get()
-        content = row?.content || null
+      if (sourceType === 'outline' || sourceType === 'chapter') {
+        const fetched = await fetchContentForIndexing(c.env, sourceType, sourceId)
+        content = fetched.content
       }
     }
 
@@ -93,9 +80,14 @@ router.post(
 )
 
 /**
- * DELETE /api/vectorize/:type/:id
- *
- * 删除指定内容的所有向量索引
+ * DELETE /:type/:id - 删除向量化索引
+ * @description 从向量数据库中删除指定类型和ID的向量索引
+ * @param {string} type - 内容类型：outline | chapter | character | summary
+ * @param {string} id - 内容ID
+ * @returns {Object} { ok: boolean, message: string }
+ * @throws {400} 无效的内容类型
+ * @throws {503} Vectorize服务未配置
+ * @throws {500} 删除失败
  */
 router.delete('/:type/:id', async (c) => {
   const sourceType = c.req.param('type') as any
@@ -110,7 +102,6 @@ router.delete('/:type/:id', async (c) => {
   }
 
   try {
-    // 从 D1 查询实际 chunk 数量，不再硬编码
     await deindexContent(c.env, sourceType, sourceId)
 
     return c.json({
@@ -130,9 +121,14 @@ router.delete('/:type/:id', async (c) => {
 })
 
 /**
- * GET /api/vectorize/search
- *
- * 语义相似度搜索（调试用）
+ * GET /search - 相似内容搜索
+ * @description 通过向量相似度搜索相关内容，支持按小说ID过滤
+ * @param {string} q - 搜索查询文本
+ * @param {string} [novelId] - 可选的小说ID过滤
+ * @returns {Object} { ok: boolean, query: string, resultsCount: number, results: Array }
+ * @throws {400} 缺少查询参数
+ * @throws {503} Vectorize服务未配置
+ * @throws {500} 搜索失败
  */
 router.get('/search', async (c) => {
   const query = c.req.query('q')
@@ -178,9 +174,9 @@ router.get('/search', async (c) => {
 })
 
 /**
- * GET /api/vectorize/status
- *
- * 检查 Vectorize 服务状态
+ * GET /status - 获取向量化服务状态
+ * @description 检查Vectorize服务配置和运行状态
+ * @returns {Object} { status: string, message: string, embeddingModel?: string, dimensions?: number }
  */
 router.get('/status', async (c) => {
   try {
@@ -191,7 +187,6 @@ router.get('/status', async (c) => {
       })
     }
 
-    // 尝试一次空查询来验证连接
     await embedText(c.env.AI, 'test')
 
     return c.json({

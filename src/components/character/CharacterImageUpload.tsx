@@ -1,13 +1,9 @@
 /**
- * NovelForge · CharacterImageUpload 角色图片上传组件
- *
- * 功能：
- * - 拖拽/点击上传角色图片
- * - 图片预览与裁剪
- * - AI 视觉分析（自动生成描述）
- * - 分析结果展示与应用
+ * @file CharacterImageUpload.tsx
+ * @description 角色图片上传组件，支持拖拽上传、图片预览和AI视觉分析
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { useState, useRef } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'

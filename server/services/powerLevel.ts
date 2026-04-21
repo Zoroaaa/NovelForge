@@ -1,12 +1,9 @@
 /**
- * NovelForge · 境界/成长体系追踪服务（Phase 1.3）
- *
- * 功能：
- * - 章节生成完成后自动检测境界突破事件
- * - 自动更新角色的 powerLevel 字段
- * - 提供境界管理 API 支持
+ * @file powerLevel.ts
+ * @description 境界/成长体系追踪服务模块，提供境界突破检测和角色成长管理功能
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { drizzle } from 'drizzle-orm/d1'
 import { characters, chapters } from '../db/schema'
 import { eq, and } from 'drizzle-orm'

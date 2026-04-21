@@ -1,7 +1,9 @@
 /**
- * NovelForge · 写作统计 Dashboard
+ * @file WritingStats.tsx
+ * @description 写作统计面板组件，展示AI生成日志和写作统计信息
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'

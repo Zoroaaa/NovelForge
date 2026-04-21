@@ -1,28 +1,18 @@
 /**
- * NovelForge · Export 导出路由
- *
- * 支持多格式导出：
- * - POST /api/export          - 通用导出入口（根据format参数）
- * - POST /api/export/epub     - EPUB 导出
- * - POST /api/export/md       - Markdown 导出
- * - POST /api/export/txt      - 纯文本导出
- * - POST /api/export/zip      - ZIP 打包下载
+ * @file export.ts
+ * @description 导出路由模块，提供小说导出功能，支持多种格式
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
  */
-
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { drizzle } from 'drizzle-orm/d1'
-import { eq } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import {
-  exportAsMarkdown,
-  exportAsTxt,
-  exportAsEpub,
-  exportAsPdf,
-  exportAsZip,
+  createExportRecord,
+  updateExportRecord,
+  performExport,
 } from '../services/export'
-import { exports as exportsTable } from '../db/schema'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -35,56 +25,31 @@ const ExportSchema = z.object({
 })
 
 /**
- * POST /api/export
- *
- * 通用导出入口（根据 format 参数决定输出格式）
+ * POST / - 导出小说
+ * @description 导出小说为指定格式，支持MD、TXT、EPUB、PDF、ZIP
+ * @param {string} novelId - 小说ID
+ * @param {string} format - 导出格式：md | txt | epub | pdf | zip
+ * @param {string[]} [volumeIds] - 可选的卷ID列表，指定导出范围
+ * @param {boolean} [includeTOC] - 是否包含目录
+ * @param {boolean} [includeMeta] - 是否包含元信息
+ * @returns {Blob} 导出文件
+ * @throws {500} 导出失败
  */
 router.post('/', zValidator('json', ExportSchema), async (c) => {
   const options = c.req.valid('json')
-  const db = drizzle(c.env.DB)
   
-  // 创建导出记录
-  const exportRecord = await db.insert(exportsTable).values({
+  const exportRecord = await createExportRecord(c.env, {
     novelId: options.novelId,
     format: options.format,
     scope: options.volumeIds && options.volumeIds.length > 0 ? 'volume' : 'full',
     scopeMeta: options.volumeIds ? JSON.stringify({ volumeIds: options.volumeIds }) : null,
-    status: 'processing',
-  }).returning()
+  })
   
-  const exportId = exportRecord[0].id
+  const exportId = exportRecord.id
 
   try {
-    let blob: Blob
-    const contentType = getContentType(options.format)
-    const fileExtension = getFileExtension(options.format)
+    const { blob, contentType, fileExtension, filename } = await performExport(c.env, options)
 
-    switch (options.format) {
-      case 'md':
-        blob = await exportAsMarkdown(c.env, options)
-        break
-      case 'txt':
-        blob = await exportAsTxt(c.env, options)
-        break
-      case 'epub':
-        blob = await exportAsEpub(c.env, options)
-        break
-      case 'pdf':
-        blob = await exportAsPdf(c.env, options)
-        break
-      case 'zip':
-        blob = await exportAsZip(c.env, options)
-        break
-      default:
-        // 更新记录为失败
-        await db.update(exportsTable).set({
-          status: 'error',
-          errorMsg: `Unsupported format: ${options.format}`,
-        }).where(eq(exportsTable.id, exportId))
-        return c.json({ error: `Unsupported format: ${options.format}` }, 400)
-    }
-
-    // 上传到R2存储
     let r2Key: string | null = null
     if (c.env.STORAGE) {
       r2Key = `exports/${options.novelId}/${exportId}.${fileExtension}`
@@ -94,16 +59,12 @@ router.post('/', zValidator('json', ExportSchema), async (c) => {
         },
       })
       
-      // 更新记录为完成
-      await db.update(exportsTable).set({
+      await updateExportRecord(c.env, exportId, {
         status: 'done',
         r2Key,
         fileSize: blob.size,
-      }).where(eq(exportsTable.id, exportId))
+      })
     }
-
-    // 获取小说标题用于文件名
-    const filename = `novel_${options.novelId}_${Date.now()}.${fileExtension}`
 
     return new Response(blob, {
       headers: {
@@ -116,11 +77,10 @@ router.post('/', zValidator('json', ExportSchema), async (c) => {
   } catch (error) {
     console.error('Export failed:', error)
     
-    // 更新记录为失败
-    await db.update(exportsTable).set({
+    await updateExportRecord(c.env, exportId, {
       status: 'error',
       errorMsg: (error as Error).message,
-    }).where(eq(exportsTable.id, exportId))
+    })
     
     return c.json(
       {
@@ -133,9 +93,9 @@ router.post('/', zValidator('json', ExportSchema), async (c) => {
 })
 
 /**
- * GET /api/export/formats
- *
- * 返回支持的导出格式列表
+ * GET /formats - 获取支持的导出格式列表
+ * @description 返回所有支持的导出格式及其详细信息
+ * @returns {Object} { formats: Array<{id, name, description, extension, mimeType}> }
  */
 router.get('/formats', (c) => {
   return c.json({
@@ -178,30 +138,5 @@ router.get('/formats', (c) => {
     ],
   })
 })
-
-// ========== 工具函数 ==========
-
-function getContentType(format: string): string {
-  switch (format) {
-    case 'md':
-      return 'text/markdown; charset=utf-8'
-    case 'txt':
-      return 'text/plain; charset=utf-8'
-    case 'epub':
-      return 'application/epub+zip'
-    case 'pdf':
-      return 'text/html; charset=utf-8'
-    case 'zip':
-      return 'application/zip'
-    default:
-      return 'application/octet-stream'
-  }
-}
-
-function getFileExtension(format: string): string {
-  if (format === 'epub') return 'epub'
-  if (format === 'pdf') return 'html'
-  return format
-}
 
 export { router as export }

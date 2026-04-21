@@ -1,3 +1,9 @@
+/**
+ * @file SettingsPanel.tsx
+ * @description 小说设定面板组件，管理世界观、力量体系、势力等设定
+ * @version 1.0.0
+ * @modified 2026-04-21 - 添加规范化注释
+ */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { toast } from 'sonner'
