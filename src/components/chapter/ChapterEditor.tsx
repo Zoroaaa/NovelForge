@@ -5,7 +5,7 @@
  * @modified 2026-04-21 - 添加规范化注释
  */
 import { useMutation } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EditorRoot, EditorContent, useEditor } from 'novel'
 import StarterKit from '@tiptap/starter-kit'
 import { useDebouncedCallback } from 'use-debounce'
@@ -39,13 +39,24 @@ function ChapterEditorInner({ chapter, injectedContent, onContentInserted, onSav
 
   const isEditorReady = useMemo(() => !!editor, [editor])
 
-  const insertContentToEditor = (content: string) => {
-    if (!editor) return false
+  const editorRef = useRef(editor)
+  const onContentInsertedRef = useRef(onContentInserted)
+  const onSaveRef = useRef(onSave)
+
+  editorRef.current = editor
+  onContentInsertedRef.current = onContentInserted
+  onSaveRef.current = onSave
+
+  const lastProcessedRef = useRef<string>('')
+
+  const performInsert = useCallback((content: string) => {
+    const currentEditor = editorRef.current
+    if (!currentEditor) return false
 
     try {
-      editor.commands.insertContent(content)
+      currentEditor.commands.insertContent(content)
       setShowInsertBanner(true)
-      onContentInserted?.()
+      onContentInsertedRef.current?.()
       setLastInjectedContent(content)
       setTimeout(() => setShowInsertBanner(false), 3000)
       toast.success('内容已注入编辑器')
@@ -55,25 +66,32 @@ function ChapterEditorInner({ chapter, injectedContent, onContentInserted, onSav
       toast.error('内容注入失败，请重试')
       return false
     }
-  }
+  }, [])
 
   useEffect(() => {
-    if (isEditorReady && pendingContent) {
-      insertContentToEditor(pendingContent)
+    if (isEditorReady && pendingContent && pendingContent !== lastProcessedRef.current) {
+      console.log('[ChapterEditor] Auto-injecting pending content:', pendingContent.substring(0, 50) + '...')
+      lastProcessedRef.current = pendingContent
+      performInsert(pendingContent)
       setPendingContent('')
     }
-  }, [isEditorReady, pendingContent, insertContentToEditor])
+  }, [isEditorReady, pendingContent, performInsert])
 
   useEffect(() => {
     if (!injectedContent || injectedContent === lastInjectedContent) return
 
-    if (isEditorReady) {
-      insertContentToEditor(injectedContent)
+    console.log('[ChapterEditor] Received new injectedContent:', injectedContent.substring(0, 50) + '...')
+    console.log('[ChapterEditor] isEditorReady:', isEditorReady, 'editor exists:', !!editor)
+
+    if (isEditorReady && editor) {
+      lastProcessedRef.current = injectedContent
+      performInsert(injectedContent)
     } else {
       setPendingContent(injectedContent)
       toast.info('编辑器准备中，内容将在就绪后自动写入')
+      console.log('[ChapterEditor] Content cached in pendingContent, waiting for editor...')
     }
-  }, [injectedContent, lastInjectedContent, isEditorReady, insertContentToEditor])
+  }, [injectedContent, lastInjectedContent, isEditorReady, editor, performInsert])
 
   const handleInsertContent = () => {
     if (!injectedContent) {
@@ -81,22 +99,27 @@ function ChapterEditorInner({ chapter, injectedContent, onContentInserted, onSav
       return
     }
 
-    if (!isEditorReady || !editor) {
+    const currentEditor = editorRef.current
+
+    if (!isEditorReady || !currentEditor) {
       setPendingContent(injectedContent)
       toast.info('编辑器准备中，内容将在就绪后自动写入')
+      console.log('[ChapterEditor] Manual insert: Editor not ready, caching content')
       return
     }
 
     try {
-      if (editor.getText().trim()) {
-        editor.commands.insertContent('\n\n' + injectedContent)
+      console.log('[ChapterEditor] Manual insert: Editor ready, inserting now')
+
+      if (currentEditor.getText().trim()) {
+        currentEditor.commands.insertContent('\n\n' + injectedContent)
       } else {
-        editor.commands.insertContent(injectedContent)
+        currentEditor.commands.insertContent(injectedContent)
       }
 
-      onSave(htmlToMarkdown(editor.getHTML()))
+      onSaveRef.current(htmlToMarkdown(currentEditor.getHTML()))
       setShowInsertBanner(true)
-      onContentInserted?.()
+      onContentInsertedRef.current?.()
       setLastInjectedContent(injectedContent)
       setTimeout(() => setShowInsertBanner(false), 3000)
       toast.success('内容已成功写入')
