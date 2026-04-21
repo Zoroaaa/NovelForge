@@ -165,21 +165,22 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
   return (
     <div className="space-y-4">
       {/* 头部操作栏 */}
-      <div className="flex items-center justify-between px-4 pt-4">
-        <div className="text-sm text-muted-foreground">
-          共 {rules.filter(r => r.isActive === 1).length} 条活跃规则 / {rules.length} 条总计
-        </div>
-        
-        <Dialog open={dialogOpen} onOpenChange={(open) => {
-          setDialogOpen(open)
-          if (!open) resetForm()
-        }}>
-          <DialogTrigger asChild>
-            <Button size="sm" className="gap-2">
-              <Plus className="h-4 w-4" />
-              新增规则
-            </Button>
-          </DialogTrigger>
+      <div className="px-3 pt-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">
+            活跃 {rules.filter(r => r.isActive === 1).length} / 共 {rules.length} 条
+          </span>
+          
+          <Dialog open={dialogOpen} onOpenChange={(open) => {
+            setDialogOpen(open)
+            if (!open) resetForm()
+          }}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="h-7 gap-1.5 text-xs">
+                <Plus className="h-3.5 w-3.5" />
+                新增规则
+              </Button>
+            </DialogTrigger>
           
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
@@ -257,7 +258,7 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
       </div>
 
       {/* 规则列表（按类别分组展示） */}
-      <div className="px-4 pb-4 space-y-3">
+      <div className="px-3 pb-3 space-y-1.5">
         {RULE_CATEGORIES.map(({ value, label, icon: Icon, color }) => {
           const items = groupedRules[value] || []
           const activeCount = items.filter(r => r.isActive === 1).length

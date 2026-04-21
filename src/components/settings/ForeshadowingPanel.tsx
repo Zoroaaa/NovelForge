@@ -171,30 +171,25 @@ export function ForeshadowingPanel({ novelId }: ForeshadowingPanelProps) {
   return (
     <div className="space-y-4">
       {/* 头部统计栏 */}
-      <div className="flex items-center justify-between px-4 pt-4">
-        <div className="flex items-center gap-3">
-          <Badge variant="secondary" className="gap-1">
-            <Circle className="h-3 w-3 fill-current" />
-            共 {(stats.total || 0)} 条
-          </Badge>
-          
-          <div className="flex items-center gap-1 text-xs">
-            <span className={`px-2 py-0.5 rounded ${STATUS_CONFIG.open.badge}`}>
-              ⚠️ 未收尾: {(stats['open'] || 0)}
-            </span>
-            <span className={`px-2 py-0.5 rounded ${STATUS_CONFIG.resolved.badge}`}>
-              ✅ 已收尾: {(stats['resolved'] || 0)}
-            </span>
-            <span className={`px-2 py-0.5 rounded ${STATUS_CONFIG.abandoned.badge}`}>
-              ❌ 已放弃: {(stats['abandoned'] || 0)}
-            </span>
-          </div>
+      <div className="px-3 pt-3 space-y-2">
+        {/* 统计数字行 */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-muted-foreground">共 {stats.total || 0} 条</span>
+          <span className={`text-xs px-1.5 py-0.5 rounded ${STATUS_CONFIG.open.badge}`}>
+            ⚠️ 未收 {stats['open'] || 0}
+          </span>
+          <span className={`text-xs px-1.5 py-0.5 rounded ${STATUS_CONFIG.resolved.badge}`}>
+            ✅ 已收 {stats['resolved'] || 0}
+          </span>
+          <span className={`text-xs px-1.5 py-0.5 rounded ${STATUS_CONFIG.abandoned.badge}`}>
+            ❌ 放弃 {stats['abandoned'] || 0}
+          </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* 状态筛选 */}
+        {/* 操作行 */}
+        <div className="flex items-center justify-between gap-2">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[120px] h-8"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-7 text-xs flex-1"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部</SelectItem>
               <SelectItem value="open">未收尾</SelectItem>
@@ -203,14 +198,13 @@ export function ForeshadowingPanel({ novelId }: ForeshadowingPanelProps) {
             </SelectContent>
           </Select>
 
-          {/* 新建按钮 */}
           <Dialog open={dialogOpen} onOpenChange={(open) => {
             setDialogOpen(open)
             if (!open) resetForm()
           }}>
             <DialogTrigger asChild>
-              <Button size="sm" className="gap-2">
-                <Plus className="h-4 w-4" />
+              <Button size="sm" className="h-7 gap-1.5 text-xs shrink-0">
+                <Plus className="h-3.5 w-3.5" />
                 新增伏笔
               </Button>
             </DialogTrigger>
@@ -276,15 +270,14 @@ export function ForeshadowingPanel({ novelId }: ForeshadowingPanelProps) {
       </div>
 
       {/* 伏笔列表 */}
-      <div className="px-4 pb-4 space-y-2">
+      <div className="px-3 pb-3 space-y-2">
         {foreshadowings.length === 0 ? (
           /* 空状态 */
-          <div className="border rounded-lg p-12 text-center bg-muted/10">
-            <AlertTriangle className="h-12 w-12 mx-auto text-muted-foreground opacity-50 mb-4" />
-            <h3 className="font-medium mb-2">还没有伏笔记录</h3>
-            <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">
-              伏笔是小说的重要叙事工具。AI 在生成章节时会自动识别和提取伏笔，
-              你也可以手动添加和管理伏笔，确保剧情的连贯性和悬念感。
+          <div className="border rounded-lg p-6 text-center bg-muted/10">
+            <AlertTriangle className="h-8 w-8 mx-auto text-muted-foreground opacity-50 mb-3" />
+            <h3 className="font-medium mb-1 text-sm">还没有伏笔记录</h3>
+            <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+              AI 在生成章节时会自动识别和提取伏笔，你也可以手动添加和管理伏笔，确保剧情连贯性。
             </p>
             
             <Button onClick={() => setDialogOpen(true)} className="gap-2">

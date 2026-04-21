@@ -354,17 +354,16 @@ export function MasterOutlinePanel({ novelId }: MasterOutlinePanelProps) {
           </div>
         ) : (
           /* 无总纲时的空状态 */
-          <div className="border rounded-lg p-12 text-center bg-muted/10">
-            <div className="mb-4">
-              <FileText className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
+          <div className="border rounded-lg p-6 text-center bg-muted/10">
+            <div className="mb-3">
+              <FileText className="h-8 w-8 mx-auto text-muted-foreground opacity-50" />
             </div>
-            <h3 className="font-medium mb-2">还没有创建总纲</h3>
-            <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">
-              总纲是小说的核心框架，包含世界观、主线剧情、角色发展轨迹等关键信息。
-              AI 在生成章节时会参考总纲来保持剧情一致性。
+            <h3 className="font-medium mb-1 text-sm">还没有创建总纲</h3>
+            <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+              总纲是小说的核心框架，包含世界观、主线剧情、角色发展轨迹等关键信息。AI 在生成章节时会参考总纲来保持剧情一致性。
             </p>
             
-            <Button onClick={() => setDialogOpen(true)} className="gap-2">
+            <Button onClick={() => setDialogOpen(true)} className="gap-2" size="sm">
               <Plus className="h-4 w-4" />
               创建第一个总纲
             </Button>

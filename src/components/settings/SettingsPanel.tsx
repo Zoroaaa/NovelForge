@@ -164,21 +164,20 @@ export function SettingsPanel({ novelId }: SettingsPanelProps) {
   return (
     <div className="space-y-4">
       {/* 头部操作栏 */}
-      <div className="flex items-center justify-between px-4 pt-4">
-        <div className="text-sm text-muted-foreground">
-          共 {settings.length} 条设定
-        </div>
-        
-        <Dialog open={dialogOpen} onOpenChange={(open) => {
-          setDialogOpen(open)
-          if (!open) resetForm()
-        }}>
-          <DialogTrigger asChild>
-            <Button size="sm" className="gap-2">
-              <Plus className="h-4 w-4" />
-              新增设定
-            </Button>
-          </DialogTrigger>
+      <div className="px-3 pt-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">共 {settings.length} 条设定</span>
+          
+          <Dialog open={dialogOpen} onOpenChange={(open) => {
+            setDialogOpen(open)
+            if (!open) resetForm()
+          }}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="h-7 gap-1.5 text-xs">
+                <Plus className="h-3.5 w-3.5" />
+                新增设定
+              </Button>
+            </DialogTrigger>
           
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
@@ -265,7 +264,7 @@ export function SettingsPanel({ novelId }: SettingsPanelProps) {
       </div>
 
       {/* 设定列表（按类型分组展示） */}
-      <div className="px-4 pb-4 space-y-2">
+      <div className="px-3 pb-3 space-y-1.5">
         {SETTING_TYPES.map(({ value, label, icon: Icon, color }) => {
           const items = groupedSettings[value] || []
           const isExpanded = expandedTypes.has(value)
