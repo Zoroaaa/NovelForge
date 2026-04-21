@@ -5,14 +5,15 @@
  * @modified 2026-04-21 - 添加规范化注释
  */
 import { useMutation } from '@tanstack/react-query'
-import { useEffect, useRef, useState } from 'react'
-import { EditorRoot, EditorContent, type EditorInstance } from 'novel'
+import { useEffect, useState } from 'react'
+import { EditorRoot, EditorContent, useEditor } from 'novel'
 import StarterKit from '@tiptap/starter-kit'
 import { useDebouncedCallback } from 'use-debounce'
 import type { Chapter } from '@/lib/types'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { PenLine, RotateCcw } from 'lucide-react'
+import { toast } from 'sonner'
 
 /**
  * 章节编辑器组件属性
@@ -27,55 +28,56 @@ interface ChapterEditorProps {
 }
 
 /**
- * 章节编辑器组件
- * @description 基于Tipoff的富文本编辑器，支持自动保存、内容注入和撤销功能
- * @param {ChapterEditorProps} props - 组件属性
- * @returns {JSX.Element} 编辑器组件
+ * 章节编辑器内部组件，用于访问useCurrentEditor钩子
  */
-export function ChapterEditor({ chapter, injectedContent, onContentInserted }: ChapterEditorProps) {
-  const mutation = useMutation({
-    mutationFn: (content: string) => api.chapters.update(chapter.id, { content }),
-  })
-
+function ChapterEditorInner({ chapter, injectedContent, onContentInserted, onSave }: ChapterEditorProps & { onSave: (content: string) => void }) {
+  const { editor } = useEditor()
   const [showInsertBanner, setShowInsertBanner] = useState(false)
-  const editorRef = useRef<EditorInstance | null>(null)
-
-  const save = useDebouncedCallback((content: string) => {
-    mutation.mutate(content)
-  }, 1500)
+  const [lastInjectedContent, setLastInjectedContent] = useState<string>('')
 
   useEffect(() => {
-    if (injectedContent && editorRef.current) {
-      const editor = editorRef.current
-      if (editor.commands?.insertContent) {
-        editor.commands.insertContent(injectedContent)
-        setShowInsertBanner(true)
-        onContentInserted?.()
-        setTimeout(() => setShowInsertBanner(false), 3000)
-      }
+    if (!injectedContent || !editor || injectedContent === lastInjectedContent) return
+
+    try {
+      editor.commands.insertContent(injectedContent)
+      setShowInsertBanner(true)
+      onContentInserted?.()
+      setLastInjectedContent(injectedContent)
+      setTimeout(() => setShowInsertBanner(false), 3000)
+      toast.success('内容已注入编辑器')
+    } catch (error) {
+      console.error('[ChapterEditor] Failed to insert content:', error)
+      toast.error('内容注入失败，请重试')
     }
-  }, [injectedContent])
+  }, [injectedContent, editor, lastInjectedContent, onContentInserted])
 
   const handleInsertContent = () => {
-    if (!injectedContent || !editorRef.current) return
-
-    const editor = editorRef.current
-    if (!editor.commands?.insertContent) return
-
-    if (editor.getText().trim()) {
-      editor.commands.insertContent('\n\n' + injectedContent)
-    } else {
-      editor.commands.insertContent(injectedContent)
+    if (!injectedContent || !editor) {
+      toast.error('编辑器未就绪，无法写入')
+      return
     }
 
-    save(editor.getHTML())
-    setShowInsertBanner(true)
-    onContentInserted?.()
-    setTimeout(() => setShowInsertBanner(false), 3000)
+    try {
+      if (editor.getText().trim()) {
+        editor.commands.insertContent('\n\n' + injectedContent)
+      } else {
+        editor.commands.insertContent(injectedContent)
+      }
+
+      onSave(editor.getHTML())
+      setShowInsertBanner(true)
+      onContentInserted?.()
+      setLastInjectedContent(injectedContent)
+      setTimeout(() => setShowInsertBanner(false), 3000)
+      toast.success('内容已成功写入')
+    } catch (error) {
+      console.error('[ChapterEditor] Failed to insert content:', error)
+      toast.error('内容写入失败，请重试')
+    }
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-8 py-12">
+    <div>
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">{chapter.title}</h1>
         {injectedContent && (
@@ -100,17 +102,42 @@ export function ChapterEditor({ chapter, injectedContent, onContentInserted }: C
         </div>
       )}
 
+      <EditorContent
+        extensions={[StarterKit]}
+        initialContent={chapter.content || '<p></p>' as any}
+        onUpdate={({ editor: updatedEditor }: any) => {
+          const html = updatedEditor.getHTML()
+          if (html !== '<p></p>') onSave(html)
+        }}
+        className="font-serif text-base leading-relaxed focus:outline-none min-h-[500px]"
+      />
+    </div>
+  )
+}
+
+/**
+ * 章节编辑器组件
+ * @description 基于Tipoff的富文本编辑器，支持自动保存、内容注入和撤销功能
+ * @param {ChapterEditorProps} props - 组件属性
+ * @returns {JSX.Element} 编辑器组件
+ */
+export function ChapterEditor({ chapter, injectedContent, onContentInserted }: ChapterEditorProps) {
+  const mutation = useMutation({
+    mutationFn: (content: string) => api.chapters.update(chapter.id, { content }),
+  })
+
+  const save = useDebouncedCallback((content: string) => {
+    mutation.mutate(content)
+  }, 1500)
+
+  return (
+    <div className="max-w-3xl mx-auto px-8 py-12">
       <EditorRoot>
-        <EditorContent
-          extensions={[StarterKit]}
-          ref={editorRef as any}
-          initialContent={chapter.content || '<p></p>' as any}
-          onUpdate={({ editor }: any) => {
-            editorRef.current = editor
-            const html = editor.getHTML()
-            if (html !== '<p></p>') save(html)
-          }}
-          className="font-serif text-base leading-relaxed focus:outline-none min-h-[500px]"
+        <ChapterEditorInner
+          chapter={chapter}
+          injectedContent={injectedContent}
+          onContentInserted={onContentInserted}
+          onSave={save}
         />
       </EditorRoot>
 
