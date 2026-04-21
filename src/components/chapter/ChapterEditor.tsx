@@ -49,6 +49,14 @@ function ChapterEditorInner({ chapter, injectedContent, onContentInserted, onSav
 
   const lastProcessedRef = useRef<string>('')
 
+  useEffect(() => {
+    console.log('[ChapterEditor] Editor state changed:', {
+      hasEditor: !!editor,
+      isReady: !!editor,
+      hasPendingContent: !!pendingContent
+    })
+  }, [editor, pendingContent])
+
   const performInsert = useCallback((content: string) => {
     const currentEditor = editorRef.current
     if (!currentEditor) return false
@@ -60,11 +68,61 @@ function ChapterEditorInner({ chapter, injectedContent, onContentInserted, onSav
       setLastInjectedContent(content)
       setTimeout(() => setShowInsertBanner(false), 3000)
       toast.success('内容已注入编辑器')
+      console.log('[ChapterEditor] ✅ Content successfully inserted into editor')
       return true
     } catch (error) {
       console.error('[ChapterEditor] Failed to insert content:', error)
       toast.error('内容注入失败，请重试')
       return false
+    }
+  }, [])
+
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const startPollingForEditor = useCallback((content: string) => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current)
+    }
+
+    console.log('[ChapterEditor] ⏳ Starting to poll for editor readiness...')
+
+    let attempts = 0
+    const maxAttempts = 100
+
+    pollTimerRef.current = setInterval(() => {
+      attempts++
+      const currentEditor = editorRef.current
+
+      console.log(`[ChapterEditor] Polling attempt ${attempts}/${maxAttempts}:`, {
+        hasEditor: !!currentEditor,
+        isReady: !!currentEditor
+      })
+
+      if (currentEditor && content !== lastProcessedRef.current) {
+        console.log('[ChapterEditor] ✅ Editor is ready! Inserting cached content now.')
+        clearInterval(pollTimerRef.current!)
+        pollTimerRef.current = null
+        lastProcessedRef.current = content
+        performInsert(content)
+        setPendingContent('')
+        return
+      }
+
+      if (attempts >= maxAttempts) {
+        console.warn('[ChapterEditor] ⚠️ Max polling attempts reached. Editor may not be initializing.')
+        clearInterval(pollTimerRef.current!)
+        pollTimerRef.current = null
+        toast.error('编辑器初始化超时，请刷新页面后重试')
+      }
+    }, 100)
+  }, [performInsert])
+
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
     }
   }, [])
 
@@ -90,8 +148,9 @@ function ChapterEditorInner({ chapter, injectedContent, onContentInserted, onSav
       setPendingContent(injectedContent)
       toast.info('编辑器准备中，内容将在就绪后自动写入')
       console.log('[ChapterEditor] Content cached in pendingContent, waiting for editor...')
+      startPollingForEditor(injectedContent)
     }
-  }, [injectedContent, lastInjectedContent, isEditorReady, editor, performInsert])
+  }, [injectedContent, lastInjectedContent, isEditorReady, editor, performInsert, startPollingForEditor])
 
   const handleInsertContent = () => {
     if (!injectedContent) {
@@ -105,6 +164,7 @@ function ChapterEditorInner({ chapter, injectedContent, onContentInserted, onSav
       setPendingContent(injectedContent)
       toast.info('编辑器准备中，内容将在就绪后自动写入')
       console.log('[ChapterEditor] Manual insert: Editor not ready, caching content')
+      startPollingForEditor(injectedContent)
       return
     }
 
