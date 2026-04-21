@@ -46,7 +46,6 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [title, setTitle] = useState('')
-  const [outlineId, setOutlineId] = useState('')
   const [volumeId, setVolumeId] = useState('')
   const [expandedVolumes, setExpandedVolumes] = useState<Set<string>>(new Set(['uncategorized']))
 
@@ -75,7 +74,6 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
       toast.success('章节已创建')
       setDialogOpen(false)
       setTitle('')
-      setOutlineId('')
       setVolumeId('')
       onChapterSelect?.(newChapter.id)
     },
@@ -106,7 +104,6 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
       sortOrder: maxOrder + 1,
       content: null,
       volumeId: volumeId === 'none' ? null : volumeId || null,
-      outlineId: outlineId === 'none' ? null : outlineId || null,
     })
   }
 

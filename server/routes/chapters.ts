@@ -20,7 +20,6 @@ const MAX_SNAPSHOTS = 10
 const CreateSchema = z.object({
   novelId: z.string(),
   volumeId: z.string().optional().nullable(),
-  outlineId: z.string().optional().nullable(),
   title: z.string(),
   sortOrder: z.number().optional(),
   content: z.string().optional().nullable(),
@@ -102,7 +101,6 @@ router.get('/:id', async (c) => {
  * @description 创建新章节并自动触发向量化索引
  * @param {string} novelId - 所属小说ID
  * @param {string} [volumeId] - 所属卷ID
- * @param {string} [outlineId] - 关联大纲ID
  * @param {string} title - 章节标题
  * @param {number} [sortOrder] - 排序顺序
  * @param {string} [content] - 章节内容

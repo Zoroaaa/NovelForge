@@ -42,7 +42,6 @@ export interface Chapter {
   id: string
   novelId: string
   volumeId: string | null
-  outlineId: string | null
   title: string
   sortOrder: number
   content: string | null

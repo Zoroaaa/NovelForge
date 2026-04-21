@@ -30,9 +30,13 @@ const router = new Hono<{ Bindings: Env }>()
 
 const CreateSchema = z.object({
   novelId: z.string(),
-  outlineId: z.string().optional().nullable(),
   title: z.string(),
   sortOrder: z.number().optional(),
+  outline: z.string().optional().nullable(),
+  blueprint: z.string().optional().nullable(),
+  summary: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  targetWordCount: z.number().optional().nullable(),
 })
 
 /**
@@ -68,7 +72,6 @@ router.get('/:id', async (c) => {
 /**
  * POST / - 创建新卷
  * @param {string} novelId - 所属小说ID
- * @param {string} [outlineId] - 关联大纲ID
  * @param {string} title - 卷标题
  * @param {number} [sortOrder] - 排序顺序
  * @returns {Object} 创建的卷对象
