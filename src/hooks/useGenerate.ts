@@ -21,6 +21,7 @@ export function useGenerate() {
   const [status, setStatus] = useState<'idle' | 'generating' | 'done' | 'error'>('idle')
   const [contextInfo, setContextInfo] = useState<ContextBundle | null>(null)
   const [toolCalls, setToolCalls] = useState<ToolCallEvent[]>([])
+  const [usage, setUsage] = useState<{ prompt_tokens: number; completion_tokens: number } | null>(null)
   const stopRef = useRef<(() => void) | null>(null)
 
   const generate = (chapterId: string, novelId: string, options?: {
@@ -40,9 +41,8 @@ export function useGenerate() {
         existingContent: options?.existingContent,
       },
       // onChunk
-      (chunk) => {
+      (data) => {
         try {
-          const data = JSON.parse(chunk)
           if (data.type === 'context') {
             setContextInfo(data.context)
             return
@@ -61,12 +61,19 @@ export function useGenerate() {
             })
             return
           }
+          // 处理完成事件，记录 usage
+          if (data.type === 'done' && data.usage) {
+            setUsage(data.usage)
+            return
+          }
           if (data.content) {
             setOutput((prev) => prev + data.content)
             return
           }
         } catch {
-          setOutput((prev) => prev + chunk)
+          if (typeof data === 'string') {
+            setOutput((prev) => prev + data)
+          }
         }
       },
       // onDone
@@ -84,5 +91,5 @@ export function useGenerate() {
     setStatus('idle')
   }
 
-  return { output, status, generate, stop, contextInfo, setContextInfo, toolCalls }
+  return { output, status, generate, stop, contextInfo, setContextInfo, toolCalls, usage }
 }

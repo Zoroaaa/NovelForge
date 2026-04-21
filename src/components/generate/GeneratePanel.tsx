@@ -49,7 +49,7 @@ export function GeneratePanel({
   onContextUpdate,
   existingContent = '',
 }: GeneratePanelProps) {
-  const { output, status, generate, stop, contextInfo, toolCalls } = useGenerate()
+  const { output, status, generate, stop, contextInfo, toolCalls, usage } = useGenerate()
   const [showConsistencyCheck, setShowConsistencyCheck] = useState(false)
   
   // Phase 1.6: 生成模式状态
@@ -208,7 +208,7 @@ export function GeneratePanel({
         )}
       </div>
 
-      <StreamOutput content={output} status={status} />
+      <StreamOutput content={output} status={status} usage={usage} />
 
       {status === 'done' && output && (
         <div className="space-y-2">

@@ -12,9 +12,10 @@ import { useState } from 'react'
 interface StreamOutputProps {
   content: string
   status: 'idle' | 'generating' | 'done' | 'error'
+  usage?: { prompt_tokens: number; completion_tokens: number } | null
 }
 
-export function StreamOutput({ content, status }: StreamOutputProps) {
+export function StreamOutput({ content, status, usage }: StreamOutputProps) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
@@ -23,6 +24,8 @@ export function StreamOutput({ content, status }: StreamOutputProps) {
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
+
+  const formatToken = (n: number) => n.toLocaleString()
 
   if (status === 'idle') {
     return (
@@ -38,12 +41,19 @@ export function StreamOutput({ content, status }: StreamOutputProps) {
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           {status === 'generating' ? '生成中...' : status === 'done' ? '生成完成' : '生成出错'}
         </span>
-        {content && (
-          <Button variant="ghost" size="sm" onClick={handleCopy} className="h-7 gap-1">
-            {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-            {copied ? '已复制' : '复制'}
-          </Button>
-        )}
+        <div className="flex items-center gap-3">
+          {usage && (
+            <span className="text-xs text-muted-foreground">
+              ↓{formatToken(usage.prompt_tokens)} ↑{formatToken(usage.completion_tokens)}
+            </span>
+          )}
+          {content && (
+            <Button variant="ghost" size="sm" onClick={handleCopy} className="h-7 gap-1">
+              {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              {copied ? '已复制' : '复制'}
+            </Button>
+          )}
+        </div>
       </div>
 
       <ScrollArea className="h-[400px] rounded-md border bg-muted/30 p-4">
