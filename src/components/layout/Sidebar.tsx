@@ -11,6 +11,7 @@ import { RulesPanel } from '@/components/rules/RulesPanel'
 import { OutlinePanel } from '@/components/outline/OutlinePanel'
 import { ForeshadowingPanel } from '@/components/foreshadowing/ForeshadowingPanel'
 import { VolumePanel } from '@/components/volume/VolumePanel'
+import { EntityTreePanel } from '@/components/entitytree/EntityTreePanel'
 import { useNovelStore } from '@/store/novelStore'
 import {
   BookOpen,
@@ -20,6 +21,7 @@ import {
   AlignLeft,
   Library,
   Bookmark,
+  TreePine,
 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -37,6 +39,7 @@ const NAV_ITEMS = [
   { value: 'outline',       icon: AlignLeft,   label: '总纲' },
   { value: 'volumes',       icon: Library,     label: '卷' },
   { value: 'foreshadowing', icon: Bookmark,    label: '伏笔' },
+  { value: 'entity-tree',   icon: TreePine,    label: '实体树' },
 ] as const
 
 export function Sidebar({ novelId, onChapterSelect }: SidebarProps) {
@@ -101,6 +104,9 @@ export function Sidebar({ novelId, onChapterSelect }: SidebarProps) {
           )}
           {sidebarTab === 'foreshadowing' && (
             <ForeshadowingPanel novelId={novelId} onChapterSelect={onChapterSelect} />
+          )}
+          {sidebarTab === 'entity-tree' && (
+            <EntityTreePanel novelId={novelId} onChapterSelect={onChapterSelect} />
           )}
         </div>
       </div>
