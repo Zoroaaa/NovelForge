@@ -72,7 +72,7 @@ router.post('/', zValidator('json', CreateSchema), async (c) => {
   const [row] = await db.insert(t).values(body).returning()
 
   if (c.env.VECTORIZE && row.content) {
-    await enqueue(c.env, c, {
+    await enqueue(c.env, {
       type: 'index_content',
       payload: {
         sourceType: 'chapter',
@@ -120,7 +120,7 @@ router.patch(
 
     if (body.content !== undefined && row) {
       if (c.env.VECTORIZE && body.content) {
-        await enqueue(c.env, c, {
+        await enqueue(c.env, {
           type: 'index_content',
           payload: {
             sourceType: 'chapter',
@@ -136,7 +136,7 @@ router.patch(
     }
 
     if (body.summary !== undefined && row && c.env.VECTORIZE && body.summary) {
-      await enqueue(c.env, c, {
+      await enqueue(c.env, {
         type: 'index_content',
         payload: {
           sourceType: 'summary',

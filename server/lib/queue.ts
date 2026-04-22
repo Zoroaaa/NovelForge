@@ -42,35 +42,29 @@ export type QueueMessage =
       }
     }
 
-async function safeWaitUntil(c: any, fn: Promise<void> | void) {
-  const ctx = (c as any).executionContext
-  if (ctx?.waitUntil) {
-    ctx.waitUntil(Promise.resolve(fn).catch((e: Error) => console.warn('Async task failed:', e)))
-  } else {
-    Promise.resolve(fn).catch((e: Error) => console.warn('Async task failed:', e))
-  }
-}
-
 export async function enqueue(
   env: Env,
-  c: any,
   message: QueueMessage
 ): Promise<void> {
-  if (env.TASK_QUEUE) {
-    await env.TASK_QUEUE.send(message)
-  } else {
-    const { executeTask } = await import('../queue-handler')
-    safeWaitUntil(c, executeTask(env, message))
+  if (!env.TASK_QUEUE) {
+    console.warn('enqueue: TASK_QUEUE not available, message dropped:', message.type)
+    return
   }
+  await env.TASK_QUEUE.send(message)
 }
 
-export async function enqueueRaw(
+export async function enqueueBatch(
   env: Env,
-  message: QueueMessage
+  messages: QueueMessage[]
 ): Promise<void> {
-  if (env.TASK_QUEUE) {
-    await env.TASK_QUEUE.send(message)
-  } else {
-    console.warn('enqueueRaw called but TASK_QUEUE not available, message dropped:', message.type)
+  if (!env.TASK_QUEUE || messages.length === 0) {
+    console.warn('enqueueBatch: TASK_QUEUE not available or empty messages')
+    return
+  }
+  const BATCH_SIZE = 100
+  for (let i = 0; i < messages.length; i += BATCH_SIZE) {
+    await env.TASK_QUEUE.sendBatch(
+      messages.slice(i, i + BATCH_SIZE).map(body => ({ body }))
+    )
   }
 }

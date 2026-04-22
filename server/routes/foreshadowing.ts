@@ -93,7 +93,7 @@ router.post('/', zValidator('json', CreateForeshadowingSchema), async (c) => {
     }).returning().get()
 
     if (c.env.VECTORIZE && newForeshadowing.description) {
-      await enqueue(c.env, c, {
+      await enqueue(c.env, {
         type: 'index_content',
         payload: {
           sourceType: 'foreshadowing',
@@ -158,7 +158,7 @@ router.put('/:id', zValidator('json', UpdateForeshadowingSchema), async (c) => {
       .get()
 
     if (c.env.VECTORIZE && body.description !== undefined && updated.description) {
-      await enqueue(c.env, c, {
+      await enqueue(c.env, {
         type: 'index_content',
         payload: {
           sourceType: 'foreshadowing',

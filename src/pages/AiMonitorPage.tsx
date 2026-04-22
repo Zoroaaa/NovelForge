@@ -1,13 +1,13 @@
 /**
  * @file AiMonitorPage.tsx
  * @description AI监控中心页面 - 向量索引管理、生成日志、上下文诊断、手动操作
- * @version 1.0.0
+ * @version 2.0.0
+ * @modified 2026-04-22 - 向量索引重建改为 Queue 后台执行，前端仅触发并轮询进度
  */
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import type { ReindexItem } from '@/lib/api'
 import { MainLayout } from '@/components/layout/MainLayout'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -65,9 +65,6 @@ export default function AiMonitorPage() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [isReindexing, setIsReindexing] = useState(false)
-  const [reindexProgress, setReindexProgress] = useState<string>('')
-  const [reindexTotal, setReindexTotal] = useState(0)
-  const [reindexDone, setReindexDone] = useState(0)
   const [contextNovelId, setContextNovelId] = useState<string>('')
   const [contextChapterId, setContextChapterId] = useState<string>('')
   const [contextResult, setContextResult] = useState<any>(null)
@@ -85,8 +82,6 @@ export default function AiMonitorPage() {
     queryFn: () => api.vectorize.getStats(selectedNovelId),
     enabled: !!selectedNovelId,
   })
-
-
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return
@@ -106,62 +101,57 @@ export default function AiMonitorPage() {
   const handleReindexAll = async () => {
     if (!selectedNovelId) return
     setIsReindexing(true)
-    setReindexTotal(0)
-    setReindexDone(0)
-    setReindexProgress('正在获取待索引列表...')
     try {
-      const { items, total } = await api.vectorize.reindexAll({
+      const result = await api.vectorize.reindexAll({
         novelId: selectedNovelId,
         clearExisting: true,
       })
-      setReindexTotal(total)
-      setReindexProgress(`共 ${total} 条，开始索引...`)
 
-      const BATCH_SIZE = 1
-      const CONCURRENCY = 2
-      const batches: ReindexItem[][] = []
-      for (let i = 0; i < items.length; i += BATCH_SIZE) {
-        batches.push(items.slice(i, i + BATCH_SIZE))
-      }
+      if (result.ok) {
+        toast.success('索引重建任务已提交到后台队列，正在异步执行中...', { duration: 5000 })
 
-      let done = 0
-      for (let i = 0; i < batches.length; i += CONCURRENCY) {
-        const window = batches.slice(i, i + CONCURRENCY)
-        const results = await Promise.allSettled(
-          window.map(batch => api.vectorize.reindexItems({ items: batch }))
-        )
+        let pollCount = 0
+        const MAX_POLL = 60
+        const POLL_INTERVAL = 5000
 
-        // 检查是否有失败
-        for (const result of results) {
-          if (result.status === 'rejected') {
-            console.error('Batch failed:', result.reason)
-          } else if (result.value.failed > 0) {
-            console.warn(`Batch had ${result.value.failed} failures:`, result.value.errors)
+        const pollStats = async () => {
+          if (pollCount >= MAX_POLL) {
+            toast.info('轮询超时，请稍后手动刷新查看索引状态')
+            setIsReindexing(false)
+            return
+          }
+
+          pollCount++
+          try {
+            const stats = await api.vectorize.getStats(selectedNovelId)
+            const totalIndexed = stats.total
+            queryClient.setQueryData(['vector-stats', selectedNovelId], stats)
+
+            if (totalIndexed > 0 || pollCount > 3) {
+              await refetchVectorStats()
+            }
+          } catch {
+            // 轮询失败静默忽略
+          }
+
+          if (pollCount < MAX_POLL) {
+            setTimeout(pollStats, POLL_INTERVAL)
+          } else {
+            setIsReindexing(false)
           }
         }
 
-        done += window.reduce((s, b) => s + b.length, 0)
-        setReindexDone(done)
-        setReindexProgress(`进度：${done} / ${total}`)
-
-        // 添加短暂延迟，避免触发 Cloudflare 速率限制
-        if (i + CONCURRENCY < batches.length) {
-          await new Promise(resolve => setTimeout(resolve, 200))
-        }
+        setTimeout(pollStats, POLL_INTERVAL)
       }
-
-      toast.success(`索引重建完成，共处理 ${total} 条`)
-      queryClient.invalidateQueries({ queryKey: ['vector-stats'] })
     } catch (e: any) {
-      const isServiceUnavailable = e?.status === 503 || e?.code === 'VECTORIZE_NOT_CONFIGURED'
-      const errorMessage = isServiceUnavailable
-        ? '向量索引服务未配置（503）。请确保：\n1. 已在 Cloudflare 控制台创建 Vectorize 索引\n2. wrangler.toml 中已正确绑定 VECTORIZE\n3. 生产环境已重新部署'
-        : `索引重建失败：${e.message || '未知错误'}`
+      const isQueueUnavailable = e?.code === 'QUEUE_UNAVAILABLE'
+      const errorMessage = isQueueUnavailable
+        ? '任务队列不可用，请确认 Cloudflare Queue 绑定已配置'
+        : `索引重建任务提交失败：${e.message || '未知错误'}`
       toast.error(errorMessage, { duration: 8000 })
       console.error('Reindex failed:', e)
     } finally {
-      setIsReindexing(false)
-      setReindexProgress('')
+      setTimeout(() => setIsReindexing(false), 30000)
     }
   }
 
@@ -462,7 +452,7 @@ export default function AiMonitorPage() {
                       <div className="mt-4 space-y-3">
                         <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                           <div className="flex items-center justify-between mb-3">
-                            <h4 className="font-medium text-sm">📊 上下文摘要</h4>
+                            <h4 className="font-medium text-sm">上下文摘要</h4>
                             <Button
                               variant="ghost"
                               size="sm"
@@ -500,7 +490,7 @@ export default function AiMonitorPage() {
 
                         <details className="bg-gray-50 dark:bg-gray-800 rounded-lg">
                           <summary className="p-3 cursor-pointer text-sm font-medium hover:text-blue-600 transition-colors">
-                            🔍 查看完整上下文数据（JSON）
+                            查看完整上下文数据（JSON）
                           </summary>
                           <pre className="p-3 text-xs overflow-auto max-h-[400px] bg-white dark:bg-gray-900 rounded-b-lg border-t">
                             {JSON.stringify(contextResult, null, 2)}
@@ -521,7 +511,7 @@ export default function AiMonitorPage() {
                       <RefreshCw className="w-5 h-5" />
                       索引操作
                     </CardTitle>
-                    <CardDescription>管理和重建向量索引</CardDescription>
+                    <CardDescription>管理和重建向量索引（后台队列执行）</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <Button
@@ -538,8 +528,7 @@ export default function AiMonitorPage() {
                     </Button>
                     {isReindexing && (
                       <p className="text-sm text-muted-foreground text-center">
-                        {reindexProgress}
-                        {reindexTotal > 0 && ` (${reindexDone}/${reindexTotal})`}
+                        后台正在执行索引重建，请稍后刷新查看进度
                       </p>
                     )}
 

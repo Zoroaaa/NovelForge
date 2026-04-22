@@ -1,8 +1,8 @@
 /**
  * @file vectorize.ts
  * @description 向量化索引路由模块，提供内容向量化、相似度搜索和索引管理功能
- * @version 1.0.0
- * @modified 2026-04-21 - 添加规范化注释
+ * @version 2.0.0
+ * @modified 2026-04-22 - 改造为 Workers 独立部署，向量化全量重建回归 Queue 后台执行
  */
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
@@ -18,23 +18,10 @@ import {
   fetchContentForIndexing,
 } from '../services/embedding'
 import { vectorIndex, novelSettings, characters as charactersTable, masterOutline, foreshadowing } from '../db/schema'
-// alias for use in new reindex routes
-const characters = charactersTable
+import { enqueue } from '../lib/queue'
 
 const router = new Hono<{ Bindings: Env }>()
 
-/**
- * POST /index - 创建向量化索引
- * @description 将内容进行向量化并存储到向量数据库，支持大纲、章节、角色、摘要等类型
- * @param {string} sourceType - 内容类型：outline | chapter | character | summary
- * @param {string} sourceId - 内容ID
- * @param {string} novelId - 所属小说ID
- * @param {string} title - 内容标题
- * @param {string} [content] - 可选的内容文本，不提供时自动从数据库获取
- * @returns {Object} { ok: boolean, vectorIds: string[], message: string }
- * @throws {503} Vectorize服务未配置
- * @throws {500} 向量化失败
- */
 router.post(
   '/index',
   zValidator(
@@ -98,21 +85,11 @@ router.post(
   }
 )
 
-/**
- * DELETE /:type/:id - 删除向量化索引
- * @description 从向量数据库中删除指定类型和ID的向量索引
- * @param {string} type - 内容类型：outline | chapter | character | summary
- * @param {string} id - 内容ID
- * @returns {Object} { ok: boolean, message: string }
- * @throws {400} 无效的内容类型
- * @throws {503} Vectorize服务未配置
- * @throws {500} 删除失败
- */
 router.delete('/:type/:id', async (c) => {
   const sourceType = c.req.param('type') as any
   const sourceId = c.req.param('id')
 
-  if (!['outline', 'chapter', 'character', 'summary'].includes(sourceType)) {
+  if (!['outline', 'chapter', 'character', 'summary', 'setting', 'foreshadowing'].includes(sourceType)) {
     return c.json({ error: 'Invalid source type' }, 400)
   }
 
@@ -139,16 +116,6 @@ router.delete('/:type/:id', async (c) => {
   }
 })
 
-/**
- * GET /search - 相似内容搜索
- * @description 通过向量相似度搜索相关内容，支持按小说ID过滤
- * @param {string} q - 搜索查询文本
- * @param {string} [novelId] - 可选的小说ID过滤
- * @returns {Object} { ok: boolean, query: string, resultsCount: number, results: Array }
- * @throws {400} 缺少查询参数
- * @throws {503} Vectorize服务未配置
- * @throws {500} 搜索失败
- */
 router.get('/search', async (c) => {
   const query = c.req.query('q')
   const novelId = c.req.query('novelId')
@@ -192,11 +159,6 @@ router.get('/search', async (c) => {
   }
 })
 
-/**
- * GET /status - 向量化服务诊断接口（公开，无需登录）
- * @description 检查所有 bindings 配置和运行状态，用于排查 503 问题
- * @returns {Object} { status, bindings, diagnostics, recommendations }
- */
 export async function handleVectorStatus(c: any) {
   const diagnostics = {
     timestamp: new Date().toISOString(),
@@ -232,10 +194,10 @@ export async function handleVectorStatus(c: any) {
     }
 
     if (!c.env.VECTORIZE) {
-      diagnostics.issues.push('❌ VECTORIZE binding 未配置或不可用（这是 503 的根本原因）')
+      diagnostics.issues.push('VECTORIZE binding 未配置或不可用')
       diagnostics.recommendations.push(
-        '1. 在 Cloudflare Dashboard → Workers & Pages → novelforge → Settings → Bindings 中确认 VECTORIZE 绑定存在',
-        '2. 绑定后必须重新部署项目（Redeploy）才能生效',
+        '1. 在 Cloudflare Dashboard → Workers → novelforge → Settings → Bindings 中确认 VECTORIZE 绑定存在',
+        '2. 绑定后必须重新部署项目才能生效',
         '3. 检查 wrangler.toml 中的 [[vectorize]] 配置是否正确',
         '4. 确认 Vectorize 索引 "novelforge-index" 已创建且未过期'
       )
@@ -243,7 +205,7 @@ export async function handleVectorStatus(c: any) {
       return c.json({
         status: 'error',
         code: 'VECTORIZE_UNAVAILABLE',
-        message: 'Vectorize 服务不可用（503）',
+        message: 'Vectorize 服务不可用',
         diagnostics,
         quickFix: '请访问 Cloudflare Dashboard 确认绑定并重新部署'
       }, 503)
@@ -286,7 +248,7 @@ export async function handleVectorStatus(c: any) {
     if (diagnostics.issues.length === 0 && aiWorking && vectorizeWorking) {
       return c.json({
         status: 'ok',
-        message: '✅ 所有服务正常运行',
+        message: '所有服务正常运行',
         diagnostics,
         embeddingModel: '@cf/baai/bge-m3',
         dimensions: 1024
@@ -294,7 +256,7 @@ export async function handleVectorStatus(c: any) {
     } else {
       return c.json({
         status: 'warning',
-        message: `⚠️ 发现 ${diagnostics.issues.length} 个问题`,
+        message: `发现 ${diagnostics.issues.length} 个问题`,
         diagnostics
       })
     }
@@ -309,12 +271,6 @@ export async function handleVectorStatus(c: any) {
   }
 }
 
-/**
- * GET /stats/:novelId - 获取向量索引统计信息
- * @description 统计指定小说的向量索引情况，包括总数、分类统计、未索引数量等
- * @param {string} novelId - 小说ID
- * @returns {Object} { total, byType, lastIndexedAt, unindexedCounts }
- */
 router.get('/stats/:novelId', async (c) => {
   const novelId = c.req.param('novelId')
   const db = drizzle(c.env.DB)
@@ -408,9 +364,6 @@ router.get('/stats/:novelId', async (c) => {
   }
 })
 
-/**
- * POST /reindex-all - 查询待索引条目并返回列表（不执行索引，由前端分批并发调用 /reindex-items）
- */
 router.post(
   '/reindex-all',
   zValidator(
@@ -424,167 +377,30 @@ router.post(
   async (c) => {
     const body = c.req.valid('json')
     const { novelId, types = ['setting', 'character', 'outline', 'foreshadowing'], clearExisting } = body
-    const db = drizzle(c.env.DB)
 
     if (!c.env.VECTORIZE) {
       return c.json({ error: 'Vectorize binding not configured' }, 503)
     }
 
+    if (!c.env.TASK_QUEUE) {
+      return c.json({ error: 'Task queue not configured', code: 'QUEUE_UNAVAILABLE' }, 503)
+    }
+
     try {
-      // 清除旧索引
-      if (clearExisting) {
-        const existingVectors = await db.select({ id: vectorIndex.id })
-          .from(vectorIndex)
-          .where(eq(vectorIndex.novelId, novelId))
-          .all()
-        for (const v of existingVectors) {
-          await c.env.VECTORIZE.deleteByIds([v.id]).catch(() => {})
-        }
-        await db.delete(vectorIndex).where(eq(vectorIndex.novelId, novelId))
-      }
+      await enqueue(c.env, {
+        type: 'reindex_all',
+        payload: { novelId, types, clearExisting: clearExisting ?? true },
+      })
 
-      // 收集所有待索引 items
-      type IndexItem = {
-        sourceType: string
-        sourceId: string
-        novelId: string
-        title: string
-        content: string
-        extraMetadata?: Record<string, string>
-      }
-      const items: IndexItem[] = []
-
-      if (types.includes('setting')) {
-        const rows = await db.select({
-          id: novelSettings.id, novelId: novelSettings.novelId,
-          name: novelSettings.name, content: novelSettings.content,
-          type: novelSettings.type, importance: novelSettings.importance,
-        }).from(novelSettings).where(and(
-          eq(novelSettings.novelId, novelId),
-          sql`${novelSettings.deletedAt} IS NULL`,
-          sql`${novelSettings.content} IS NOT NULL`
-        )).all()
-        for (const r of rows) {
-          if (!r.content) continue
-          items.push({ sourceType: 'setting', sourceId: r.id, novelId: r.novelId, title: r.name, content: r.content, extraMetadata: { settingType: r.type, importance: r.importance } })
-        }
-      }
-
-      if (types.includes('character')) {
-        const rows = await db.select({
-          id: characters.id, novelId: characters.novelId,
-          name: characters.name, description: characters.description,
-        }).from(characters).where(and(
-          eq(characters.novelId, novelId),
-          sql`${characters.deletedAt} IS NULL`,
-          sql`${characters.description} IS NOT NULL`
-        )).all()
-        for (const r of rows) {
-          if (!r.description) continue
-          items.push({ sourceType: 'character', sourceId: r.id, novelId: r.novelId, title: r.name, content: r.description })
-        }
-      }
-
-      if (types.includes('foreshadowing')) {
-        const rows = await db.select({
-          id: foreshadowing.id, novelId: foreshadowing.novelId,
-          title: foreshadowing.title, description: foreshadowing.description, importance: foreshadowing.importance,
-        }).from(foreshadowing).where(and(
-          eq(foreshadowing.novelId, novelId),
-          sql`${foreshadowing.deletedAt} IS NULL`,
-          sql`${foreshadowing.description} IS NOT NULL`
-        )).all()
-        for (const r of rows) {
-          if (!r.description) continue
-          items.push({ sourceType: 'foreshadowing', sourceId: r.id, novelId: r.novelId, title: r.title, content: r.description, extraMetadata: { importance: r.importance } })
-        }
-      }
-
-      if (types.includes('outline')) {
-        const rows = await db.select({
-          id: masterOutline.id, novelId: masterOutline.novelId,
-          title: masterOutline.title, content: masterOutline.content,
-        }).from(masterOutline).where(and(
-          eq(masterOutline.novelId, novelId),
-          sql`${masterOutline.deletedAt} IS NULL`,
-          sql`${masterOutline.content} IS NOT NULL`
-        )).all()
-        for (const r of rows) {
-          if (!r.content) continue
-          items.push({ sourceType: 'outline', sourceId: r.id, novelId: r.novelId, title: r.title, content: r.content })
-        }
-      }
-
-      return c.json({ ok: true, items, total: items.length })
-    } catch (error) {
-      console.error('reindex-all list failed:', error)
-      return c.json({ error: 'Failed to list reindex items', details: (error as Error).message }, 500)
-    }
-  }
-)
-
-/**
- * POST /reindex-items - 同步执行一批索引（前端并发调用）
- * @param items - IndexItem 数组（每批建议 1~2 条，最多 5 条）
- * @returns { ok, indexed, failed, errors }
- */
-router.post(
-  '/reindex-items',
-  zValidator(
-    'json',
-    z.object({
-      items: z.array(z.object({
-        sourceType: z.enum(['setting', 'character', 'outline', 'foreshadowing', 'chapter', 'summary']),
-        sourceId: z.string().min(1),
-        novelId: z.string().min(1),
-        title: z.string(),
-        content: z.string().max(50000),
-        extraMetadata: z.record(z.string(), z.string()).optional(),
-      })).max(5, '单次请求最多 5 条，请分批处理')
-    })
-  ),
-  async (c) => {
-    const startTime = Date.now()
-    const { items } = c.req.valid('json')
-
-    console.log(`[reindex-items] Received ${items.length} items to index`)
-
-    if (!c.env.VECTORIZE) {
       return c.json({
-        error: 'Vectorize service unavailable',
-        code: 'VECTORIZE_NOT_CONFIGURED',
-        message: '向量索引服务未配置。请在 Cloudflare 控制台创建 Vectorize 索引，或在 wrangler.toml 中确认绑定配置。',
-        docs: 'https://developers.cloudflare.com/vectorize/get-started/'
-      }, 503)
+        ok: true,
+        message: '全量索引重建任务已提交到后台队列，请稍后查看索引统计',
+        novelId,
+      })
+    } catch (error) {
+      console.error('Failed to enqueue reindex task:', error)
+      return c.json({ error: 'Failed to enqueue reindex task', details: (error as Error).message }, 500)
     }
-
-    let indexed = 0
-    let failed = 0
-    const errors: string[] = []
-
-    // 串行处理以避免并发过高导致 CPU 超时
-    for (const item of items) {
-      try {
-        console.log(`[reindex-items] Indexing ${item.sourceType}:${item.sourceId}...`)
-        const result = await indexContent(c.env, item.sourceType as any, item.sourceId, item.novelId, item.title, item.content, item.extraMetadata)
-        indexed++
-        if (result.length > 0) {
-          console.log(`[reindex-items] ✓ ${item.sourceType}:${item.sourceId} - ${result.length} vectors`)
-        } else {
-          console.log(`[reindex-items] ⊘ ${item.sourceType}:${item.sourceId} - skipped (unchanged or empty)`)
-        }
-      } catch (e) {
-        failed++
-        const errorMsg = e instanceof Error ? e.message : String(e)
-        errors.push(`${item.sourceType}:${item.sourceId} - ${errorMsg}`)
-        console.error(`[reindex-items] ✗ Failed to index ${item.sourceType}:${item.sourceId}:`, e)
-      }
-    }
-
-    const duration = Date.now() - startTime
-    console.log(`[reindex-items] Completed in ${duration}ms: ${indexed} indexed, ${failed} failed`)
-
-    return c.json({ ok: true, indexed, failed, errors, duration })
   }
 )
 

@@ -162,7 +162,7 @@ router.post('/', zValidator('json', CreateSettingSchema), async (c) => {
     }).returning().get()
 
     if (c.env.VECTORIZE && newSetting.content) {
-      await enqueue(c.env, c, {
+      await enqueue(c.env, {
         type: 'index_content',
         payload: {
           sourceType: 'setting',
@@ -224,7 +224,7 @@ router.put('/:id', zValidator('json', UpdateSettingSchema), async (c) => {
       .get()
 
     if (c.env.VECTORIZE && body.content !== undefined && updated.content) {
-      await enqueue(c.env, c, {
+      await enqueue(c.env, {
         type: 'index_content',
         payload: {
           sourceType: 'setting',

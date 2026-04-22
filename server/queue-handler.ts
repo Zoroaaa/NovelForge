@@ -7,6 +7,7 @@ import { extractForeshadowingFromChapter } from './services/foreshadowing'
 import { drizzle } from 'drizzle-orm/d1'
 import { novelSettings, characters, masterOutline, foreshadowing, chapters, queueTaskLogs, vectorIndex } from './db/schema'
 import { eq, and, sql } from 'drizzle-orm'
+import { enqueueBatch } from './lib/queue'
 
 export default {
   async queue(
@@ -26,10 +27,6 @@ export default {
       }
     }
   },
-}
-
-export async function executeTask(env: Env, msg: QueueMessage): Promise<void> {
-  await handleMessage(env, msg)
 }
 
 async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
@@ -225,16 +222,7 @@ async function handleReindexAll(
   }
 
   if (env.TASK_QUEUE && messages.length > 0) {
-    const BATCH_SIZE = 100
-    for (let i = 0; i < messages.length; i += BATCH_SIZE) {
-      await env.TASK_QUEUE.sendBatch(
-        messages.slice(i, i + BATCH_SIZE).map(body => ({ body }))
-      )
-    }
-  } else if (messages.length > 0) {
-    for (const msg of messages) {
-      await handleMessage(env, msg)
-    }
+    await enqueueBatch(env, messages)
   }
 
   console.log(`reindex_all enqueued ${messages.length} tasks for novel ${novelId}`)

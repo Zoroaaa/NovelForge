@@ -243,7 +243,6 @@ export async function indexContent(
   const chunks = chunkText(content)
   const vectorIds: string[] = []
 
-  // 检查是否已有索引且内容未变化
   const existingIndex = await db
     .select()
     .from(vectorIndex)
@@ -261,10 +260,9 @@ export async function indexContent(
     return []
   }
 
-  // 删除旧索引（如果存在）
   if (existingIndex) {
     const oldRecords = await db
-      .select()
+      .select({ id: vectorIndex.id })
       .from(vectorIndex)
       .where(eq(vectorIndex.sourceId, sourceId))
       .all()
@@ -272,50 +270,70 @@ export async function indexContent(
     await db.delete(vectorIndex).where(eq(vectorIndex.sourceId, sourceId))
 
     try {
-      for (const old of oldRecords) {
-        await deleteVector(env.VECTORIZE, old.id)
+      const oldIds = oldRecords.map(r => r.id)
+      if (oldIds.length > 0) {
+        await env.VECTORIZE.deleteByIds(oldIds)
       }
     } catch (e) {
       console.warn('Failed to delete old vectors:', e)
     }
   }
 
-  // 创建新索引
-  for (let i = 0; i < chunks.length; i++) {
-    const vectorId = `${sourceType}_${sourceId}_${i}`
-    const values = await embedText(env.AI, chunks[i])
-
-    // 防御性校验：确保 extraMetadata 只包含字符串值
-    const safeExtraMetadata: Record<string, string> = {}
-    if (extraMetadata && typeof extraMetadata === 'object') {
-      for (const [key, value] of Object.entries(extraMetadata)) {
-        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-          safeExtraMetadata[key] = String(value)
-        }
+  const safeExtraMetadata: Record<string, string> = {}
+  if (extraMetadata && typeof extraMetadata === 'object') {
+    for (const [key, value] of Object.entries(extraMetadata)) {
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        safeExtraMetadata[key] = String(value)
       }
     }
+  }
 
-    // 插入到Vectorize
-    await upsertVector(env.VECTORIZE, vectorId, values, {
+  const allVectors: Array<{ id: string; values: number[]; metadata: Record<string, any> }> = []
+  const dbRecords: { id: string; novelId: string; sourceType: string; sourceId: string; chunkIndex: number; contentHash: string | null }[] = []
+
+  const embeddings = await embedBatch(env.AI, chunks, 3)
+
+  for (let i = 0; i < chunks.length; i++) {
+    const vectorId = `${sourceType}_${sourceId}_${i}`
+    const metadata: Record<string, any> = {
       novelId,
       sourceType,
       sourceId,
       title: i === 0 ? title : `${title} (Part ${i + 1})`,
       content: chunks[i],
       ...safeExtraMetadata,
-    })
+      indexedAt: Date.now(),
+    }
 
-    // 记录到vector_index表
-    await db.insert(vectorIndex).values({
+    allVectors.push({ id: vectorId, values: embeddings[i], metadata })
+    dbRecords.push({
       id: vectorId,
       novelId,
       sourceType,
       sourceId,
       chunkIndex: i,
-      contentHash: i === 0 ? contentHash : null, // 只在第一个chunk记录hash
+      contentHash: i === 0 ? contentHash : null,
     })
-
     vectorIds.push(vectorId)
+  }
+
+  try {
+    for (let i = 0; i < allVectors.length; i += 10) {
+      const batch = allVectors.slice(i, i + 10)
+      await env.VECTORIZE.upsert(batch)
+    }
+  } catch (e) {
+    console.error('Failed to upsert vectors to Vectorize:', e)
+    throw new Error(`Vectorize upsert failed: ${(e as Error).message}`)
+  }
+
+  try {
+    for (let i = 0; i < dbRecords.length; i += 20) {
+      const batch = dbRecords.slice(i, i + 20)
+      await db.insert(vectorIndex).values(batch)
+    }
+  } catch (e) {
+    console.error('Failed to insert vector index records:', e)
   }
 
   console.log(`Indexed ${vectorIds.length} vectors for ${sourceType}:${sourceId}`)

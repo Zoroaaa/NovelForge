@@ -180,7 +180,7 @@ router.put('/:id', zValidator('json', UpdateMasterOutlineSchema), async (c) => {
       .get()
 
     if (c.env.VECTORIZE && body.content !== undefined && updated.content) {
-      await enqueue(c.env, c, {
+      await enqueue(c.env, {
         type: 'index_content',
         payload: {
           sourceType: 'outline',

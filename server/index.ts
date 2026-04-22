@@ -285,4 +285,7 @@ mcpApi.use('*', jwtAuthMiddleware())
 mcpApi.route('/', mcp)
 app.route('/', mcpApi)
 
-export { app }
+import queueHandler from './queue-handler'
+
+export default app
+export const queue = queueHandler.queue

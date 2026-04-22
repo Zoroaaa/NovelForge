@@ -73,7 +73,7 @@ router.post('/', zValidator('json', CreateSchema), async (c) => {
   const [row] = await db.insert(t).values(c.req.valid('json')).returning()
 
   if (row?.description && c.env.VECTORIZE) {
-    await enqueue(c.env, c, {
+    await enqueue(c.env, {
       type: 'index_content',
       payload: {
         sourceType: 'character',
@@ -108,7 +108,7 @@ router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
   if (body.description !== undefined && row && c.env.VECTORIZE) {
     const descriptionContent = body.description ?? ''
     if (descriptionContent.trim()) {
-      await enqueue(c.env, c, {
+      await enqueue(c.env, {
         type: 'index_content',
         payload: {
           sourceType: 'character',

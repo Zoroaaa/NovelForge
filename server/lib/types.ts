@@ -10,7 +10,7 @@ export type Env = {
   STORAGE: R2Bucket
   AI: Ai
   VECTORIZE?: VectorizeIndex
-  TASK_QUEUE?: any
+  TASK_QUEUE: Queue
   VOLCENGINE_API_KEY: string
   ANTHROPIC_API_KEY: string
   OPENAI_API_KEY: string

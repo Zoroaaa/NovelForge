@@ -1,7 +1,10 @@
 name = "novelforge"
-pages_build_output_dir = "dist"
+main = "server/index.ts"
 compatibility_date = "2026-01-01"
 compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "dist"
 
 [[d1_databases]]
 binding = "DB"
@@ -15,20 +18,16 @@ bucket_name = "novelforge-storage"
 [ai]
 binding = "AI"
 
-# Vectorize 向量索引（Phase 2 RAG 功能）
-# 需要先运行: wrangler vectorize create novelforge-index --dimensions=1024 --metric=cosine
 [[vectorize]]
 binding = "VECTORIZE"
 index_name = "novelforge-index"
 
-# Queues 任务队列（异步任务处理）
 [[queues.producers]]
 binding = "TASK_QUEUE"
 queue = "novelforge-tasks"
 
-# [[queues.consumers]]
-# queue = "novelforge-tasks"
-# max_batch_size = 10
-# max_batch_timeout = 5
-# max_retries = 3
-# dead_letter_queue = "novelforge-tasks-dlq"
+[[queues.consumers]]
+queue = "novelforge-tasks"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
