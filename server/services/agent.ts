@@ -8,7 +8,7 @@ import { drizzle } from 'drizzle-orm/d1'
 import { chapters, modelConfigs, characters, novelSettings, masterOutline, volumes, generationLogs, foreshadowing, novels } from '../db/schema'
 import { eq, desc, sql, and } from 'drizzle-orm'
 import type { Env } from '../lib/types'
-import { buildChapterContext, type ContextBundle } from './contextBuilder'
+import { buildChapterContext, assemblePromptContext, type ContextBundle } from './contextBuilder'
 import { streamGenerate, resolveConfig } from './llm'
 import { indexContent, searchSimilar, embedText } from './embedding'
 import { extractForeshadowingFromChapter } from './foreshadowing'
@@ -596,69 +596,25 @@ ${existingContent}
     ]
   }
 
-  const userContentParts: string[] = []
+  // v3: 使用 assemblePromptContext 统一组装上下文
+  const contextText = assemblePromptContext(contextBundle)
 
-  userContentParts.push(`【创作任务】`)
-  userContentParts.push(`请创作《${chapterTitle}》的正文内容，3000-5000字。`)
+  const userContent = `【创作任务】
+请创作《${chapterTitle}》的正文内容，3000-5000字。
 
-  // Phase 2.2: 使用新的三层上下文结构
-  if (contextBundle.core.chapterOutline) {
-    userContentParts.push(`\n【本章大纲】\n${contextBundle.core.chapterOutline}`)
-  }
+${contextText}
 
-  if (contextBundle.core.prevChapterSummary) {
-    userContentParts.push(`\n【上一章摘要】\n${contextBundle.core.prevChapterSummary}`)
-  }
-
-  if (contextBundle.core.protagonistStateCards.length > 0) {
-    userContentParts.push(
-      `\n【主要角色状态卡】\n${contextBundle.core.protagonistStateCards.join('\n\n')}`
-    )
-  }
-
-  if (contextBundle.core.highPriorityRules.length > 0) {
-    userContentParts.push(
-      `\n【高优先级创作规则】\n${contextBundle.core.highPriorityRules.join('\n\n')}`
-    )
-  }
-
-  // 补充上下文层
-  if (contextBundle.supplementary.summaryChain.length > 0) {
-    userContentParts.push(`\n【前情回顾（摘要链）】\n${contextBundle.supplementary.summaryChain.join('\n')}`)
-  }
-
-  if (contextBundle.supplementary.volumeSummary) {
-    userContentParts.push(`\n【当前卷概要】\n${contextBundle.supplementary.volumeSummary}`)
-  }
-
-  if (contextBundle.supplementary.openForeshadowing && contextBundle.supplementary.openForeshadowing.length > 0) {
-    userContentParts.push(
-      `\n【当前未收尾的伏笔（本章可能需要收尾或推进）】\n${contextBundle.supplementary.openForeshadowing.join('\n\n')}`
-    )
-  }
-
-  if (contextBundle.ragChunks.length > 0) {
-    userContentParts.push('\n【相关参考资料】')
-    contextBundle.ragChunks.forEach((chunk, index) => {
-      userContentParts.push(
-        `\n参考资料 ${index + 1} [${chunk.sourceType}] (${chunk.title})：\n${chunk.content}`
-      )
-    })
-  }
-
-  userContentParts.push(
-    '\n\n请基于以上资料进行创作，确保：\n' +
-    '- 符合大纲要求\n' +
-    '- 与前文衔接自然\n' +
-    '- 角色行为符合设定（特别是境界等级的一致性）\n' +
-    '- 合理处理或推进未收尾的伏笔\n' +
-    '- 严格遵循创作规则中的文风、节奏要求\n' +
-    '- 文风流畅，节奏紧凑'
-  )
+请基于以上资料进行创作，确保：
+- 符合大纲要求
+- 与前文衔接自然
+- 角色行为符合设定（特别是境界等级的一致性）
+- 合理处理或推进未收尾的伏笔
+- 严格遵循创作规则中的文风、节奏要求
+- 文风流畅，节奏紧凑`
 
   return [
     { role: 'system', content: systemPrompt },
-    { role: 'user', content: userContentParts.join('\n') },
+    { role: 'user', content: userContent },
   ]
 }
 

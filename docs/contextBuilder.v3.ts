@@ -1,6 +1,6 @@
 /**
- * @file contextBuilder.ts
- * @description 精准分槽上下文构建器 v3 —— 解决海量设定噪音问题
+ * @file contextBuilder.v3.ts
+ * @description 精准分槽上下文构建器 —— 解决海量设定噪音问题
  *
  * 核心改造：从"单向量全局混查"升级为"分槽独立检索 + 类型过滤"
  *

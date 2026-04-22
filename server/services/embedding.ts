@@ -11,10 +11,12 @@ import { vectorIndex, masterOutline, chapters } from '../db/schema'
 
 export interface VectorMetadata {
   novelId: string
-  sourceType: 'outline' | 'chapter' | 'character' | 'summary'
+  sourceType: 'outline' | 'chapter' | 'character' | 'summary' | 'setting' | 'foreshadowing'
   sourceId: string
   title?: string
   content?: string
+  settingType?: string    // v3: 设定类型（world_rule, power_system, geography等）
+  importance?: string     // v3: 重要性（high, normal, low）
 }
 
 export interface EmbeddingResult {
@@ -224,7 +226,9 @@ export async function indexContent(
   sourceId: string,
   novelId: string,
   title: string,
-  content: string | null
+  content: string | null,
+  settingType?: string,
+  importance?: string
 ): Promise<string[]> {
   if (!content || !content.trim()) {
     return []
@@ -283,7 +287,9 @@ export async function indexContent(
       sourceType,
       sourceId,
       title: i === 0 ? title : `${title} (Part ${i + 1})`,
-      content: chunks[i]
+      content: chunks[i],
+      ...(settingType ? { settingType } : {}),
+      ...(importance ? { importance } : {}),
     })
 
     // 记录到vector_index表

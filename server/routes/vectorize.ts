@@ -35,16 +35,18 @@ router.post(
   zValidator(
     'json',
     z.object({
-      sourceType: z.enum(['outline', 'chapter', 'character', 'summary']),
+      sourceType: z.enum(['outline', 'chapter', 'character', 'summary', 'setting', 'foreshadowing']),
       sourceId: z.string().min(1),
       novelId: z.string().min(1),
       title: z.string(),
       content: z.string().nullable().optional(),
+      settingType: z.string().optional(),
+      importance: z.string().optional(),
     })
   ),
   async (c) => {
     const body = c.req.valid('json')
-    const { sourceType, sourceId, novelId, title } = body
+    const { sourceType, sourceId, novelId, title, settingType, importance } = body
 
     let content = body.content
     if (!content) {
@@ -59,7 +61,16 @@ router.post(
     }
 
     try {
-      const vectorIds = await indexContent(c.env, sourceType, sourceId, novelId, title, content ?? null)
+      const vectorIds = await indexContent(
+        c.env,
+        sourceType,
+        sourceId,
+        novelId,
+        title,
+        content ?? null,
+        settingType,
+        importance
+      )
 
       return c.json({
         ok: true,
