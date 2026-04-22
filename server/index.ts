@@ -17,7 +17,7 @@
  */
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import type { AppType } from './lib/types'
+import type { AppType, Env } from './lib/types'
 import { authMiddleware, jwtAuthMiddleware, adminAuthMiddleware, hashPassword, verifyPassword, generateToken, getJwtSecret } from './lib/auth'
 
 import { novels } from './routes/novels'
@@ -288,6 +288,12 @@ app.route('/', mcpApi)
 import { handleQueueBatch } from './queue-handler'
 
 export default {
-  fetch: app.fetch,
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const response = await app.fetch(request, env, ctx)
+    if (response.status === 404 && !request.url.includes('/api/')) {
+      return (env as any).ASSETS.fetch(new Request(request))
+    }
+    return response
+  },
   queue: handleQueueBatch,
 }
