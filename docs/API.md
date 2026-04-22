@@ -9,6 +9,12 @@
 - [基础信息](#基础信息)
 - [认证方式](#认证方式)
 - [通用响应格式](#通用响应格式)
+- **v1.5.0 新增**
+  - [用户认证 (Auth)](#用户认证-auth)
+  - [系统初始化 (Setup)](#系统初始化-setup)
+  - [邀请码管理 (Invite Codes)](#邀请码管理-invite-codes)
+  - [系统设置 (System Settings)](#系统设置-system-settings)
+  - [创意工坊 (Workshop)](#创意工坊-workshop)
 - [小说管理 (Novels)](#小说管理-novels)
 - [总纲管理 (Master Outline)](#总纲管理-master-outline)
 - [创作规则 (Writing Rules)](#创作规则-writing-rules)
@@ -89,6 +95,475 @@ Authorization: Bearer <token>  # 如需认证
 | 404 | Not Found | 资源不存在 |
 | 409 | Conflict | 资源冲突 |
 | 500 | Internal Server Error | 服务器错误 |
+
+---
+
+## v1.5.0 新增 API
+
+### 用户认证 (Auth)
+
+> **注意**: 以下端点**不需要 JWT 认证**
+
+#### 用户注册
+
+**POST** `/api/auth/register`
+
+**请求体**:
+```json
+{
+  "username": "noveluser",
+  "email": "user@example.com",
+  "password": "MySecurePass123",
+  "inviteCode": "optional-invite-code"
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| username | string | ✅ | 用户名（3-32字符，字母数字下划线） |
+| email | string | ✅ | 邮箱地址 |
+| password | string | ✅ | 密码（8-64位，需包含大小写字母和数字） |
+| inviteCode | string | 否 | 邀请码（如果注册需要） |
+
+**成功响应 (201)**:
+```json
+{
+  "message": "注册成功",
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "user": {
+    "id": "usr_abc123",
+    "username": "noveluser",
+    "email": "user@example.com",
+    "role": "user"
+  }
+}
+```
+
+#### 用户登录
+
+**POST** `/api/auth/login`
+
+**请求体**:
+```json
+{
+  "login": "noveluser",  // 或邮箱
+  "password": "MySecurePass123"
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| login | string | ✅ | 用户名或邮箱 |
+| password | string | ✅ | 密码 |
+
+**成功响应 (200)**:
+```json
+{
+  "message": "登录成功",
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "user": {
+    "id": "usr_abc123",
+    "username": "noveluser",
+    "email": "user@example.com",
+    "role": "admin"
+  }
+}
+```
+
+#### 获取当前用户信息
+
+**GET** `/api/auth/me`
+
+> **需要认证**: `Authorization: Bearer <token>`
+
+**响应示例**:
+```json
+{
+  "id": "usr_abc123",
+  "username": "noveluser",
+  "email": "user@example.com",
+  "role": "admin",
+  "createdAt": 1713571200,
+  "updatedAt": 1713657600,
+  "deletedAt": null
+}
+```
+
+#### 修改密码
+
+**PUT** `/api/auth/password`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "currentPassword": "OldPassword123",
+  "newPassword": "NewPassword456"
+}
+```
+
+**成功响应 (200)**:
+```json
+{
+  "message": "密码修改成功"
+}
+```
+
+#### 删除账号
+
+**DELETE** `/api/auth/account`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "password": "ConfirmPassword123"
+}
+```
+
+**成功响应 (200)**:
+```json
+{
+  "message": "账号已删除"
+}
+```
+
+#### 登出
+
+**POST** `/api/auth/logout`
+
+> **需要认证**
+
+**成功响应 (200)**:
+```json
+{
+  "message": "登出成功"
+}
+```
+
+---
+
+### 系统初始化 (Setup)
+
+> **注意**: 以下端点**不需要 JWT 认证**
+
+#### 检查初始化状态
+
+**GET** `/api/setup/status`
+
+**响应示例**:
+```json
+{
+  "initialized": false
+}
+```
+
+#### 创建管理员账号
+
+**POST** `/api/setup`
+
+**请求体**:
+```json
+{
+  "username": "admin",
+  "email": "admin@example.com",
+  "password": "AdminPassword123"
+}
+```
+
+**成功响应 (201)**:
+```json
+{
+  "message": "初始化成功",
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "user": {
+    "id": "usr_admin1",
+    "username": "admin",
+    "email": "admin@example.com",
+    "role": "admin"
+  }
+}
+```
+
+**错误响应 (409)**:
+```json
+{
+  "error": "系统已经初始化，无法重复创建管理员",
+  "code": "ALREADY_INITIALIZED"
+}
+```
+
+---
+
+### 邀请码管理 (Invite Codes)
+
+> **需要认证**: 所有端点都需要 `Admin` 权限
+
+#### 获取邀请码列表
+
+**GET** `/api/invite-codes`
+
+**查询参数**:
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| status | string | - | 过滤状态：active/used/expired/disabled |
+| page | number | 1 | 页码 |
+| perPage | number | 20 | 每页数量 |
+
+**响应示例**:
+```json
+[
+  {
+    "id": "ic_abc123",
+    "code": "INVITE2024",
+    "maxUses": 10,
+    "usedCount": 3,
+    "status": "active",
+    "expiresAt": null,
+    "createdBy": "usr_admin1",
+    "createdAt": 1713571200,
+    "updatedAt": 1713571300
+  }
+]
+```
+
+#### 创建邀请码
+
+**POST** `/api/invite-codes`
+
+**请求体**:
+```json
+{
+  "code": "INVITE2024",
+  "maxUses": 10,
+  "expiresInDays": 30
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| code | string | 否 | 自定义代码（留空自动生成） |
+| maxUses | number | 否 | 最大使用次数（默认 1） |
+| expiresInDays | number | 否 | 有效期天数（默认 null，永不过期） |
+
+**成功响应 (201)**:
+```json
+{
+  "id": "ic_abc123",
+  "code": "INVITE2024",
+  "maxUses": 10,
+  "usedCount": 0,
+  "status": "active",
+  "expiresAt": 1741147200,
+  "createdBy": "usr_admin1",
+  "createdAt": 1713571200,
+  "updatedAt": 1713571200
+}
+```
+
+#### 更新邀请码
+
+**PUT** `/api/invite-codes/:id`
+
+**请求体**:
+```json
+{
+  "maxUses": 20,
+  "status": "disabled"
+}
+```
+
+#### 删除邀请码
+
+**DELETE** `/api/invite-codes/:id`
+
+---
+
+### 系统设置 (System Settings)
+
+> **需要认证**: `GET` 需要普通用户权限，`PUT` 需要 `Admin` 权限
+
+#### 获取系统设置
+
+**GET** `/api/system-settings`
+
+**响应示例**:
+```json
+[
+  {
+    "key": "registration_enabled",
+    "value": "true",
+    "description": "是否允许公开注册",
+    "updatedAt": 1713571200
+  },
+  {
+    "key": "admin_initialized",
+    "value": "true",
+    "description": "系统是否已完成管理员初始化",
+    "updatedAt": 1713571200
+  },
+  {
+    "key": "site_name",
+    "value": "NovelForge",
+    "description": "站点名称",
+    "updatedAt": 1713571200
+  }
+]
+```
+
+#### 更新系统设置
+
+**PUT** `/api/system-settings`
+
+> **需要 Admin 权限**
+
+**请求体**:
+```json
+{
+  "settings": [
+    {
+      "key": "registration_enabled",
+      "value": "false"
+    }
+  ]
+}
+```
+
+**成功响应 (200)**:
+```json
+{
+  "message": "更新成功",
+  "updated": [
+    { "key": "registration_enabled", "value": "false" }
+  ]
+}
+```
+
+---
+
+### 创意工坊 (Workshop)
+
+> **需要认证**
+
+#### 创建会话
+
+**POST** `/api/workshop/sessions`
+
+**请求体**:
+```json
+{
+  "title": "我的玄幻小说创意"
+}
+```
+
+**成功响应 (201)**:
+```json
+{
+  "id": "ws_abc123",
+  "title": "我的玄幻小说创意",
+  "stage": "concept",
+  "data": {},
+  "userId": "usr_abc123",
+  "createdAt": 1713571200,
+  "updatedAt": 1713571200
+}
+```
+
+#### 获取会话列表
+
+**GET** `/api/workshop/sessions`
+
+**响应示例**:
+```json
+[
+  {
+    "id": "ws_abc123",
+    "title": "我的玄幻小说创意",
+    "stage": "concept",
+    "data": {},
+    "createdAt": 1713571200,
+    "updatedAt": 1713571500
+  }
+]
+```
+
+#### 获取会话详情
+
+**GET** `/api/workshop/sessions/:id`
+
+#### 更新会话数据
+
+**PUT** `/api/workshop/sessions/:id`
+
+**请求体**:
+```json
+{
+  "stage": "worldbuilding",
+  "data": {
+    "genre": "玄幻",
+    "coreConcepts": ["修炼体系", "宗门争霸"]
+  }
+}
+```
+
+#### 删除会话
+
+**DELETE** `/api/workshop/sessions/:id`
+
+#### SSE 对话流
+
+**GET** `/api/workshop/sessions/:id/chat?message=你好&stage=concept`
+
+> 返回 SSE (Server-Sent Events) 流
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| message | string | ✅ | 用户消息内容 |
+| stage | string | ✅ | 当前阶段：concept/worldbuilding/character/volume |
+
+**SSE 事件格式**:
+```
+event: message
+data: {"type":"text","content":"你好！我是你的AI创作助手..."}
+
+event: extracted_data
+data: {"genre":"玄幻","title":"混沌元尊","...":"..."}
+
+event: done
+data: {}
+```
+
+#### 提交确认（生成小说框架）
+
+**POST** `/api/workshop/sessions/:id/submit`
+
+**请求体**:
+```json
+{
+  "confirmedData": {
+    "title": "混沌元尊",
+    "genre": "玄幻",
+    "synopsis": "...",
+    "worldSettings": [...],
+    "characters": [...],
+    "volumes": [...]
+  }
+}
+```
+
+**成功响应 (201)**:
+```json
+{
+  "message": "小说创建成功",
+  "novelId": "nov_abc123",
+  "masterOutlineId": "mo_def456",
+  "characterIds": ["char_789"],
+  "volumeIds": ["vol_012"]
+}
+```
 
 ---
 

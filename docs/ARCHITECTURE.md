@@ -53,6 +53,12 @@
 │  │  │  ┌─────────────┐                                        │  │  │
 │  │  │  │     mcp     │  (MCP Server for Claude Desktop)      │  │  │
 │  │  │  └─────────────┘                                        │  │  │
+│  │  │  ┌──────────┐ ┌───────────┐ ┌──────────────┐           │  │  │
+│  │  │  │   auth   │ │  setup    │ │system-settings│ (v1.5)  │  │  │
+│  │  │  └──────────┘ └───────────┘ └──────────────┘           │  │  │
+│  │  │  ┌──────────────┐ ┌────────────────┐                   │  │  │
+│  │  │  │ invite-codes │ │   workshop     │ (v1.5)            │  │  │
+│  │  │  └──────────────┘ └────────────────┘                   │  │  │
 │  │  └─────────────────────────────────────────────────────────┘  │  │
 │  └───────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
@@ -64,13 +70,17 @@
 │  (SQLite Edge)   │            │ (Vector Search) │        │  (Object Store)│
 ├──────────────────┤            ├─────────────────┤        ├────────────────┤
 │ - novels         │            │ - embeddings    │        │ - character    │
-│ - master_outline │            │   (768 dim)     │        │   images       │
-│ - writing_rules  │            │ - metadata      │        │ - exports      │
-│ - novel_settings │            │   indexing      │        │ - covers       │
-│ - volumes        │            └─────────────────┘        └────────────────┘
+│ - users          │ (v1.5)     │   (768 dim)     │        │   images       │
+│ - invite_codes   │ (v1.5)     │ - metadata      │        │ - exports      │
+│ - system_settings│ (v1.5)     │   indexing      │        │ - covers       │
+│ - master_outline │            └─────────────────┘        └────────────────┘
+│ - writing_rules  │
+│ - novel_settings │
+│ - volumes        │
 │ - chapters       │
 │ - characters     │
 │ - foreshadowing  │
+│ - workshop_sessions│ (v1.5)
 │ - model_configs  │
 │ - generation_logs│
 │ - exports        │
@@ -460,7 +470,70 @@ CREATE TABLE entity_index (
   depth INTEGER DEFAULT 0,
   meta TEXT,                     -- JSON 元数据
   created_at INTEGER,
+  updated_at INTEGER,
+  deletedAt INTEGER              -- v1.5.0 新增软删除支持
+);
+```
+
+#### `users` - 用户表（v3.0/v1.5.0 新增）
+```sql
+CREATE TABLE users (
+  id TEXT PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE,
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,    -- PBKDF2 哈希值
+  salt TEXT NOT NULL,             -- 随机盐值
+  role TEXT DEFAULT 'user',       -- admin/user
+  is_deleted INTEGER DEFAULT 0,   -- 软删除标记
+  created_at INTEGER,
+  updated_at INTEGER,
+  deletedAt INTEGER
+);
+
+-- 索引
+CREATE INDEX idx_users_username ON users(username) WHERE deletedAt IS NULL;
+CREATE INDEX idx_users_email ON users(email) WHERE deletedAt IS NULL;
+```
+
+#### `invite_codes` - 邀请码表（v3.0/v1.5.0 新增）
+```sql
+CREATE TABLE invite_codes (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  max_uses INTEGER DEFAULT 1,    -- 最大使用次数
+  used_count INTEGER DEFAULT 0,  -- 已使用次数
+  status TEXT DEFAULT 'active',  -- active/used/expired/disabled
+  expires_at INTEGER,            -- 过期时间（null=永不过期）
+  created_by TEXT,               -- 创建者用户 ID
+  created_at INTEGER,
   updated_at INTEGER
+);
+
+-- 索引
+CREATE INDEX idx_invite_codes_code ON invite_codes(code) WHERE status = 'active';
+```
+
+#### `system_settings` - 系统设置表（v3.0/v1.5.0 新增）
+```sql
+CREATE TABLE system_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  description TEXT,
+  updated_at INTEGER
+);
+```
+
+#### `workshop_sessions` - 创意工坊会话表（v1.5.0 增强）
+```sql
+CREATE TABLE workshop_sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  stage TEXT DEFAULT 'concept',  -- concept/worldbuilding/character/volume
+  data TEXT,                     -- JSON 存储会话数据
+  created_at INTEGER,
+  updated_at INTEGER,
+  deletedAt INTEGER              -- v1.5.0 新增软删除支持
 );
 ```
 
@@ -680,6 +753,135 @@ interface PowerLevelData {
     timestamp?: number     // 突破时间戳
   }>
   nextMilestone?: string   // 下一阶段目标
+}
+```
+
+---
+
+### 9. 创意工坊服务 (`/server/services/workshop.ts`) (v1.5.0 新增)
+
+**职责**: 多阶段对话式创作引擎，帮助作者从零开始构建小说框架
+
+**核心功能**:
+- `createSession()` - 创建新的创意会话
+- `chat()` - SSE 流式 AI 对话
+- `extractStructuredData()` - 从 AI 回复中提取结构化数据
+- `submitSession()` - 提交确认，生成完整的小说框架
+
+**分阶段 Prompt 体系**:
+```typescript
+const STAGE_PROMPTS = {
+  concept: {
+    system: '你是一位专业的小说策划师...',
+    userPrompt: '请告诉我你的小说创意...',
+    extractFields: ['title', 'genre', 'synopsis', 'targetLength', 'coreAppeals']
+  },
+  worldbuilding: {
+    system: '你是一位世界观构建专家...',
+    userPrompt: '让我们构建这个世界观...',
+    extractFields: ['worldSettings']
+  },
+  character: {
+    system: '你是一位角色设计大师...',
+    userPrompt: '现在来设计角色...',
+    extractFields: ['characters']
+  },
+  volume: {
+    system: '你是一位资深编辑...',
+    userPrompt: '最后规划卷纲...',
+    extractFields: ['volumes', 'plotThreads']
+  }
+}
+```
+
+**SSE 流式输出格式**:
+```typescript
+// 文本消息
+{ type: 'message', event: 'message', data: { type: 'text', content: '...' } }
+
+// 结构化数据
+{ type: 'extracted_data', event: 'extracted_data', data: { genre: '玄幻', ... } }
+
+// 完成
+{ type: 'done', event: 'done', data: {} }
+```
+
+**提交流程**:
+```
+1. 验证必填字段（title, genre, synopsis）
+2. 创建小说记录 (novels)
+3. 创建总纲 (master_outline)
+4. 批量创建角色 (characters)
+5. 批量创建卷 (volumes)
+6. 返回所有创建的 ID
+```
+
+---
+
+### 10. 认证与安全模块 (`/server/lib/auth.ts`) (v1.5.0 新增)
+
+**职责**: 用户认证、密码安全、JWT 管理
+
+**核心功能**:
+
+#### 密码哈希
+```typescript
+// PBKDF2 + SHA-256, 100,000 次迭代
+async function hashPassword(password: string): Promise<{ hash: string; salt: string }> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(password),
+    'PBKDF2',
+    false,
+    ['deriveBits']
+  );
+  const hash = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt, iterations: 100_000, hash: 'SHA-256' },
+    keyMaterial,
+    256
+  );
+  return { hash: arrayBufferToBase64(hash), salt: bufferToBase64(salt) };
+}
+```
+
+#### JWT Token 管理
+```typescript
+// HS256 签名, 7 天有效期
+interface JWTPayload {
+  userId: string;
+  username: string;
+  role: 'admin' | 'user';
+  iat: number;  // 签发时间
+  exp: number;  // 过期时间 (iat + 7天)
+}
+
+// 密钥从环境变量获取
+const JWT_SECRET = env.JWT_SECRET || 'novelforge-jwt-secret-key';
+```
+
+#### 认证中间件
+```typescript
+// JWT 认证中间件
+async function authMiddleware(c: Context, next: Next) {
+  const token = c.req.header('Authorization')?.replace('Bearer ', '');
+  if (!token) return c.json({ error: '未提供认证令牌' }, 401);
+
+  const payload = verifyToken(token);
+  if (!payload) return c.json({ error: '认证令牌无效或已过期' }, 401);
+
+  c.set('user', payload);
+  await next();
+}
+
+// Admin 权限中间件
+async function adminMiddleware(c: Context, next: Next) {
+  const user = c.get('user');
+  if (user.role !== 'admin') {
+    return c.json({ error: '需要管理员权限' }, 403);
+  }
+  await next();
 }
 ```
 

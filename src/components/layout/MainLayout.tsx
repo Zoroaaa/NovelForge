@@ -222,10 +222,10 @@ export function MainLayout({ children, headerActions, headerTitle, headerSubtitl
         </Button>
       </div>
     </div>
-    </TooltipProvider>
   )
 
   return (
+    <TooltipProvider>
     <div className="flex h-screen overflow-hidden bg-background">
       {/* 移动端遮罩层 */}
       {mobileMenuOpen && (
