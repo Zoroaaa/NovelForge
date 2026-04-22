@@ -8,7 +8,6 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../lib/types'
-import { enqueue } from '../lib/queue'
 import { drizzle } from 'drizzle-orm/d1'
 import { eq, and, sql, count, isNull } from 'drizzle-orm'
 import {
@@ -19,6 +18,8 @@ import {
   fetchContentForIndexing,
 } from '../services/embedding'
 import { vectorIndex, novelSettings, characters as charactersTable, masterOutline, foreshadowing } from '../db/schema'
+// alias for use in new reindex routes
+const characters = charactersTable
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -322,11 +323,7 @@ router.get('/stats/:novelId', async (c) => {
 })
 
 /**
- * POST /reindex-all - 全量重建向量索引
- * @description 清除旧索引并重建指定小说的所有内容向量索引
- * @param {string} novelId - 小说ID
- * @param {string[]} [types] - 可选，指定要重建的类型列表
- * @returns {Object} { indexed, failed, details }
+ * POST /reindex-all - 查询待索引条目并返回列表（不执行索引，由前端分批并发调用 /reindex-items）
  */
 router.post(
   '/reindex-all',
@@ -340,36 +337,148 @@ router.post(
   ),
   async (c) => {
     const body = c.req.valid('json')
-    const { novelId, types, clearExisting } = body
+    const { novelId, types = ['setting', 'character', 'outline', 'foreshadowing'], clearExisting } = body
+    const db = drizzle(c.env.DB)
 
     if (!c.env.VECTORIZE) {
       return c.json({ error: 'Vectorize binding not configured' }, 503)
     }
 
     try {
-      await enqueue(c.env, c, {
-        type: 'reindex_all',
-        payload: {
-          novelId,
-          types,
-          clearExisting,
-        },
-      })
+      // 清除旧索引
+      if (clearExisting) {
+        const existingVectors = await db.select({ id: vectorIndex.id })
+          .from(vectorIndex)
+          .where(eq(vectorIndex.novelId, novelId))
+          .all()
+        for (const v of existingVectors) {
+          await c.env.VECTORIZE.deleteByIds([v.id]).catch(() => {})
+        }
+        await db.delete(vectorIndex).where(eq(vectorIndex.novelId, novelId))
+      }
 
-      return c.json({
-        ok: true,
-        message: `Reindex task enqueued for novel ${novelId}`,
-      })
+      // 收集所有待索引 items
+      type IndexItem = {
+        sourceType: string
+        sourceId: string
+        novelId: string
+        title: string
+        content: string
+        extraMetadata?: Record<string, string>
+      }
+      const items: IndexItem[] = []
+
+      if (types.includes('setting')) {
+        const rows = await db.select({
+          id: novelSettings.id, novelId: novelSettings.novelId,
+          name: novelSettings.name, content: novelSettings.content,
+          type: novelSettings.type, importance: novelSettings.importance,
+        }).from(novelSettings).where(and(
+          eq(novelSettings.novelId, novelId),
+          sql`${novelSettings.deletedAt} IS NULL`,
+          sql`${novelSettings.content} IS NOT NULL`
+        )).all()
+        for (const r of rows) {
+          if (!r.content) continue
+          items.push({ sourceType: 'setting', sourceId: r.id, novelId: r.novelId, title: r.name, content: r.content, extraMetadata: { settingType: r.type, importance: r.importance } })
+        }
+      }
+
+      if (types.includes('character')) {
+        const rows = await db.select({
+          id: characters.id, novelId: characters.novelId,
+          name: characters.name, description: characters.description,
+        }).from(characters).where(and(
+          eq(characters.novelId, novelId),
+          sql`${characters.deletedAt} IS NULL`,
+          sql`${characters.description} IS NOT NULL`
+        )).all()
+        for (const r of rows) {
+          if (!r.description) continue
+          items.push({ sourceType: 'character', sourceId: r.id, novelId: r.novelId, title: r.name, content: r.description })
+        }
+      }
+
+      if (types.includes('foreshadowing')) {
+        const rows = await db.select({
+          id: foreshadowing.id, novelId: foreshadowing.novelId,
+          title: foreshadowing.title, description: foreshadowing.description, importance: foreshadowing.importance,
+        }).from(foreshadowing).where(and(
+          eq(foreshadowing.novelId, novelId),
+          sql`${foreshadowing.deletedAt} IS NULL`,
+          sql`${foreshadowing.description} IS NOT NULL`
+        )).all()
+        for (const r of rows) {
+          if (!r.description) continue
+          items.push({ sourceType: 'foreshadowing', sourceId: r.id, novelId: r.novelId, title: r.title, content: r.description, extraMetadata: { importance: r.importance } })
+        }
+      }
+
+      if (types.includes('outline')) {
+        const rows = await db.select({
+          id: masterOutline.id, novelId: masterOutline.novelId,
+          title: masterOutline.title, content: masterOutline.content,
+        }).from(masterOutline).where(and(
+          eq(masterOutline.novelId, novelId),
+          sql`${masterOutline.deletedAt} IS NULL`,
+          sql`${masterOutline.content} IS NOT NULL`
+        )).all()
+        for (const r of rows) {
+          if (!r.content) continue
+          items.push({ sourceType: 'outline', sourceId: r.id, novelId: r.novelId, title: r.title, content: r.content })
+        }
+      }
+
+      return c.json({ ok: true, items, total: items.length })
     } catch (error) {
-      console.error('Failed to enqueue reindex-all:', error)
-      return c.json(
-        {
-          error: 'Failed to enqueue reindex task',
-          details: (error as Error).message,
-        },
-        500
-      )
+      console.error('reindex-all list failed:', error)
+      return c.json({ error: 'Failed to list reindex items', details: (error as Error).message }, 500)
     }
+  }
+)
+
+/**
+ * POST /reindex-items - 同步执行一批索引（前端并发调用）
+ * @param items - IndexItem 数组（每批建议 3~5 条）
+ * @returns { ok, indexed, failed, errors }
+ */
+router.post(
+  '/reindex-items',
+  zValidator(
+    'json',
+    z.object({
+      items: z.array(z.object({
+        sourceType: z.enum(['setting', 'character', 'outline', 'foreshadowing', 'chapter', 'summary']),
+        sourceId: z.string().min(1),
+        novelId: z.string().min(1),
+        title: z.string(),
+        content: z.string(),
+        extraMetadata: z.record(z.string(), z.string()).optional(),
+      }))
+    })
+  ),
+  async (c) => {
+    const { items } = c.req.valid('json')
+
+    if (!c.env.VECTORIZE) {
+      return c.json({ error: 'Vectorize binding not configured' }, 503)
+    }
+
+    let indexed = 0
+    let failed = 0
+    const errors: string[] = []
+
+    await Promise.all(items.map(async (item) => {
+      try {
+        await indexContent(c.env, item.sourceType as any, item.sourceId, item.novelId, item.title, item.content, item.extraMetadata)
+        indexed++
+      } catch (e) {
+        failed++
+        errors.push(`${item.sourceType}:${item.sourceId} - ${(e as Error).message}`)
+      }
+    }))
+
+    return c.json({ ok: true, indexed, failed, errors })
   }
 )
 

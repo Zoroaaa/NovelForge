@@ -7,7 +7,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { getToken } from '@/lib/api'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -33,7 +32,7 @@ interface GenerationLogsProps {
 
 export function GenerationLogs({ novelId }: GenerationLogsProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [limit, setLimit] = useState(50)
+  const [limit] = useState(50)
 
   const { data: logs, isLoading } = useQuery({
     queryKey: ['generation-logs', novelId, limit],

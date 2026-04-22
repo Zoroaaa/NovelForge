@@ -27,7 +27,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
 
 interface ChapterListProps {
   novelId: string
@@ -167,12 +166,6 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
       volumeId: selectedVolumeForNext?.id || null,
       summary: nextChapterResult.summary,
     })
-  }
-
-  const openNextChapterDialog = (volume: Volume) => {
-    setSelectedVolumeForNext(volume)
-    setNextChapterResult(null)
-    setNextChapterDialogOpen(true)
   }
 
   const closeNextChapterDialog = () => {

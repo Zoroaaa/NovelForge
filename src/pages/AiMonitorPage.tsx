@@ -4,9 +4,10 @@
  * @version 1.0.0
  */
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import type { ReindexItem } from '@/lib/api'
 import { MainLayout } from '@/components/layout/MainLayout'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -65,6 +66,8 @@ export default function AiMonitorPage() {
   const [isSearching, setIsSearching] = useState(false)
   const [isReindexing, setIsReindexing] = useState(false)
   const [reindexProgress, setReindexProgress] = useState<string>('')
+  const [reindexTotal, setReindexTotal] = useState(0)
+  const [reindexDone, setReindexDone] = useState(0)
   const [contextNovelId, setContextNovelId] = useState<string>('')
   const [contextChapterId, setContextChapterId] = useState<string>('')
   const [contextResult, setContextResult] = useState<any>(null)
@@ -83,24 +86,7 @@ export default function AiMonitorPage() {
     enabled: !!selectedNovelId,
   })
 
-  const reindexMutation = useMutation({
-    mutationFn: (types?: string[]) =>
-      api.vectorize.reindexAll({ novelId: selectedNovelId, types }),
-    onSuccess: (data) => {
-      toast.success(data.message || '索引重建任务已提交，请稍后查看统计')
-      setIsReindexing(false)
-      setReindexProgress('任务已提交到队列，正在后台执行...')
-      setTimeout(() => {
-        setReindexProgress('')
-        queryClient.invalidateQueries({ queryKey: ['vector-stats'] })
-      }, 3000)
-    },
-    onError: (error) => {
-      toast.error(`索引重建失败：${error.message}`)
-      setIsReindexing(false)
-      setReindexProgress('')
-    },
-  })
+
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return
@@ -117,11 +103,46 @@ export default function AiMonitorPage() {
     }
   }
 
-  const handleReindexAll = () => {
+  const handleReindexAll = async () => {
     if (!selectedNovelId) return
     setIsReindexing(true)
-    setReindexProgress('正在重建索引...')
-    reindexMutation.mutate(undefined)
+    setReindexTotal(0)
+    setReindexDone(0)
+    setReindexProgress('正在获取待索引列表...')
+    try {
+      const { items, total } = await api.vectorize.reindexAll({
+        novelId: selectedNovelId,
+        clearExisting: true,
+      })
+      setReindexTotal(total)
+      setReindexProgress(`共 ${total} 条，开始索引...`)
+
+      const BATCH_SIZE = 3
+      const CONCURRENCY = 4
+      const batches: ReindexItem[][] = []
+      for (let i = 0; i < items.length; i += BATCH_SIZE) {
+        batches.push(items.slice(i, i + BATCH_SIZE))
+      }
+
+      let done = 0
+      for (let i = 0; i < batches.length; i += CONCURRENCY) {
+        const window = batches.slice(i, i + CONCURRENCY)
+        await Promise.allSettled(
+          window.map(batch => api.vectorize.reindexItems({ items: batch }))
+        )
+        done += window.reduce((s, b) => s + b.length, 0)
+        setReindexDone(done)
+        setReindexProgress(`进度：${done} / ${total}`)
+      }
+
+      toast.success(`索引重建完成，共处理 ${total} 条`)
+      queryClient.invalidateQueries({ queryKey: ['vector-stats'] })
+    } catch (e: any) {
+      toast.error(`索引重建失败：${e.message}`)
+    } finally {
+      setIsReindexing(false)
+      setReindexProgress('')
+    }
   }
 
   const handleRebuildEntityIndex = async () => {
@@ -498,6 +519,7 @@ export default function AiMonitorPage() {
                     {isReindexing && (
                       <p className="text-sm text-muted-foreground text-center">
                         {reindexProgress}
+                        {reindexTotal > 0 && ` (${reindexDone}/${reindexTotal})`}
                       </p>
                     )}
 

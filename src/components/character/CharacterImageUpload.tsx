@@ -8,7 +8,6 @@ import { useState, useRef } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { getToken } from '@/lib/api'
 import { toast } from 'sonner'
-import type { Character } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,

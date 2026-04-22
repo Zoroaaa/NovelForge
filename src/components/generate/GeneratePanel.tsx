@@ -55,7 +55,7 @@ export function GeneratePanel({
 
   // Phase 1.6: 生成模式状态
   const [mode, setMode] = useState<GenerationMode>('generate')
-  const [selectedText, setSelectedText] = useState<string>('')  // 重写模式的选中文本
+  const [selectedText] = useState<string>('')  // 重写模式的选中文本
 
   const handleInsert = () => {
     if (output && !isInserting) {

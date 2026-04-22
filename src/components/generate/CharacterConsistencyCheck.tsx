@@ -12,7 +12,6 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Shield, ShieldAlert, AlertTriangle, CheckCircle, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
 import { api } from '@/lib/api'
-import type { Character } from '@/lib/types'
 
 interface Conflict {
   characterName: string

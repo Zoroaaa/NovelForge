@@ -25,7 +25,6 @@ import {
 import {
   BookOpen,
   Wand2,
-  Settings,
   User,
   LogOut,
   ChevronLeft,

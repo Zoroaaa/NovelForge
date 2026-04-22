@@ -4,7 +4,6 @@
  * @version 1.0.0
  * @modified 2026-04-21 - 添加规范化注释
  */
-import type { QueueMessage } from './queue'
 
 export type Env = {
   DB: D1Database

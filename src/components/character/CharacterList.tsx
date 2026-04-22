@@ -10,7 +10,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Character } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Plus, User, Trash2, Edit2, Swords, ChevronDown, ChevronRight, ChevronUp, TrendingUp } from 'lucide-react'
+import { Plus, User, Trash2, Edit2, Swords, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react'
 import {
   Dialog,
   DialogContent,

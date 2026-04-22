@@ -10,6 +10,15 @@ import type {
   MasterOutline, WritingRule, NovelSetting, ForeshadowingItem
 } from './types'
 
+export type ReindexItem = {
+  sourceType: 'setting' | 'character' | 'outline' | 'foreshadowing' | 'chapter' | 'summary'
+  sourceId: string
+  novelId: string
+  title: string
+  content: string
+  extraMetadata?: Record<string, string>
+}
+
 const TOKEN_KEY = 'auth_token'
 
 export function getToken(): string | null {
@@ -268,8 +277,10 @@ export const api = {
         results: Array<{ id: string; score: number; title: string; sourceType: string; preview: string }>
       }>(`/api/vectorize/search${params}`)
     },
-    reindexAll: (body: { novelId: string; types?: string[] }) =>
-      req<{ ok: boolean; message: string }>('/api/vectorize/reindex-all', { method: 'POST', body: j(body), timeout: 300000 }),
+    reindexAll: (body: { novelId: string; types?: string[]; clearExisting?: boolean }) =>
+      req<{ ok: boolean; items: ReindexItem[]; total: number }>('/api/vectorize/reindex-all', { method: 'POST', body: j(body), timeout: 60000 }),
+    reindexItems: (body: { items: ReindexItem[] }) =>
+      req<{ ok: boolean; indexed: number; failed: number; errors: string[] }>('/api/vectorize/reindex-items', { method: 'POST', body: j(body), timeout: 120000 }),
     getStatus: () =>
       req<{ status: string; message: string; embeddingModel?: string; dimensions?: number }>('/api/vectorize/status'),
   },

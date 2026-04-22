@@ -24,7 +24,6 @@ import {
   Hash,
   AlertCircle,
   Wrench,
-  Loader2,
   Map,
   Sword,
   Gem,
