@@ -193,21 +193,20 @@ router.get('/search', async (c) => {
 })
 
 /**
- * GET /status - 获取向量化服务状态（含完整诊断信息）
+ * GET /status - 向量化服务诊断接口（公开，无需登录）
  * @description 检查所有 bindings 配置和运行状态，用于排查 503 问题
  * @returns {Object} { status, bindings, diagnostics, recommendations }
  */
-router.get('/status', async (c) => {
+export async function handleVectorStatus(c: any) {
   const diagnostics = {
     timestamp: new Date().toISOString(),
     environment: c.req.url.includes('pages.dev') ? 'preview' : 'production',
-    bindings: {} as Record<string, any>,
+    bindings: {} as Record<string, unknown>,
     issues: [] as string[],
     recommendations: [] as string[]
   }
 
   try {
-    // 检测 DB binding
     diagnostics.bindings.DB = {
       configured: !!c.env.DB,
       type: c.env.DB ? 'D1Database' : 'undefined'
@@ -216,7 +215,6 @@ router.get('/status', async (c) => {
       diagnostics.issues.push('DB (D1) binding 未配置')
     }
 
-    // 检测 AI binding
     diagnostics.bindings.AI = {
       configured: !!c.env.AI,
       type: c.env.AI ? 'Ai' : 'undefined'
@@ -225,13 +223,12 @@ router.get('/status', async (c) => {
       diagnostics.issues.push('AI (Workers AI) binding 未配置')
     }
 
-    // 检测 VECTORIZE binding（关键！）
     diagnostics.bindings.VECTORIZE = {
       configured: !!c.env.VECTORIZE,
-      type: c.env.VECTORIZE ? c.env.VECTORIZE.constructor?.name || 'object' : 'undefined',
-      hasUpsert: typeof c.env.VECTORIZE?.upsert === 'function',
-      hasQuery: typeof c.env.VECTORIZE?.query === 'function',
-      hasDeleteByIds: typeof c.env.VECTORIZE?.deleteByIds === 'function'
+      type: c.env.VECTORIZE ? (c.env.VECTORIZE as object).constructor?.name || 'object' : 'undefined',
+      hasUpsert: typeof (c.env.VECTORIZE as Record<string, unknown>)?.upsert === 'function',
+      hasQuery: typeof (c.env.VECTORIZE as Record<string, unknown>)?.query === 'function',
+      hasDeleteByIds: typeof (c.env.VECTORIZE as Record<string, unknown>)?.deleteByIds === 'function'
     }
 
     if (!c.env.VECTORIZE) {
@@ -252,19 +249,17 @@ router.get('/status', async (c) => {
       }, 503)
     }
 
-    // 测试 AI embedding
     let aiWorking = false
     try {
       await embedText(c.env.AI, 'test')
       aiWorking = true
-      diagnostics.bindings.AI.working = true
+      ;(diagnostics.bindings.AI as Record<string, unknown>).working = true
     } catch (e) {
-      diagnostics.bindings.AI.working = false
-      diagnostics.bindings.AI.error = (e as Error).message
+      ;(diagnostics.bindings.AI as Record<string, unknown>).working = false
+      ;(diagnostics.bindings.AI as Record<string, unknown>).error = (e as Error).message
       diagnostics.issues.push(`AI embedding 测试失败: ${(e as Error).message}`)
     }
 
-    // 测试 Vectorize 基本操作
     let vectorizeWorking = false
     try {
       const testVector = {
@@ -272,13 +267,13 @@ router.get('/status', async (c) => {
         values: Array(1024).fill(0.1),
         metadata: { test: true, ts: Date.now() }
       }
-      await c.env.VECTORIZE.upsert([testVector])
-      await c.env.VECTORIZE.deleteByIds(['__diagnostic_test__'])
+      await (c.env.VECTORIZE as { upsert: (v: unknown[]) => Promise<unknown> }).upsert([testVector])
+      await (c.env.VECTORIZE as { deleteByIds: (ids: string[]) => Promise<unknown> }).deleteByIds(['__diagnostic_test__'])
       vectorizeWorking = true
-      diagnostics.bindings.VECTORIZE.working = true
+      ;(diagnostics.bindings.VECTORIZE as Record<string, unknown>).working = true
     } catch (e) {
-      diagnostics.bindings.VECTORIZE.working = false
-      diagnostics.bindings.VECTORIZE.error = (e as Error).message
+      ;(diagnostics.bindings.VECTORIZE as Record<string, unknown>).working = false
+      ;(diagnostics.bindings.VECTORIZE as Record<string, unknown>).error = (e as Error).message
       diagnostics.issues.push(`Vectorize 操作测试失败: ${(e as Error).message}`)
       diagnostics.recommendations.push(
         'Vectorize binding 存在但无法执行操作，可能是：',
@@ -312,7 +307,7 @@ router.get('/status', async (c) => {
       diagnostics
     }, 500)
   }
-})
+}
 
 /**
  * GET /stats/:novelId - 获取向量索引统计信息

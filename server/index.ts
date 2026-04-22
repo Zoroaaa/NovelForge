@@ -28,7 +28,7 @@ import { settings } from './routes/settings'
 import { generate } from './routes/generate'
 import { export as exportRouter } from './routes/export'
 import { search } from './routes/search'
-import { vectorize } from './routes/vectorize'
+import { vectorize, handleVectorStatus } from './routes/vectorize'
 import { mcp } from './routes/mcp'
 
 import { masterOutlineRouter } from './routes/master-outline'
@@ -185,6 +185,9 @@ app.get('/system-settings/registration', async (c) => {
     return c.json({ error: 'Internal Server Error', code: 'GET_REGISTRATION_STATUS_FAILED', message: '获取注册状态失败' }, 500)
   }
 })
+
+// GET /api/vectorize/status（诊断接口，公开访问，用于排查 503 问题）
+app.get('/vectorize/status', handleVectorStatus)
 
 // GET /api/novels/:id/cover（封面是 <img src> 直接加载，浏览器不带 Authorization header，必须公开）
 app.get('/novels/:id/cover', async (c) => {
