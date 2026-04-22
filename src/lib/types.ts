@@ -28,7 +28,7 @@ export interface Volume {
   wordCount: number
   status: string
   summary: string | null
-  outline: string | null
+  eventLine: string | null
   blueprint: string | null
   targetWordCount: number | null
   notes: string | null
@@ -135,7 +135,7 @@ export type NovelInput = Pick<Novel, 'title'> & Partial<Pick<Novel, 'description
 // v2.0: OutlineInput 已废弃，使用 MasterOutline / NovelSetting / VolumeInput 替代
 
 export type VolumeInput = Omit<Volume, 'id' | 'wordCount' | 'createdAt' | 'updatedAt' | 'deletedAt'>
-export type ChapterInput = Omit<Chapter, 'id' | 'wordCount' | 'status' | 'summary' | 'summaryAt' | 'summaryModel' | 'modelUsed' | 'promptTokens' | 'completionTokens' | 'generationTime' | 'createdAt' | 'updatedAt' | 'deletedAt'>
+export type ChapterInput = Omit<Chapter, 'id' | 'wordCount' | 'status' | 'summaryAt' | 'summaryModel' | 'modelUsed' | 'promptTokens' | 'completionTokens' | 'generationTime' | 'createdAt' | 'updatedAt' | 'deletedAt'>
 export type CharacterInput = Omit<Character, 'id' | 'imageR2Key' | 'createdAt' | 'updatedAt' | 'deletedAt'>
 export type SortItem = { id: string; sortOrder: number; parentId?: string | null }
 

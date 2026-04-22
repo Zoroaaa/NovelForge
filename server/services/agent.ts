@@ -5,7 +5,7 @@
  * @modified 2026-04-21 - 添加规范化注释
  */
 import { drizzle } from 'drizzle-orm/d1'
-import { chapters, modelConfigs, characters, novelSettings, masterOutline, volumes, generationLogs, foreshadowing } from '../db/schema'
+import { chapters, modelConfigs, characters, novelSettings, masterOutline, volumes, generationLogs, foreshadowing, novels } from '../db/schema'
 import { eq, desc, sql, and } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { buildChapterContext, type ContextBundle } from './contextBuilder'
@@ -775,6 +775,184 @@ export async function triggerAutoSummary(
   }
 }
 
+export async function generateMasterOutlineSummary(
+  env: Env,
+  novelId: string
+): Promise<{ ok: boolean; summary?: string; error?: string }> {
+  try {
+    const db = drizzle(env.DB)
+
+    const outline = await db
+      .select({
+        id: masterOutline.id,
+        title: masterOutline.title,
+        content: masterOutline.content,
+      })
+      .from(masterOutline)
+      .where(eq(masterOutline.novelId, novelId))
+      .orderBy(desc(masterOutline.version))
+      .get()
+
+    if (!outline?.content) {
+      return { ok: false, error: '总纲内容为空' }
+    }
+
+    let summaryConfig
+    try {
+      summaryConfig = await resolveConfig(db, 'summary_gen', novelId)
+      summaryConfig.apiKey = summaryConfig.apiKey || ''
+    } catch (error) {
+      return { ok: false, error: '未配置摘要生成模型' }
+    }
+
+    const contentForSummary = outline.content.slice(0, 3000)
+
+    const summaryMessages = [
+      {
+        role: 'system' as const,
+        content: '你是一个专业的文本摘要助手。请为以下小说总纲生成一段简洁的摘要（200-300字），概括核心世界观、主线剧情和关键设定。',
+      },
+      {
+        role: 'user' as const,
+        content: `总纲标题：《${outline.title}》\n\n总纲内容：\n${contentForSummary}`,
+      },
+    ]
+
+    const base = summaryConfig.apiBase || getDefaultBase(summaryConfig.provider)
+    const resp = await fetch(`${base}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${summaryConfig.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: summaryConfig.modelId,
+        messages: summaryMessages,
+        stream: false,
+        temperature: summaryConfig.params?.temperature ?? 0.3,
+        max_tokens: summaryConfig.params?.max_tokens ?? 500,
+      }),
+    })
+
+    if (!resp.ok) {
+      return { ok: false, error: `API错误: ${resp.status}` }
+    }
+
+    const result = await resp.json() as any
+    const summaryText = result.choices?.[0]?.message?.content
+
+    if (summaryText) {
+      await db
+        .update(masterOutline)
+        .set({
+          summary: summaryText,
+          updatedAt: sql`(unixepoch())`,
+        })
+        .where(eq(masterOutline.id, outline.id))
+
+      return { ok: true, summary: summaryText }
+    }
+
+    return { ok: false, error: '未生成有效摘要' }
+  } catch (error) {
+    console.warn('Master outline summary generation failed:', error)
+    return { ok: false, error: (error as Error).message }
+  }
+}
+
+export async function generateVolumeSummary(
+  env: Env,
+  volumeId: string,
+  novelId: string
+): Promise<{ ok: boolean; summary?: string; error?: string }> {
+  try {
+    const db = drizzle(env.DB)
+
+    const volume = await db
+      .select({
+        id: volumes.id,
+        title: volumes.title,
+        blueprint: volumes.blueprint,
+        eventLine: volumes.eventLine,
+      })
+      .from(volumes)
+      .where(eq(volumes.id, volumeId))
+      .get()
+
+    if (!volume) {
+      return { ok: false, error: '卷不存在' }
+    }
+
+    if (!volume.blueprint && !volume.eventLine) {
+      return { ok: false, error: '卷蓝图和事件线都为空' }
+    }
+
+    let summaryConfig
+    try {
+      summaryConfig = await resolveConfig(db, 'summary_gen', novelId)
+      summaryConfig.apiKey = summaryConfig.apiKey || ''
+    } catch (error) {
+      return { ok: false, error: '未配置摘要生成模型' }
+    }
+
+    const contentForSummary = [
+      volume.blueprint ? `【卷蓝图】\n${volume.blueprint.slice(0, 2000)}` : '',
+      volume.eventLine ? `\n【事件线】\n${volume.eventLine.slice(0, 2000)}` : '',
+    ].join('\n').slice(0, 3000)
+
+    const summaryMessages = [
+      {
+        role: 'system' as const,
+        content: '你是一个专业的文本摘要助手。请为以下卷的蓝图和事件线生成一段简洁的摘要（150-200字），概括本卷的核心情节和关键事件。',
+      },
+      {
+        role: 'user' as const,
+        content: `卷标题：《${volume.title}》\n\n${contentForSummary}`,
+      },
+    ]
+
+    const base = summaryConfig.apiBase || getDefaultBase(summaryConfig.provider)
+    const resp = await fetch(`${base}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${summaryConfig.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: summaryConfig.modelId,
+        messages: summaryMessages,
+        stream: false,
+        temperature: summaryConfig.params?.temperature ?? 0.3,
+        max_tokens: summaryConfig.params?.max_tokens ?? 500,
+      }),
+    })
+
+    if (!resp.ok) {
+      return { ok: false, error: `API错误: ${resp.status}` }
+    }
+
+    const result = await resp.json() as any
+    const summaryText = result.choices?.[0]?.message?.content
+
+    if (summaryText) {
+      await db
+        .update(volumes)
+        .set({
+          summary: summaryText,
+          updatedAt: sql`(unixepoch())`,
+        })
+        .where(eq(volumes.id, volumeId))
+
+      return { ok: true, summary: summaryText }
+    }
+
+    return { ok: false, error: '未生成有效摘要' }
+  } catch (error) {
+    console.warn('Volume summary generation failed:', error)
+    return { ok: false, error: (error as Error).message }
+  }
+}
+
 function getDefaultBase(provider: string): string {
   switch (provider) {
     case 'volcengine':
@@ -828,7 +1006,7 @@ async function executeAgentTool(
       if (type === 'volume_outline' || type === 'volume') {
         // 查询卷大纲
         const volumeOutlines = await db
-          .select({ title: volumes.title, outline: volumes.outline, summary: volumes.summary })
+          .select({ title: volumes.title, eventLine: volumes.eventLine, summary: volumes.summary })
           .from(volumes)
           .where(eq(volumes.novelId, targetNovelId))
           .orderBy(volumes.sortOrder)
@@ -837,7 +1015,7 @@ async function executeAgentTool(
         
         return JSON.stringify(volumeOutlines.map(v => ({
           title: `卷纲：${v.title}`,
-          content: v.outline?.slice(0, 500) || v.summary?.slice(0, 500),
+          content: v.eventLine?.slice(0, 500) || v.summary?.slice(0, 500),
           type: 'volume_outline'
         })), null, 2)
       }
@@ -1371,7 +1549,7 @@ export async function generateOutlineBatch(
       ? `\n\n【现有章节】\n${existingChapters.map((ch, i) => `${i + 1}. 第${ch.sortOrder || i + 1}章《${ch.title}》`).join('\n')}`
       : ''
 
-    const batchPrompt = `请为小说的某一卷生成完整的章节大纲规划。
+    const batchPrompt = `请为小说的某一卷生成章节标题和摘要规划。
 
 【卷信息】：
 - 标题：《${volume.title}》
@@ -1380,7 +1558,7 @@ ${volume.summary ? `- 卷概要：${volume.summary}` : ''}
 
 【生成要求】：
 - 需要规划 ${targetCount} 个章节
-- 每个章节包含：章节标题、本章核心情节（200-300字）、关键冲突点、伏笔安排、人物动态
+- 每个章节包含：章节标题、章节摘要（150-200字，概括本章核心情节）
 - 章节之间要有连贯性，形成完整的故事弧线
 - 注意节奏：开头铺垫、中间发展、高潮迭起、结尾悬念
 ${existingChaptersInfo}
@@ -1390,17 +1568,14 @@ ${context ? `\n【补充上下文】：\n${context}` : ''}
 [
   {
     "chapterTitle": "章节标题",
-    "outline": "本章大纲内容（200-300字）",
-    "keyConflicts": ["关键冲突1", "关键冲突2"],
-    "foreshadowingSetup": ["埋入伏笔1", "收尾伏笔2"],
-    "characterDynamics": "人物动态描述"
+    "summary": "章节摘要（150-200字）"
   }
 ]
 
 要求：
-1. 输出 ${targetCount} 个章节的大纲规划
-2. 每章大纲质量要高，有具体的情节点而非空泛描述
-3. 合理安排伏笔的埋入和收尾`
+1. 输出 ${targetCount} 个章节的标题和摘要
+2. 摘要质量要高，有具体的情节点而非空泛描述
+3. 章节标题要有吸引力，符合小说风格`
 
     const base = llmConfig.apiBase || 'https://ark.cn-beijing.volces.com/api/v3'
     const resp = await fetch(`${base}/chat/completions`, {
@@ -1450,76 +1625,259 @@ ${context ? `\n【补充上下文】：\n${context}` : ''}
       return { ok: false, error: '生成结果为空', details: 'LLM未返回有效的章节大纲' }
     }
 
-    let volumeOutlineContent = `# 《${volume.title}》章节大纲\n\n`
-    volumeOutlineContent += `生成时间：${new Date().toLocaleString('zh-CN')}\n\n`
-    volumeOutlineContent += `---\n\n`
+    const chapterPlans = parsedOutlines.map((outlineData: any, i: number) => ({
+      index: i,
+      chapterTitle: outlineData.chapterTitle || `第${i + 1}章`,
+      summary: outlineData.summary || '',
+    }))
 
-    const createdOutlines: any[] = []
-    
-    for (let i = 0; i < parsedOutlines.length; i++) {
-      const outlineData = parsedOutlines[i]
-      
-      try {
-        const chapterOutline = [
-          `## ${outlineData.chapterTitle || `第${i + 1}章`}`,
-          outlineData.outline || '',
-          outlineData.keyConflicts && outlineData.keyConflicts.length > 0 
-            ? `\n**关键冲突**：\n${outlineData.keyConflicts.map((c: string) => `- ${c}`).join('\n')}` 
-            : '',
-          outlineData.foreshadowingSetup && outlineData.foreshadowingSetup.length > 0
-            ? `\n**伏笔安排**：\n${outlineData.foreshadowingSetup.map((f: string) => `- ${f}`).join('\n')}`
-            : '',
-          outlineData.characterDynamics ? `\n**人物动态**：\n${outlineData.characterDynamics}` : '',
-        ].filter(Boolean).join('\n')
-
-        volumeOutlineContent += chapterOutline + '\n\n---\n\n'
-
-        createdOutlines.push({
-          index: i,
-          title: outlineData.chapterTitle || `第${i + 1}章`,
-          action: 'created',
-        })
-      } catch (outlineError) {
-        console.warn(`Failed to process outline ${i}:`, outlineError)
-        createdOutlines.push({
-          index: i,
-          action: 'failed',
-          error: (outlineError as Error).message,
-        })
-      }
-    }
-
-    try {
-      await db
-        .update(volumes)
-        .set({
-          outline: volumeOutlineContent,
-          updatedAt: sql`(unixepoch())`,
-        })
-        .where(eq(volumes.id, volumeId))
-
-      console.log(`✅ Volume outline updated for volume ${volumeId}`)
-    } catch (updateError) {
-      console.warn('Failed to update volume outline:', updateError)
-      return { 
-        ok: false, 
-        error: '更新卷大纲失败', 
-        details: (updateError as Error).message 
-      }
-    }
-
-    console.log(`✅ Batch outline generation complete: ${createdOutlines.filter(o => o.action !== 'failed').length}/${parsedOutlines.length} chapters planned`)
+    console.log(`✅ Batch chapter plans generated: ${chapterPlans.length} chapters`)
 
     return {
       ok: true,
-      message: `成功生成卷大纲，包含 ${createdOutlines.filter(o => o.action !== 'failed').length} 个章节规划`,
-      outlines: createdOutlines,
+      message: `成功生成 ${chapterPlans.length} 个章节规划`,
+      outlines: chapterPlans,
       totalRequested: parsedOutlines.length,
-      successCount: createdOutlines.filter(o => o.action !== 'failed').length,
-      volumeOutlinePreview: volumeOutlineContent.slice(0, 500),
+      successCount: chapterPlans.length,
     }
   } catch (error) {
     console.error('Batch outline generation failed:', error)
     return { ok: false, error: '批量生成异常', details: (error as Error).message }
+  }
+}
+
+export async function confirmBatchChapterCreation(
+  env: Env,
+  data: {
+    volumeId: string
+    novelId: string
+    chapterPlans: Array<{ chapterTitle: string; summary: string }>
+  }
+): Promise<{
+  ok: boolean
+  message?: string
+  createdChapters?: Array<{ id: string; title: string; sortOrder: number }>
+  error?: string
+}> {
+  const { volumeId, novelId, chapterPlans } = data
+  const db = drizzle(env.DB)
+
+  try {
+    const volume = await db
+      .select({
+        id: volumes.id,
+        sortOrder: volumes.sortOrder,
+      })
+      .from(volumes)
+      .where(eq(volumes.id, volumeId))
+      .get()
+
+    if (!volume) {
+      return { ok: false, error: '卷不存在' }
+    }
+
+    const existingChapters = await db
+      .select({
+        sortOrder: chapters.sortOrder,
+      })
+      .from(chapters)
+      .where(eq(chapters.volumeId, volumeId))
+      .orderBy(desc(chapters.sortOrder))
+      .limit(1)
+      .get()
+
+    const startSortOrder = existingChapters ? existingChapters.sortOrder + 1 : 0
+
+    const createdChapters: Array<{ id: string; title: string; sortOrder: number }> = []
+
+    for (let i = 0; i < chapterPlans.length; i++) {
+      const plan = chapterPlans[i]
+      try {
+        const [chapter] = await db
+          .insert(chapters)
+          .values({
+            novelId,
+            volumeId,
+            title: plan.chapterTitle,
+            summary: plan.summary,
+            sortOrder: startSortOrder + i,
+            content: null,
+            wordCount: 0,
+            status: 'draft',
+          })
+          .returning()
+
+        createdChapters.push({
+          id: chapter.id,
+        title: chapter.title,
+          sortOrder: chapter.sortOrder,
+        })
+      } catch (insertError) {
+        console.warn(`Failed to create chapter ${i}:`, insertError)
+      }
+    }
+
+    await db
+      .update(volumes)
+      .set({
+        chapterCount: sql`${volumes.chapterCount} + ${createdChapters.length}`,
+        updatedAt: sql`(unixepoch())`,
+      })
+      .where(eq(volumes.id, volumeId))
+
+    await db
+      .update(novels)
+      .set({
+        chapterCount: sql`${novels.chapterCount} + ${createdChapters.length}`,
+        updatedAt: sql`(unixepoch())`,
+      })
+      .where(eq(novels.id, novelId))
+
+    console.log(`✅ Batch chapter creation complete: ${createdChapters.length}/${chapterPlans.length} chapters created`)
+
+    return {
+      ok: true,
+      message: `成功创建 ${createdChapters.length} 个章节`,
+      createdChapters,
+    }
+  } catch (error) {
+    console.error('Batch chapter creation failed:', error)
+    return { ok: false, error: '批量创建章节异常' }
+  }
+}
+
+export async function generateNextChapter(
+  env: Env,
+  data: {
+    volumeId: string
+    novelId: string
+  }
+): Promise<{
+  ok: boolean
+  chapterTitle?: string
+  summary?: string
+  error?: string
+}> {
+  const { volumeId, novelId } = data
+  const db = drizzle(env.DB)
+
+  try {
+    const volume = await db
+      .select({
+        id: volumes.id,
+        title: volumes.title,
+        blueprint: volumes.blueprint,
+        eventLine: volumes.eventLine,
+        summary: volumes.summary,
+      })
+      .from(volumes)
+      .where(eq(volumes.id, volumeId))
+      .get()
+
+    if (!volume) {
+      return { ok: false, error: '卷不存在' }
+    }
+
+    const existingChapters = await db
+      .select({
+        title: chapters.title,
+        summary: chapters.summary,
+      })
+      .from(chapters)
+      .where(eq(chapters.volumeId, volumeId))
+      .orderBy(desc(chapters.sortOrder))
+      .limit(3)
+      .all()
+
+    let llmConfig
+    try {
+      llmConfig = await resolveConfig(db, 'outline_gen', novelId)
+      llmConfig.apiKey = llmConfig.apiKey || ''
+    } catch {
+      try {
+        llmConfig = await resolveConfig(db, 'chapter_gen', novelId)
+        llmConfig.apiKey = llmConfig.apiKey || ''
+      } catch (error) {
+        return { ok: false, error: '未配置大纲生成或章节生成模型' }
+      }
+    }
+
+    const recentChaptersInfo = existingChapters.length > 0
+      ? `\n\n【最近章节】\n${existingChapters.map((ch, i) => `${i + 1}. 《${ch.title}》\n   摘要：${ch.summary || '无'}`).join('\n\n')}`
+      : ''
+
+    const prompt = `请为小说的某一卷生成下一章的标题和摘要。
+
+【卷信息】：
+- 标题：《${volume.title}》
+${volume.blueprint ? `- 卷蓝图：\n${volume.blueprint.slice(0, 1000)}` : ''}
+${volume.eventLine ? `- 事件线：\n${volume.eventLine.slice(0, 1000)}` : ''}
+${volume.summary ? `- 卷摘要：${volume.summary}` : ''}
+${recentChaptersInfo}
+
+【生成要求】：
+- 生成下一章的章节标题（要有吸引力，符合小说风格）
+- 生成章节摘要（150-200字，概括本章核心情节）
+- 章节要与已有章节连贯，承接上一章的结尾
+- 注意节奏：开头铺垫、中间发展、高潮迭起、结尾悬念
+
+请以JSON格式输出（不要输出其他内容）：
+{
+  "chapterTitle": "章节标题",
+  "summary": "章节摘要（150-200字）"
+}`
+
+    const base = llmConfig.apiBase || getDefaultBase(llmConfig.provider)
+    const resp = await fetch(`${base}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${llmConfig.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: llmConfig.modelId,
+        messages: [
+          { role: 'system', content: '你是一个专业的小说创作助手，擅长生成连贯的章节标题和摘要。你只输出JSON，不要其他内容。' },
+          { role: 'user', content: prompt },
+        ],
+        stream: false,
+        temperature: llmConfig.params?.temperature ?? 0.85,
+        max_tokens: 1000,
+      }),
+    })
+
+    if (!resp.ok) {
+      const errorText = await resp.text()
+      return { ok: false, error: `API错误: ${resp.status} ${errorText}` }
+    }
+
+    const result = await resp.json() as any
+    const content = result.choices?.[0]?.message?.content || ''
+
+    let parsedResult: any
+    try {
+      const jsonMatch = content.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        parsedResult = JSON.parse(jsonMatch[0])
+      } else {
+        parsedResult = JSON.parse(content)
+      }
+    } catch (parseError) {
+      console.warn('Failed to parse next chapter result:', parseError)
+      return { ok: false, error: '解析生成结果失败' }
+    }
+
+    if (!parsedResult.chapterTitle || !parsedResult.summary) {
+      return { ok: false, error: '生成结果不完整' }
+    }
+
+    return {
+      ok: true,
+      chapterTitle: parsedResult.chapterTitle,
+      summary: parsedResult.summary,
+    }
+  } catch (error) {
+    console.error('Next chapter generation failed:', error)
+    return { ok: false, error: '生成下一章异常' }
   }
 }

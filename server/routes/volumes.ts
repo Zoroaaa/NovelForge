@@ -32,7 +32,7 @@ const CreateSchema = z.object({
   novelId: z.string(),
   title: z.string(),
   sortOrder: z.number().optional(),
-  outline: z.string().optional().nullable(),
+  eventLine: z.string().optional().nullable(),
   blueprint: z.string().optional().nullable(),
   summary: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),

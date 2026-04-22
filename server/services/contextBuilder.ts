@@ -360,14 +360,14 @@ async function fetchChapterOutline(db: any, chapterId: string): Promise<string> 
     // v2.0: 从卷表获取卷大纲（替代原 outlines 表）
     const result = await db
       .select({
-        outline: volumes.outline,
+        eventLine: volumes.eventLine,
       })
       .from(chapters)
       .leftJoin(volumes, eq(chapters.volumeId, volumes.id))
       .where(eq(chapters.id, chapterId))
       .get()
 
-    return result?.outline || ''
+    return result?.eventLine || ''
   } catch (error) {
     console.warn('Failed to fetch chapter outline:', error)
     return ''

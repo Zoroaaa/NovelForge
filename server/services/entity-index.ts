@@ -144,7 +144,7 @@ export async function rebuildEntityIndex(env: Env, novelId: string): Promise<{
           status: vol.status,
           wordCount: vol.wordCount,
           chapterCount: vol.chapterCount || 0,
-          hasOutline: !!vol.outline,
+          hasOutline: !!vol.eventLine,
         }),
       })
 

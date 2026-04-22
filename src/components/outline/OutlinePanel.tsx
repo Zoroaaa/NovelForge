@@ -9,7 +9,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { MasterOutline } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Save, History, Plus, Eye, Edit2, Trash2, FileText, Clock, Hash, ChevronDown, ChevronRight } from 'lucide-react'
+import { Save, History, Plus, Eye, Edit2, Trash2, FileText, Clock, Hash, ChevronDown, ChevronRight, Wand2, Loader2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -82,9 +82,20 @@ export function OutlinePanel({ novelId }: OutlinePanelProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['master-outline'] })
       queryClient.invalidateQueries({ queryKey: ['master-outline-history'] })
-      toast.success('✅ 版本已删除')
+      toast.success('✅与其他版本已删除')
     },
     onError: (err) => toast.error(`❌ 删除失败: ${(err as Error).message}`),
+  })
+
+  const generateSummaryMutation = useMutation({
+    mutationFn: () => api.generate.masterOutlineSummary({ novelId }),
+    onSuccess: (result) => {
+      if (result.summary) {
+        setFormData(prev => ({ ...prev, summary: result.summary || '' }))
+        toast.success('✅ 摘要已生成')
+      }
+    },
+    onError: (err) => toast.error(`❌ 生成摘要失败: ${(err as Error).message}`),
   })
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -336,11 +347,33 @@ export function OutlinePanel({ novelId }: OutlinePanelProps) {
 
             <div className="space-y-2">
               <Label>摘要</Label>
-              <Input
-                maxLength={200}
-                value={formData.summary}
-                onChange={(e) => setFormData(prev => ({ ...prev, summary: e.target.value }))}
-              />
+              <div className="flex gap-2">
+                <Input
+                  maxLength={200}
+                  value={formData.summary}
+                  onChange={(e) => setFormData(prev => ({ ...prev, summary: e.target.value }))}
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => generateSummaryMutation.mutate()}
+                  disabled={generateSummaryMutation.isPending}
+                >
+                  {generateSummaryMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      生成中
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="h-3.5 w-3.5" />
+                      AI生成
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
 
             <div className="space-y-2">

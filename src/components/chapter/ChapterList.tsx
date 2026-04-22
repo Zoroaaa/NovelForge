@@ -10,7 +10,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Chapter, ChapterInput, Volume } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Plus, BookOpen, Trash2, FileText, Sparkles, CheckCircle, RefreshCw, ChevronDown, ChevronRight, Library } from 'lucide-react'
+import { Plus, BookOpen, Trash2, FileText, Sparkles, CheckCircle, RefreshCw, ChevronDown, ChevronRight, Library, Wand2, Loader2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -49,6 +49,11 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
   const [volumeId, setVolumeId] = useState('')
   const [expandedVolumes, setExpandedVolumes] = useState<Set<string>>(new Set(['uncategorized']))
   const [expandedChapters, setExpandedChapters] = useState<Set<string>>(new Set())
+  
+  const [nextChapterDialogOpen, setNextChapterDialogOpen] = useState(false)
+  const [selectedVolumeForNext, setSelectedVolumeForNext] = useState<Volume | null>(null)
+  const [isGeneratingNext, setIsGeneratingNext] = useState(false)
+  const [nextChapterResult, setNextChapterResult] = useState<any>(null)
 
   const { data: chapters, isLoading } = useQuery({
     queryKey: ['chapters', novelId],
@@ -105,6 +110,7 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
       sortOrder: maxOrder + 1,
       content: null,
       volumeId: volumeId === 'none' ? null : volumeId || null,
+      summary: '',
     })
   }
 
@@ -125,6 +131,54 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
       else next.add(chapterId)
       return next
     })
+  }
+
+  const handleGenerateNextChapter = async () => {
+    if (!selectedVolumeForNext) return
+    setIsGeneratingNext(true)
+    setNextChapterResult(null)
+
+    try {
+      const result = await api.generate.nextChapter({
+        volumeId: selectedVolumeForNext.id,
+        novelId,
+      })
+
+      setNextChapterResult(result)
+
+      if (!result.ok) {
+        toast.error(result.error || '生成下一章失败')
+      }
+    } catch (err) {
+      toast.error(`生成下一章失败: ${(err as Error).message}`)
+    } finally {
+      setIsGeneratingNext(false)
+    }
+  }
+
+  const handleConfirmNextChapter = () => {
+    if (!nextChapterResult?.ok || !nextChapterResult.chapterTitle || !nextChapterResult.summary) return
+
+    createMutation.mutate({
+      novelId,
+      title: nextChapterResult.chapterTitle,
+      sortOrder: chapters && chapters.length > 0 ? Math.max(...chapters.map(c => c.sortOrder)) + 1 : 0,
+      content: null,
+      volumeId: selectedVolumeForNext?.id || null,
+      summary: nextChapterResult.summary,
+    })
+  }
+
+  const openNextChapterDialog = (volume: Volume) => {
+    setSelectedVolumeForNext(volume)
+    setNextChapterResult(null)
+    setNextChapterDialogOpen(true)
+  }
+
+  const closeNextChapterDialog = () => {
+    setNextChapterDialogOpen(false)
+    setSelectedVolumeForNext(null)
+    setNextChapterResult(null)
   }
 
   const renderChapter = (chapter: Chapter, idx: number) => {
@@ -288,7 +342,7 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
   return (
     <div className="flex flex-col h-full">
       {/* 操作栏 */}
-      <div className="px-4 py-3 border-b">
+      <div className="px-4 py-3 border-b flex items-center justify-between gap-2">
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button variant="outline" size="sm" className="w-full gap-2 h-8">
@@ -328,6 +382,123 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
                 <Button type="submit" disabled={!title.trim() || createMutation.isPending}>创建</Button>
               </div>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={nextChapterDialogOpen} onOpenChange={setNextChapterDialogOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm" className="w-full gap-2 h-8">
+              <Wand2 className="h-3.5 w-3.5" />
+              生成下一章
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Wand2 className="h-5 w-5 text-primary" />
+                AI 生成下一章
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="bg-muted/50 p-3 rounded-lg">
+                <p className="text-sm font-medium">目标卷：《{selectedVolumeForNext?.title || '请选择卷'}》</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  将为该卷生成下一章的标题和摘要，确认后创建章节
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>选择卷</Label>
+                <Select value={selectedVolumeForNext?.id || ''} onValueChange={(v) => {
+                  const volume = volumes?.find(vol => vol.id === v)
+                  if (volume) setSelectedVolumeForNext(volume)
+                }}>
+                  <SelectTrigger><SelectValue placeholder="选择目标卷" /></SelectTrigger>
+                  <SelectContent>
+                    {volumes?.map(v => (
+                      <SelectItem key={v.id} value={v.id}>{v.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {!nextChapterResult && (
+                <Button
+                  onClick={handleGenerateNextChapter}
+                  disabled={isGeneratingNext || !selectedVolumeForNext}
+                  className="w-full gap-2"
+                >
+                  {isGeneratingNext ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      正在生成中...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="h-4 w-4" />
+                      开始生成
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {nextChapterResult && (
+                <div className="space-y-3">
+                  <div className={`p-3 rounded-lg ${nextChapterResult.ok ? 'bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800'}`}>
+                    <p className={`text-sm font-medium ${nextChapterResult.ok ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
+                      {nextChapterResult.ok ? '✓ 生成成功' : '✗ 生成失败'}
+                    </p>
+                    {nextChapterResult.error && (
+                      <p className="text-xs text-muted-foreground mt-1">{nextChapterResult.error}</p>
+                    )}
+                  </div>
+
+                  {nextChapterResult.ok && (
+                    <div className="space-y-2">
+                      <div className="border rounded-lg p-3 space-y-2">
+                        <div>
+                          <Label>章节标题</Label>
+                          <p className="text-sm font-medium">{nextChapterResult.chapterTitle}</p>
+                        </div>
+                        <div>
+                          <Label>章节摘要</Label>
+                          <p className="text-xs text-muted-foreground line-clamp-3">{nextChapterResult.summary}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button variant="outline" onClick={() => setNextChapterResult(null)} className="flex-1">
+                          重新生成
+                        </Button>
+                        <Button 
+                          onClick={handleConfirmNextChapter}
+                          disabled={createMutation.isPending}
+                          className="flex-1"
+                        >
+                          {createMutation.isPending ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              创建中...
+                            </>
+                          ) : (
+                            <>
+                              确认创建章节
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={closeNextChapterDialog} className="flex-1">
+                  取消
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
       </div>

@@ -261,12 +261,37 @@ export const api = {
       req<{
         ok: boolean
         message?: string
-        outlines?: any[]
+        outlines?: Array<{ index: number; chapterTitle: string; summary: string }>
         totalRequested?: number
         successCount?: number
-        volumeOutlinePreview?: string
         error?: string
       }>('/api/generate/outline-batch', { method: 'POST', body: j(body), timeout: 300000 }),
+    confirmBatchChapters: (body: { volumeId: string; novelId: string; chapterPlans: Array<{ chapterTitle: string; summary: string }> }) =>
+      req<{
+        ok: boolean
+        message?: string
+        createdChapters?: Array<{ id: string; title: string; sortOrder: number }>
+        error?: string
+      }>('/api/generate/confirm-batch-chapters', { method: 'POST', body: j(body) }),
+    nextChapter: (body: { volumeId: string; novelId: string }) =>
+      req<{
+        ok: boolean
+        chapterTitle?: string
+        summary?: string
+        error?: string
+      }>('/api/generate/next-chapter', { method: 'POST', body: j(body) }),
+    masterOutlineSummary: (body: { novelId: string }) =>
+      req<{
+        ok: boolean
+        summary?: string
+        error?: string
+      }>('/api/generate/master-outline-summary', { method: 'POST', body: j(body) }),
+    volumeSummary: (body: { volumeId: string; novelId: string }) =>
+      req<{
+        ok: boolean
+        summary?: string
+        error?: string
+      }>('/api/generate/volume-summary', { method: 'POST', body: j(body) }),
   },
 
   // 认证系统API

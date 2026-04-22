@@ -597,7 +597,7 @@ export async function commitWorkshopSession(
           novelId,
           title: vol.title,
           summary: vol.outline || '',
-          outline: vol.blueprint || '',
+          eventLine: vol.blueprint || '',
           sortOrder: createdVolumes.length + 1,
         }).returning()
         createdVolumes.push(volume)

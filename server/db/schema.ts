@@ -109,7 +109,7 @@ export const volumes = sqliteTable('volumes', {
   title: text('title').notNull(),
   sortOrder: integer('sort_order').notNull().default(0),
   
-  outline: text('outline'),
+  eventLine: text('event_line'),
   blueprint: text('blueprint'),
   summary: text('summary'),
   status: text('status').notNull().default('draft'),

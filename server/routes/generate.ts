@@ -17,6 +17,10 @@ import {
   checkCharacterConsistency,
   generateOutlineBatch,
   checkChapterCoherence,
+  generateMasterOutlineSummary,
+  generateVolumeSummary,
+  confirmBatchChapterCreation,
+  generateNextChapter,
 } from '../services/agent'
 import { generateOutline } from '../services/llm'
 
@@ -274,6 +278,65 @@ router.post('/outline-batch', zValidator('json', z.object({
       500
     )
   }
+})
+
+router.post('/master-outline-summary', zValidator('json', z.object({
+  novelId: z.string().min(1),
+})), async (c) => {
+  const { novelId } = c.req.valid('json')
+  const result = await generateMasterOutlineSummary(c.env, novelId)
+  
+  if (!result.ok) {
+    return c.json({ error: result.error }, 500)
+  }
+  
+  return c.json({ ok: true, summary: result.summary })
+})
+
+router.post('/volume-summary', zValidator('json', z.object({
+  volumeId: z.string().min(1),
+  novelId: z.string().min(1),
+})), async (c) => {
+  const { volumeId, novelId } = c.req.valid('json')
+  const result = await generateVolumeSummary(c.env, volumeId, novelId)
+  
+  if (!result.ok) {
+    return c.json({ error: result.error }, 500)
+  }
+  
+  return c.json({ ok: true, summary: result.summary })
+})
+
+router.post('/confirm-batch-chapters', zValidator('json', z.object({
+  volumeId: z.string().min(1),
+  novelId: z.string().min(1),
+  chapterPlans: z.array(z.object({
+    chapterTitle: z.string(),
+    summary: z.string(),
+  })),
+})), async (c) => {
+  const { volumeId, novelId, chapterPlans } = c.req.valid('json')
+  const result = await confirmBatchChapterCreation(c.env, { volumeId, novelId, chapterPlans })
+  
+  if (!result.ok) {
+    return c.json({ error: result.error }, 500)
+  }
+  
+  return c.json(result)
+})
+
+router.post('/next-chapter', zValidator('json', z.object({
+  volumeId: z.string().min(1),
+  novelId: z.string().min(1),
+})), async (c) => {
+  const { volumeId, novelId } = c.req.valid('json')
+  const result = await generateNextChapter(c.env, { volumeId, novelId })
+  
+  if (!result.ok) {
+    return c.json({ error: result.error }, 500)
+  }
+  
+  return c.json(result)
 })
 
 export { router as generate }

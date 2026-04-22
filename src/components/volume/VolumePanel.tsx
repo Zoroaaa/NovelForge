@@ -48,7 +48,7 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
   const [formData, setFormData] = useState({
     title: '',
     summary: '',
-    outline: '',
+    eventLine: '',
     blueprint: '',
     notes: '',
     status: 'draft',
@@ -60,6 +60,7 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
   const [batchChapterCount, setBatchChapterCount] = useState('10')
   const [batchContext, setBatchContext] = useState('')
   const [isBatchGenerating, setIsBatchGenerating] = useState(false)
+  const [isConfirming, setIsConfirming] = useState(false)
   const [batchResult, setBatchResult] = useState<any>(null)
 
   const { data: volumes, isLoading: volumesLoading } = useQuery({
@@ -80,12 +81,12 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
   }, {} as Record<string, Chapter[]>)
 
   const createMutation = useMutation({
-    mutationFn: (data: { title: string; summary?: string; outline?: string; blueprint?: string; notes?: string; status?: string; targetWordCount?: number }) =>
+    mutationFn: (data: { title: string; summary?: string; eventLine?: string; blueprint?: string; notes?: string; status?: string; targetWordCount?: number }) =>
       api.volumes.create({
         novelId,
         title: data.title,
         sortOrder: (volumes?.length || 0),
-        outline: data.outline || null,
+        eventLine: data.eventLine || null,
         blueprint: data.blueprint || null,
         targetWordCount: data.targetWordCount || null,
         notes: data.notes || null,
@@ -124,6 +125,23 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
     onError: (err) => toast.error(`删除失败: ${(err as Error).message}`),
   })
 
+  const confirmBatchMutation = useMutation({
+    mutationFn: (chapterPlans: Array<{ chapterTitle: string; summary: string }>) =>
+      api.generate.confirmBatchChapters({
+        volumeId: selectedVolumeForBatch?.id || '',
+        novelId,
+        chapterPlans,
+      }),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['volumes', novelId] })
+      queryClient.invalidateQueries({ queryKey: ['chapters', novelId] })
+      toast.success(`✅ 成功创建 ${result.createdChapters?.length || 0} 个章节`)
+      setBatchDialogOpen(false)
+      setBatchResult(null)
+    },
+    onError: (err) => toast.error(`❌ 创建章节失败: ${(err as Error).message}`),
+  })
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.title.trim()) {
@@ -134,7 +152,7 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
     const data = {
       title: formData.title.trim(),
       summary: formData.summary.trim() || undefined,
-      outline: formData.outline.trim() || undefined,
+      eventLine: formData.eventLine.trim() || undefined,
       blueprint: formData.blueprint.trim() || undefined,
       notes: formData.notes.trim() || undefined,
       status: formData.status || 'draft',
@@ -153,7 +171,7 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
     setFormData({
       title: volume.title,
       summary: volume.summary || '',
-      outline: volume.outline || '',
+      eventLine: volume.eventLine || '',
       blueprint: volume.blueprint || '',
       notes: volume.notes || '',
       status: volume.status || 'draft',
@@ -184,8 +202,19 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
 
   const resetForm = () => {
     setEditingId(null)
-    setFormData({ title: '', summary: '', outline: '', blueprint: '', notes: '', status: 'draft', targetWordCount: '' })
+    setFormData({ title: '', summary: '', eventLine: '', blueprint: '', notes: '', status: 'draft', targetWordCount: '' })
   }
+
+  const generateSummaryMutation = useMutation({
+    mutationFn: () => api.generate.volumeSummary({ volumeId: editingId || '', novelId }),
+    onSuccess: (result) => {
+      if (result.summary) {
+        setFormData(prev => ({ ...prev, summary: result.summary || '' }))
+        toast.success('✅ 摘要已生成')
+      }
+    },
+    onError: (err) => toast.error(`❌ 生成摘要失败: ${(err as Error).message}`),
+  })
 
   const handleBatchGenerate = async () => {
     if (!selectedVolumeForBatch) return
@@ -294,22 +323,44 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
               </div>
 
               <div className="space-y-2">
-                <Label>卷简介（可选）</Label>
-                <Textarea
-                  placeholder="描述这一卷的主要内容..."
-                  rows={3}
-                  value={formData.summary}
-                  onChange={(e) => setFormData(prev => ({ ...prev, summary: e.target.value }))}
-                />
+                <Label>卷摘要（可选）</Label>
+                <div className="flex gap-2">
+                  <Textarea
+                    placeholder="描述这一卷的主要内容..."
+                    rows={3}
+                    value={formData.summary}
+                    onChange={(e) => setFormData(prev => ({ ...prev, summary: e.target.value }))}
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => generateSummaryMutation.mutate()}
+                    disabled={generateSummaryMutation.isPending || !editingId}
+                  >
+                    {generateSummaryMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        生成中
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="h-3.5 w-3.5" />
+                        AI生成
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
 
               <div className="space-y-2">
-                <Label>卷大纲（可选，支持 Markdown）</Label>
+                <Label>事件线（可选，支持 Markdown）</Label>
                 <Textarea
                   placeholder="详细规划这一卷的情节发展..."
                   rows={8}
-                  value={formData.outline}
-                  onChange={(e) => setFormData(prev => ({ ...prev, outline: e.target.value }))}
+                  value={formData.eventLine}
+                  onChange={(e) => setFormData(prev => ({ ...prev, eventLine: e.target.value }))}
                 />
               </div>
 
@@ -477,7 +528,7 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Wand2 className="h-5 w-5 text-primary" />
-              AI 批量生成章节大纲
+              AI 批量生成章节规划
             </DialogTitle>
           </DialogHeader>
 
@@ -536,23 +587,12 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
                 <div className="space-y-3">
                   <div className={`p-3 rounded-lg ${batchResult.ok ? 'bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800'}`}>
                     <p className={`text-sm font-medium ${batchResult.ok ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
-                      {batchResult.ok ? `✓ 成功生成 ${batchResult.successCount} 个章节大纲` : `✗ 生成失败`}
+                      {batchResult.ok ? `✓ 成功生成 ${batchResult.successCount} 个章节规划` : `✗ 生成失败`}
                     </p>
                     {batchResult.message && (
                       <p className="text-xs text-muted-foreground mt-1">{batchResult.message}</p>
                     )}
                   </div>
-
-                  {batchResult.volumeOutlinePreview && (
-                    <div className="space-y-2">
-                      <Label>卷大纲预览</Label>
-                      <div className="bg-muted/30 p-4 rounded-lg max-h-[400px] overflow-y-auto">
-                        <pre className="text-xs whitespace-pre-wrap leading-relaxed font-mono">
-                          {batchResult.volumeOutlinePreview}
-                        </pre>
-                      </div>
-                    </div>
-                  )}
 
                   {batchResult.outlines && batchResult.outlines.length > 0 && (
                     <div className="space-y-2">
@@ -561,8 +601,8 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
                         {batchResult.outlines.map((outline: any, idx: number) => (
                           <div key={idx} className="border rounded-lg p-3 space-y-1">
                             <p className="font-medium text-sm">{idx + 1}. {outline.chapterTitle || `第${idx + 1}章`}</p>
-                            {outline.outline && (
-                              <p className="text-xs text-muted-foreground line-clamp-2">{outline.outline}</p>
+                            {outline.summary && (
+                              <p className="text-xs text-muted-foreground line-clamp-2">{outline.summary}</p>
                             )}
                           </div>
                         ))}
@@ -574,8 +614,26 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
                     <Button variant="outline" onClick={() => setBatchResult(null)} className="flex-1">
                       重新生成
                     </Button>
-                    <Button onClick={closeBatchDialog} className="flex-1">
-                      完成
+                    <Button 
+                      onClick={() => {
+                        if (batchResult.outlines) {
+                          setIsConfirming(true)
+                          confirmBatchMutation.mutate(batchResult.outlines)
+                        }
+                      }}
+                      disabled={confirmBatchMutation.isPending || isConfirming}
+                      className="flex-1"
+                    >
+                      {confirmBatchMutation.isPending || isConfirming ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          创建中...
+                        </>
+                      ) : (
+                        <>
+                          确认创建章节
+                        </>
+                      )}
                     </Button>
                   </div>
                 </div>
