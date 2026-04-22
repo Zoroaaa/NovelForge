@@ -25,8 +25,8 @@ export interface EmbeddingResult {
   metadata: VectorMetadata
 }
 
-const EMBEDDING_MODEL = '@cf/baai/bge-base-zh-v1.5'
-const DIMENSIONS = 768
+const EMBEDDING_MODEL = '@cf/baai/bge-m3'
+const DIMENSIONS = 1024
 
 /**
  * 对单个文本进行向量化

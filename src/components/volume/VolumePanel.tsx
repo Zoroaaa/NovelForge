@@ -61,7 +61,12 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
   const [batchContext, setBatchContext] = useState('')
   const [isBatchGenerating, setIsBatchGenerating] = useState(false)
   const [isConfirming, setIsConfirming] = useState(false)
-  const [batchResult, setBatchResult] = useState<any>(null)
+  const [batchResult, setBatchResult] = useState<{
+    ok?: boolean
+    successCount?: number
+    message?: string
+    outlines?: Array<{ chapterTitle: string; summary: string }>
+  } | null>(null)
 
   const { data: volumes, isLoading: volumesLoading } = useQuery({
     queryKey: ['volumes', novelId],
@@ -598,7 +603,7 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
                     <div className="space-y-2">
                       <Label>生成的章节列表（{batchResult.outlines.length} 章）</Label>
                       <div className="max-h-[300px] overflow-y-auto space-y-2">
-                        {batchResult.outlines.map((outline: any, idx: number) => (
+                        {batchResult.outlines?.map((outline: { chapterTitle: string; summary: string }, idx: number) => (
                           <div key={idx} className="border rounded-lg p-3 space-y-1">
                             <p className="font-medium text-sm">{idx + 1}. {outline.chapterTitle || `第${idx + 1}章`}</p>
                             {outline.summary && (

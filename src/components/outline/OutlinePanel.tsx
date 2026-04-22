@@ -9,7 +9,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { MasterOutline } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Save, History, Plus, Eye, Edit2, Trash2, FileText, Clock, Hash, ChevronDown, ChevronRight, Wand2, Loader2 } from 'lucide-react'
+import { History, Plus, Edit2, Trash2, FileText, Clock, Hash, ChevronDown, ChevronRight, Wand2, Loader2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -68,7 +68,7 @@ export function OutlinePanel({ novelId }: OutlinePanelProps) {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: { title?: string; content?: string; summary?: string } }) =>
-      api.masterOutline.update(id, data as any),
+      api.masterOutline.update(id, data as Record<string, unknown>),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['master-outline'] })
       toast.success('✅ 总纲已更新')

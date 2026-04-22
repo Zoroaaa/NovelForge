@@ -14,7 +14,6 @@ import {
   Sparkles,
   Trash2,
   Wand2,
-  Plus,
   LayoutGrid,
   List,
 } from 'lucide-react'

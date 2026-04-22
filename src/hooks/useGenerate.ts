@@ -11,7 +11,7 @@ import type { ContextBundle } from '@/components/generate/ContextPreview'
 
 export interface ToolCallEvent {
   name: string
-  args: Record<string, any>
+  args: Record<string, unknown>
   result: string
   status?: 'running' | 'done'  // Phase 1.4: 工具调用状态
 }
@@ -60,10 +60,10 @@ export function useGenerate() {
               const existingIndex = prev.findIndex(tc => tc.name === chunk.name && tc.status === 'running')
               if (existingIndex >= 0 && chunk.status === 'done') {
                 const updated = [...prev]
-                updated[existingIndex] = { name: chunk.name as string, args: chunk.args as Record<string, any>, result: (chunk.result as string) || '' }
+                updated[existingIndex] = { name: chunk.name as string, args: chunk.args as Record<string, unknown>, result: (chunk.result as string) || '' }
                 return updated
               }
-              return [...prev, { name: chunk.name as string, args: chunk.args as Record<string, any>, result: (chunk.result as string) || '' }]
+              return [...prev, { name: chunk.name as string, args: chunk.args as Record<string, unknown>, result: (chunk.result as string) || '' }]
             })
             return
           }
@@ -73,18 +73,18 @@ export function useGenerate() {
           }
           // Phase 2.3: 处理连贯性检查结果
           if (chunk.type === 'coherence_check') {
-            const { score, issues } = chunk as any
-            const errorCount = issues?.filter((i: any) => i.severity === 'error').length || 0
-            const warningCount = issues?.filter((i: any) => i.severity === 'warning').length || 0
+            const { score, issues } = chunk as { score: number; issues: Array<{ severity: string; message: string }> }
+            const errorCount = issues?.filter((i: { severity: string }) => i.severity === 'error').length || 0
+            const warningCount = issues?.filter((i: { severity: string }) => i.severity === 'warning').length || 0
 
             if (errorCount > 0) {
               toast.error(`连贯性检测发现 ${errorCount} 个问题（评分: ${score}/100）`, {
-                description: issues.slice(0, 3).map((i: any) => `• ${i.message}`).join('\n'),
+                description: issues.slice(0, 3).map((i: { message: string }) => `• ${i.message}`).join('\n'),
                 duration: 8000,
               })
             } else if (warningCount > 0) {
               toast.warning(`连贯性提示：${warningCount} 个建议（评分: ${score}/100）`, {
-                description: issues.slice(0, 2).map((i: any) => `• ${i.message}`).join('\n'),
+                description: issues.slice(0, 2).map((i: { message: string }) => `• ${i.message}`).join('\n'),
                 duration: 6000,
               })
             }

@@ -210,8 +210,8 @@ router.get('/status', async (c) => {
     return c.json({
       status: 'ok',
       message: 'Vectorize service is operational',
-      embeddingModel: '@cf/baai/bge-base-zh-v1.5',
-      dimensions: 768,
+      embeddingModel: '@cf/baai/bge-m3',
+      dimensions: 1024,
     })
   } catch (error) {
     return c.json({

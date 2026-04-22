@@ -52,7 +52,7 @@ export function Sidebar({ novelId, onChapterSelect }: SidebarProps) {
           <Tooltip key={value} delayDuration={300}>
             <TooltipTrigger asChild>
               <button
-                onClick={() => setSidebarTab(value as any)}
+                onClick={() => setSidebarTab(value)}
                 className={cn(
                   'w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150',
                   sidebarTab === value

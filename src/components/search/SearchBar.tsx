@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Search, Loader2, BookOpen } from 'lucide-react'
+import { Search, Loader2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 interface SearchResult {

@@ -31,7 +31,6 @@ import {
   ChevronLeft,
   Menu,
   Sparkles,
-  LayoutDashboard,
   BarChart3,
   FileText,
   MessageSquare,

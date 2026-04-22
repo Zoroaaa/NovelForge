@@ -334,8 +334,8 @@ export interface EntityTreeResponse {
     entityId: string
     title: string
     depth: number
-    meta: any
-    children: any[]
+    meta: Record<string, unknown>
+    children: Record<string, unknown>[]
   }>
   stats: Record<string, number>
   totalNodes: number

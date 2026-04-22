@@ -36,8 +36,6 @@ import {
   BookOpen,
   Layers,
   Eye,
-  Trash2,
-  Play,
 } from 'lucide-react'
 
 interface VectorStats {
@@ -111,7 +109,7 @@ export default function AiMonitorPage() {
     try {
       const results = await api.vectorize.search(searchQuery, selectedNovelId)
       setSearchResults(results.results || [])
-    } catch (error) {
+    } catch {
       toast.error('搜索失败')
       setSearchResults([])
     } finally {
@@ -132,7 +130,7 @@ export default function AiMonitorPage() {
       await api.entities.rebuild({ novelId: selectedNovelId })
       toast.success('实体树重建成功')
       queryClient.invalidateQueries({ queryKey: ['vector-stats'] })
-    } catch (error) {
+    } catch {
       toast.error('实体树重建失败')
     }
   }
@@ -402,7 +400,7 @@ export default function AiMonitorPage() {
                           const result = await api.generate.previewContext(contextNovelId, contextChapterId)
                           setContextResult(result)
                           toast.success(`上下文构建成功，共 ${result.summary?.totalLayers || 0} 层`)
-                        } catch (error) {
+                        } catch {
                           toast.error('获取上下文失败')
                           setContextResult(null)
                         } finally {

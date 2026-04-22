@@ -203,7 +203,7 @@ export default function ReaderPage() {
             </div>
             <div className="flex items-center gap-4 text-sm">
               <label className="shrink-0">主题</label>
-              <Select value={theme} onValueChange={(v) => setTheme(v as any)}>
+              <Select value={theme} onValueChange={(v) => setTheme(v as 'light' | 'dark' | 'sepia')}>
                 <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="light">浅色</SelectItem>
@@ -214,7 +214,7 @@ export default function ReaderPage() {
             </div>
             <div className="flex items-center gap-4 text-sm">
               <label className="shrink-0">字体</label>
-              <Select value={fontFamily} onValueChange={(v) => setFontFamily(v as any)}>
+              <Select value={fontFamily} onValueChange={(v: 'serif' | 'sans') => setFontFamily(v)}>
                 <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="serif">衬线体</SelectItem>

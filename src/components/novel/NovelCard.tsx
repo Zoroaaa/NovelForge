@@ -16,17 +16,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { 
-  MoreHorizontal, 
-  BookOpen, 
-  FileText, 
-  Trash2, 
-  Edit, 
+import {
+  MoreHorizontal,
+  BookOpen,
+  FileText,
+  Trash2,
+  Edit,
   Clock,
   Sparkles,
   ChevronRight,
   ImagePlus,
-  ImageIcon,
   RefreshCw,
 } from 'lucide-react'
 import type { Novel } from '@/lib/types'

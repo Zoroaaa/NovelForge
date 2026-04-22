@@ -10,7 +10,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { WritingRule } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Plus, Trash2, Edit2, Save, X, Power, PowerOff, Palette, Clock, Users, BookOpen, Globe, Ban, Lightbulb } from 'lucide-react'
+import { Plus, Trash2, Edit2, Power, PowerOff, Palette, Clock, Users, BookOpen, Globe, Ban, Lightbulb } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -90,7 +90,7 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<WritingRule> }) =>
-      api.rules.update(id, data as any),
+      api.rules.update(id, data as Partial<WritingRule>),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rules'] })
       toast.success('✅ 规则更新成功')

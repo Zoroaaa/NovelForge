@@ -5,7 +5,7 @@
  * @modified 2026-04-22 - 添加用户认证系统
  */
 import type {
-  Novel, Volume, Chapter, Character, SortItem,
+  Novel, Volume, Chapter, Character,
   NovelInput, ChapterInput, VolumeInput, CharacterInput, ModelConfig, GenerateOptions,
   MasterOutline, WritingRule, NovelSetting, ForeshadowingItem
 } from './types'
@@ -54,7 +54,7 @@ async function req<T>(
         throw new Error('未授权，请重新登录')
       }
       const err = await res.json().catch(() => ({ error: res.statusText }))
-      throw new Error((err as any).error ?? res.statusText)
+      throw new Error((err as Record<string, unknown>).error ? String((err as Record<string, unknown>).error) : res.statusText)
     }
 
     return res.json()
@@ -184,20 +184,20 @@ export const api = {
   // v2.0: 小说设定管理
   settings: {
     list:   (novelId: string, params?: { type?: string; importance?: string }) =>
-                                  req<{ settings: NovelSetting[]; total: number }>(`/api/settings/${novelId}${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+                                  req<{ settings: NovelSetting[]; total: number }>(`/api/settings/${novelId}${params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''}`),
     get:    (novelId: string, id: string) => req<{ setting: NovelSetting }>(`/api/settings/${novelId}/${id}`),
     create: (body: { novelId: string; type: string; name: string; content: string; attributes?: string }) =>
                                   req<NovelSetting>('/api/settings', { method: 'POST', body: j(body) }),
     update: (id: string, body: Partial<Pick<NovelSetting, 'type' | 'category' | 'name' | 'content' | 'importance' | 'sortOrder' | 'attributes'>>) =>
                                   req<NovelSetting>(`/api/settings/${id}`, { method: 'PUT', body: j(body) }),
     delete: (id: string)          => req(`/api/settings/${id}`, { method: 'DELETE' }),
-    tree:   (novelId: string)     => req<{ tree: any[]; stats: Record<string, number>; total: number }>(`/api/settings/tree/${novelId}`),
+    tree:   (novelId: string)     => req<{ tree: Record<string, unknown>[]; stats: Record<string, number>; total: number }>(`/api/settings/tree/${novelId}`),
   },
 
   // v2.0: 创作规则管理
   rules: {
     list:   (novelId: string, params?: { category?: string; activeOnly?: boolean }) =>
-                                   req<{ rules: WritingRule[] }>(`/api/rules/${novelId}${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+                                   req<{ rules: WritingRule[] }>(`/api/rules/${novelId}${params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''}`),
     create: (body: { novelId: string; category: string; title: string; content: string; priority?: number }) =>
                                    req<WritingRule>('/api/rules', { method: 'POST', body: j(body) }),
     update: (id: string, body: Partial<Pick<WritingRule, 'category' | 'title' | 'content' | 'priority' | 'isActive' | 'sortOrder'>>) =>
@@ -235,7 +235,7 @@ export const api = {
   // Phase 1.2 / v2.0: 伏笔追踪
   foreshadowing: {
     list:   (novelId: string, params?: { status?: string }) =>
-                                   req<{ foreshadowing: ForeshadowingItem[] }>(`/api/foreshadowing/${novelId}${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+                                   req<{ foreshadowing: ForeshadowingItem[] }>(`/api/foreshadowing/${novelId}${params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''}`),
     create: (body: { novelId: string; chapterId?: string; title: string; description?: string; importance?: 'high' | 'normal' | 'low' }) =>
                                    req<ForeshadowingItem>('/api/foreshadowing', { method: 'POST', body: j(body) }),
     update: (id: string, body: Partial<Pick<ForeshadowingItem, 'title' | 'description' | 'status' | 'importance' | 'resolvedChapterId'>>) =>
@@ -245,9 +245,9 @@ export const api = {
 
   // v2.0: 总索引（树形结构）
   entities: {
-    tree:    (novelId: string)     => req<any>(`/api/entities/${novelId}`),
-    children: (novelId: string, parentId: string) => req<{ children: any[] }>(`/api/entities/${novelId}/children/${parentId}`),
-    rebuild: (body: { novelId: string }) => req<any>('/api/entities/rebuild', { method: 'POST', body: j(body) }),
+    tree:    (novelId: string)     => req<Record<string, unknown>>(`/api/entities/${novelId}`),
+    children: (novelId: string, parentId: string) => req<{ children: Record<string, unknown>[] }>(`/api/entities/${novelId}/children/${parentId}`),
+    rebuild: (body: { novelId: string }) => req<Record<string, unknown>>('/api/entities/rebuild', { method: 'POST', body: j(body) }),
   },
 
   // AI 监控中心：向量索引管理
@@ -277,7 +277,7 @@ export const api = {
   // 模型配置管理
   modelConfigs: {
     list:   (params?: { novelId?: string; stage?: string }) => {
-      const searchParams = params ? '?' + new URLSearchParams(params as any).toString() : ''
+      const searchParams = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
       return req<ModelConfig[]>(`/api/config${searchParams}`)
     },
     create: (body: { stage: string; provider: string; modelId: string; scope: string; apiBase?: string; apiKey?: string; novelId?: string }) =>
@@ -290,7 +290,7 @@ export const api = {
   },
 
   generate: {
-    chapter: (payload: GenerateOptions, onChunk: (text: string) => void, onDone: () => void, onError: (e: Error) => void): (() => void) => { return () => {} },
+    chapter: (): (() => void) => { return () => {} },
     outlineBatch: (body: { volumeId: string; novelId: string; chapterCount?: number; context?: string }) =>
       req<{
         ok: boolean
@@ -329,7 +329,7 @@ export const api = {
     previewContext: (novelId: string, chapterId: string) =>
       req<{
         ok: boolean
-        contextBundle: any
+        contextBundle: Record<string, unknown>
         buildTimeMs: number
         summary: {
           totalLayers: number
@@ -363,7 +363,7 @@ export const api = {
   // 邀请码管理API（管理员）
   inviteCodes: {
     list: (params?: { page?: number; pageSize?: number; status?: string }) => {
-      const searchParams = params ? '?' + new URLSearchParams(params as any).toString() : ''
+      const searchParams = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
       return req<{ success: boolean; data: { items: InviteCode[]; pagination: PaginationInfo } }>(`/api/invite-codes${searchParams}`)
     },
     create: (body: { maxUses?: number; expiresInDays?: number }) =>

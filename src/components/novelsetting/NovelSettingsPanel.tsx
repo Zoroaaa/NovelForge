@@ -28,7 +28,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
 
 interface NovelSettingsPanelProps {
   novelId: string
@@ -102,7 +101,7 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
       return api.settings.update(id, {
         ...rest,
         attributes: attributes?.trim() || undefined,
-      } as any)
+      } as Record<string, unknown>)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] })
@@ -223,7 +222,7 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
                   <Label>重要性</Label>
                   <Select 
                     value={formData.importance} 
-                    onValueChange={(v) => setFormData(prev => ({ ...prev, importance: v as any }))}
+                    onValueChange={(v) => setFormData(prev => ({ ...prev, importance: v as 'normal' | 'high' | 'low' }))}
                   >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>

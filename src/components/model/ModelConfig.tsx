@@ -135,7 +135,7 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
     if (editingConfig) {
       updateMutation.mutate({ id: editingConfig.id, data })
     } else {
-      createMutation.mutate(data as any)
+      createMutation.mutate(data)
     }
   }
 
