@@ -130,7 +130,7 @@ export async function buildChapterContext(
   }
 ): Promise<ContextBundle> {
   const startTime = Date.now()
-  const db = drizzle(env.DB)
+  const db = drizzle(env.DB) as AppDb
 
   const summaryChainLength = Math.min(
     Math.max(options?.summaryChainLength ?? 5, 0),
@@ -547,7 +547,7 @@ async function fetchRecentSummaries(
 }
 
 async function fetchProtagonistCards(db: AppDb, novelId: string): Promise<Array<{
-  name: string; description: string; role: string; attributes: string | null
+  name: string; description: string | null; role: string | null; attributes: string | null
 }>> {
   try {
     return await db
@@ -598,7 +598,7 @@ async function fetchProtagonistPowerLevel(db: AppDb, novelId: string): Promise<M
 }
 
 function mergeProtagonistAndPower(
-  cards: Array<{ name: string; description: string; role: string; attributes: string | null }>,
+  cards: Array<{ name: string; description: string | null; role: string | null; attributes: string | null }>,
   powerMap: Map<string, string>
 ): string[] {
   return cards.map(c => {

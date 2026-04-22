@@ -74,9 +74,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const response = await api.auth.getMe()
       const user = response.data
       set({ user, isAuthenticated: true })
-    } catch {
+    } catch (error) {
       removeToken()
       set({ user: null, isAuthenticated: false })
+      throw error
     }
   },
 
@@ -87,11 +88,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return false
     }
 
-    try {
-      await get().fetchUser()
-      return true
-    } catch {
-      return false
-    }
+    await get().fetchUser()
+    return get().isAuthenticated
   }
 }))

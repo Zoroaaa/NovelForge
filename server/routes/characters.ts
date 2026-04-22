@@ -106,16 +106,19 @@ router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
     .returning()
 
   if (body.description !== undefined && row && c.env.VECTORIZE) {
-    await enqueue(c.env, c, {
-      type: 'index_content',
-      payload: {
-        sourceType: 'character',
-        sourceId: row.id,
-        novelId: row.novelId,
-        title: row.name,
-        content: body.description ?? '',
-      },
-    })
+    const descriptionContent = body.description ?? ''
+    if (descriptionContent.trim()) {
+      await enqueue(c.env, c, {
+        type: 'index_content',
+        payload: {
+          sourceType: 'character',
+          sourceId: row.id,
+          novelId: row.novelId,
+          title: row.name,
+          content: descriptionContent,
+        },
+      })
+    }
   }
 
   return c.json(row)

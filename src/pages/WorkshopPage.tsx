@@ -64,7 +64,7 @@ interface ExtractedData {
     name: string
     role: string
     description: string
-    attributes?: Record<string, any>
+    attributes?: Record<string, unknown>
     relationships?: string[]
   }>
   volumes?: Array<{
@@ -144,7 +144,7 @@ export default function WorkshopPage() {
         setSessionId(id)
         setStage(data.session.stage || 'concept')
         setMessages(
-          (data.session.messages || []).map((m: any) => ({
+          (data.session.messages || []).map((m: { role: string; content: string; timestamp?: number }) => ({
             id: crypto.randomUUID(),
             role: m.role,
             content: m.content,

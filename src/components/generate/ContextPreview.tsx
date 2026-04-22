@@ -36,6 +36,8 @@ export interface ContextDebugInfo {
   totalTokenEstimate: number
   slotBreakdown: Record<string, number>
   ragQueriesCount: number
+  ragHitsCount: number
+  summaryChainLength: number
   buildTimeMs: number
   budgetTier: {
     core: number
@@ -454,7 +456,7 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
                         </div>
                         <ScrollArea className="max-h-16 mt-1">
                           <div className="space-y-0.5 pl-5">
-                            {items.map((item, idx) => (
+                            {items.map((item: string, idx: number) => (
                               <p key={idx} className="text-xs text-muted-foreground truncate py-0.5">
                                 {item.slice(0, 80)}{item.length > 80 ? '...' : ''}
                               </p>

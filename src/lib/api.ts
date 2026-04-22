@@ -35,7 +35,7 @@ async function req<T>(
 
   const token = getToken()
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  
+
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
   }
@@ -46,18 +46,28 @@ async function req<T>(
       signal: init?.signal || controller.signal,
       ...init,
     })
-    
-    if (res.status === 401) {
-      removeToken()
-      window.location.href = '/login'
-      throw new Error('未授权，请重新登录')
-    }
-    
+
     if (!res.ok) {
+      if (res.status === 401) {
+        removeToken()
+        window.location.href = '/login'
+        throw new Error('未授权，请重新登录')
+      }
       const err = await res.json().catch(() => ({ error: res.statusText }))
       throw new Error((err as any).error ?? res.statusText)
     }
+
     return res.json()
+  } catch (error: unknown) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('请求超时，请检查网络连接后重试')
+    }
+
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('网络连接失败，请检查网络设置')
+    }
+
+    throw error
   } finally {
     clearTimeout(timer)
   }
@@ -259,7 +269,7 @@ export const api = {
       }>(`/api/vectorize/search${params}`)
     },
     reindexAll: (body: { novelId: string; types?: string[] }) =>
-      req<{ ok: boolean; indexed: number; failed: number; details: string[]; message: string }>('/api/vectorize/reindex-all', { method: 'POST', body: j(body), timeout: 300000 }),
+      req<{ ok: boolean; message: string }>('/api/vectorize/reindex-all', { method: 'POST', body: j(body), timeout: 300000 }),
     getStatus: () =>
       req<{ status: string; message: string; embeddingModel?: string; dimensions?: number }>('/api/vectorize/status'),
   },

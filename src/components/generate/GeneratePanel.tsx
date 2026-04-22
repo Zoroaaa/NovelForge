@@ -74,7 +74,7 @@ export function GeneratePanel({
 
   // Phase 1.6: 处理生成请求
   const handleGenerate = () => {
-    let options: any = { mode }
+    const options: any = { mode }
     
     if (mode === 'continue' && existingContent) {
       options.existingContent = existingContent

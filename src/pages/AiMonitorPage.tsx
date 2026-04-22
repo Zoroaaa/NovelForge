@@ -69,6 +69,8 @@ export default function AiMonitorPage() {
   const [reindexProgress, setReindexProgress] = useState<string>('')
   const [contextNovelId, setContextNovelId] = useState<string>('')
   const [contextChapterId, setContextChapterId] = useState<string>('')
+  const [contextResult, setContextResult] = useState<any>(null)
+  const [isLoadingContext, setIsLoadingContext] = useState(false)
 
   const { data: novelsData } = useQuery({
     queryKey: ['novels'],
@@ -87,10 +89,13 @@ export default function AiMonitorPage() {
     mutationFn: (types?: string[]) =>
       api.vectorize.reindexAll({ novelId: selectedNovelId, types }),
     onSuccess: (data) => {
-      toast.success(`索引重建完成：${data.indexed} 成功，${data.failed} 失败`)
+      toast.success(data.message || '索引重建任务已提交，请稍后查看统计')
       setIsReindexing(false)
-      setReindexProgress('')
-      queryClient.invalidateQueries({ queryKey: ['vector-stats'] })
+      setReindexProgress('任务已提交到队列，正在后台执行...')
+      setTimeout(() => {
+        setReindexProgress('')
+        queryClient.invalidateQueries({ queryKey: ['vector-stats'] })
+      }, 3000)
     },
     onError: (error) => {
       toast.error(`索引重建失败：${error.message}`)
@@ -392,19 +397,78 @@ export default function AiMonitorPage() {
                           toast.error('请选择小说和章节')
                           return
                         }
+                        setIsLoadingContext(true)
                         try {
                           const result = await api.generate.previewContext(contextNovelId, contextChapterId)
-                          console.log('Context preview:', result)
-                          toast.success('上下文信息已输出到控制台')
+                          setContextResult(result)
+                          toast.success(`上下文构建成功，共 ${result.summary?.totalLayers || 0} 层`)
                         } catch (error) {
                           toast.error('获取上下文失败')
+                          setContextResult(null)
+                        } finally {
+                          setIsLoadingContext(false)
                         }
                       }}
-                      disabled={!contextNovelId || !contextChapterId}
+                      disabled={!contextNovelId || !contextChapterId || isLoadingContext}
                     >
-                      <Eye className="w-4 h-4 mr-2" />
-                      预览上下文
+                      {isLoadingContext ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Eye className="w-4 h-4 mr-2" />
+                      )}
+                      {isLoadingContext ? '正在分析...' : '预览上下文'}
                     </Button>
+
+                    {contextResult && (
+                      <div className="mt-4 space-y-3">
+                        <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="font-medium text-sm">📊 上下文摘要</h4>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                navigator.clipboard.writeText(JSON.stringify(contextResult, null, 2))
+                                toast.success('已复制到剪贴板')
+                              }}
+                            >
+                              复制 JSON
+                            </Button>
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+                            <div className="bg-white dark:bg-gray-800 rounded p-2 text-center">
+                              <div className="text-lg font-bold text-blue-600">{contextResult.summary?.totalLayers || 0}</div>
+                              <div className="text-muted-foreground">总层数</div>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 rounded p-2 text-center">
+                              <div className="text-lg font-bold text-green-600">{contextResult.summary?.coreLayerCount || 0}</div>
+                              <div className="text-muted-foreground">核心层</div>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 rounded p-2 text-center">
+                              <div className="text-lg font-bold text-purple-600">{contextResult.summary?.dynamicLayerCount || 0}</div>
+                              <div className="text-muted-foreground">动态层</div>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 rounded p-2 text-center">
+                              <div className="text-lg font-bold text-orange-600">{contextResult.summary?.ragResultCount || 0}</div>
+                              <div className="text-muted-foreground">RAG命中</div>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 rounded p-2 text-center">
+                              <div className="text-lg font-bold text-gray-600">{contextResult.buildTimeMs || 0}ms</div>
+                              <div className="text-muted-foreground">构建耗时</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <details className="bg-gray-50 dark:bg-gray-800 rounded-lg">
+                          <summary className="p-3 cursor-pointer text-sm font-medium hover:text-blue-600 transition-colors">
+                            🔍 查看完整上下文数据（JSON）
+                          </summary>
+                          <pre className="p-3 text-xs overflow-auto max-h-[400px] bg-white dark:bg-gray-900 rounded-b-lg border-t">
+                            {JSON.stringify(contextResult, null, 2)}
+                          </pre>
+                        </details>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

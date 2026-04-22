@@ -65,7 +65,7 @@ export function ChapterEditor({ chapter, injectedContent, onContentInserted }: C
       const formattedContent = formatContentForEditor(content)
 
       if (!formattedContent) {
-        toast.warn('内容为空，无法写入')
+        toast.warning('内容为空，无法写入')
         return
       }
 

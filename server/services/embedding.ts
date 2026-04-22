@@ -281,6 +281,16 @@ export async function indexContent(
     const vectorId = `${sourceType}_${sourceId}_${i}`
     const values = await embedText(env.AI, chunks[i])
 
+    // 防御性校验：确保 extraMetadata 只包含字符串值
+    const safeExtraMetadata: Record<string, string> = {}
+    if (extraMetadata && typeof extraMetadata === 'object') {
+      for (const [key, value] of Object.entries(extraMetadata)) {
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+          safeExtraMetadata[key] = String(value)
+        }
+      }
+    }
+
     // 插入到Vectorize
     await upsertVector(env.VECTORIZE, vectorId, values, {
       novelId,
@@ -288,7 +298,7 @@ export async function indexContent(
       sourceId,
       title: i === 0 ? title : `${title} (Part ${i + 1})`,
       content: chunks[i],
-      ...extraMetadata,
+      ...safeExtraMetadata,
     })
 
     // 记录到vector_index表

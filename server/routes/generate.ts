@@ -353,9 +353,22 @@ router.post('/preview-context', zValidator('json', z.object({
 })), async (c) => {
   const { novelId, chapterId } = c.req.valid('json')
 
+  console.log(`[Preview-Context] Request received for novel=${novelId}, chapter=${chapterId}`)
+
+  const TIMEOUT_MS = 30000
+
+  c.header('X-RateLimit-Reminder', 'This is a diagnostic endpoint. Avoid frequent calls in production.')
+
   try {
     const startTime = Date.now()
-    const contextBundle = await buildChapterContext(c.env, novelId, chapterId)
+
+    const contextBundle = await Promise.race([
+      buildChapterContext(c.env, novelId, chapterId),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Context building timeout')), TIMEOUT_MS)
+      ),
+    ])
+
     const buildTimeMs = Date.now() - startTime
 
     if (!contextBundle) {
@@ -370,21 +383,32 @@ router.post('/preview-context', zValidator('json', z.object({
       contextBundle,
       buildTimeMs,
       summary: {
-        totalLayers: contextBundle.core.length + contextBundle.dynamic.length + (contextBundle.ragResults?.length || 0),
-        coreLayerCount: contextBundle.core.length,
-        dynamicLayerCount: contextBundle.dynamic.length,
-        ragResultCount: contextBundle.ragResults?.length || 0,
-        ragQueryTimeMs: contextBundle.ragQueryTimeMs,
+        totalLayers: Object.keys(contextBundle.core).filter(k => contextBundle.core[k as keyof typeof contextBundle.core]).length +
+                     Object.keys(contextBundle.dynamic).filter(k => {
+                       const val = contextBundle.dynamic[k as keyof typeof contextBundle.dynamic]
+                       return Array.isArray(val) ? val.length > 0 : false
+                     }).length,
+        coreLayerCount: Object.keys(contextBundle.core).filter(k => contextBundle.core[k as keyof typeof contextBundle.core]).length,
+        dynamicLayerCount: Object.keys(contextBundle.dynamic).filter(k => {
+          const val = contextBundle.dynamic[k as keyof typeof contextBundle.dynamic]
+          return Array.isArray(val) ? val.length > 0 : false
+        }).length,
+        ragResultCount: contextBundle.debug.ragQueriesCount,
+        ragQueryTimeMs: 0,
       },
     })
   } catch (error) {
     console.error('Preview context failed:', error)
+
+    const isTimeout = (error as Error).message?.includes('timeout')
+
     return c.json(
       {
-        error: 'Preview context failed',
+        error: isTimeout ? 'Context building timeout (30s)' : 'Preview context failed',
         details: (error as Error).message,
+        ...(isTimeout && { suggestion: 'Try simplifying the chapter or reducing context layers' }),
       },
-      500
+      isTimeout ? 504 : 500
     )
   }
 })

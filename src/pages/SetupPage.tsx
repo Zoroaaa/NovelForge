@@ -36,26 +36,30 @@ export default function SetupPage() {
   const [isCreating, setIsCreating] = useState(false)
 
   useEffect(() => {
-    checkSetupStatus()
-  }, [])
+    let isMounted = true
+    const checkStatus = async () => {
+      try {
+        const result = await api.setup.checkStatus()
 
-  async function checkSetupStatus() {
-    try {
-      const result = await api.setup.checkStatus()
-      
-      if (result.data.initialized && result.data.adminExists) {
-        // 系统已初始化，跳转到登录页
-        navigate('/login', { replace: true })
-        return
+        if (result.data.initialized && result.data.adminExists) {
+          navigate('/login', { replace: true })
+          return
+        }
+
+        if (isMounted) {
+          setIsSetup(!result.data.initialized)
+          setIsLoading(false)
+        }
+      } catch {
+        if (isMounted) {
+          toast.error('无法连接到服务器')
+          setIsLoading(false)
+        }
       }
-      
-      setIsSetup(!result.data.initialized)
-      setIsLoading(false)
-    } catch (error) {
-      toast.error('无法连接到服务器')
-      setIsLoading(false)
     }
-  }
+    checkStatus()
+    return () => { isMounted = false }
+  }, [navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

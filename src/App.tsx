@@ -6,7 +6,7 @@
  */
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Toaster } from '@/components/ui/sonner'
 import { useAuthStore } from '@/store/authStore'
 import { api, getToken } from '@/lib/api'
@@ -31,20 +31,38 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((state) => state.user)
   const checkAuth = useAuthStore((state) => state.checkAuth)
   const [isLoading, setIsLoading] = useState(true)
+  const [hasError, setHasError] = useState(false)
   const location = useLocation()
+  const hasCheckedAuth = useRef(false)
 
   useEffect(() => {
-    const token = getToken()
-    if (token && !isAuthenticated) {
-      checkAuth().finally(() => setIsLoading(false))
-    } else if (token && isAuthenticated && !user) {
-      checkAuth().finally(() => setIsLoading(false))
-    } else {
-      setIsLoading(false)
-    }
-  }, [isAuthenticated, user])
+    if (hasCheckedAuth.current) return
 
-  if (isLoading || !user) {
+    const token = getToken()
+    if (!token) {
+      setIsLoading(false)
+      return
+    }
+
+    hasCheckedAuth.current = true
+    const timeoutId = setTimeout(() => {
+      setHasError(true)
+      setIsLoading(false)
+    }, 15000)
+
+    checkAuth()
+      .then(() => {
+        clearTimeout(timeoutId)
+        setIsLoading(false)
+      })
+      .catch(() => {
+        clearTimeout(timeoutId)
+        setHasError(true)
+        setIsLoading(false)
+      })
+  }, [])
+
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="text-center space-y-4">
@@ -55,7 +73,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (!isAuthenticated) {
+  if (hasError || !isAuthenticated || !user) {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 

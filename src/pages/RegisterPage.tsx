@@ -3,7 +3,7 @@
  * @description 用户注册页面（需要邀请码）
  * @version 1.0.1
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { api } from '@/lib/api'
@@ -26,18 +26,23 @@ export default function RegisterPage() {
   const register = useAuthStore((state) => state.register)
   const navigate = useNavigate()
 
-  const checkRegistrationStatus = useCallback(async () => {
-    try {
-      const result = await api.systemSettings.getRegistrationStatus()
-      setRegistrationEnabled(result.data.registrationEnabled)
-    } catch {
-      toast.error('无法获取注册状态')
-    }
-  }, [])
-
   useEffect(() => {
-    checkRegistrationStatus()
-  }, [checkRegistrationStatus])
+    let isMounted = true
+    const checkStatus = async () => {
+      try {
+        const result = await api.systemSettings.getRegistrationStatus()
+        if (isMounted) {
+          setRegistrationEnabled(result.data.registrationEnabled)
+        }
+      } catch {
+        if (isMounted) {
+          toast.error('无法获取注册状态')
+        }
+      }
+    }
+    checkStatus()
+    return () => { isMounted = false }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

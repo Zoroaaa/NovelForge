@@ -43,7 +43,7 @@ async function loadNovelData(db: any, options: Omit<ExportOptions, 'format'>): P
   if (!novel) throw new Error('Novel not found')
 
   // 加载章节列表（按排序）
-  let chapterQuery = db
+  const chapterQuery = db
     .select({
       id: chapters.id,
       title: chapters.title,

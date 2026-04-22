@@ -235,7 +235,7 @@ export async function streamGenerate(
       throw new Error('Response body is not readable')
     }
 
-    let decoder = new TextDecoder()
+    const decoder = new TextDecoder()
     let buffer = ''
     let promptTokens = 0
     let completionTokens = 0

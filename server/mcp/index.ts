@@ -306,7 +306,7 @@ export async function handleToolCall(
       const { novelId, type } = args
 
       // v2.0: 查询总纲表（替代原 outlines）
-      let query = db
+      const query = db
         .select()
         .from(masterOutline)
         .where(and(
