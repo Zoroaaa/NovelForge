@@ -4,11 +4,14 @@
  * @version 1.0.0
  * @modified 2026-04-21 - 添加规范化注释
  */
+import type { QueueMessage } from './queue'
+
 export type Env = {
   DB: D1Database
   STORAGE: R2Bucket
   AI: Ai
   VECTORIZE?: VectorizeIndex
+  TASK_QUEUE?: any
   VOLCENGINE_API_KEY: string
   ANTHROPIC_API_KEY: string
   OPENAI_API_KEY: string

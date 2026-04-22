@@ -8,6 +8,9 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../lib/types'
+import { enqueue } from '../lib/queue'
+import { drizzle } from 'drizzle-orm/d1'
+import { eq, and, sql, count, isNull } from 'drizzle-orm'
 import {
   indexContent,
   deindexContent,
@@ -15,6 +18,7 @@ import {
   embedText,
   fetchContentForIndexing,
 } from '../services/embedding'
+import { vectorIndex, novelSettings, characters as charactersTable, masterOutline, foreshadowing } from '../db/schema'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -61,6 +65,10 @@ router.post(
     }
 
     try {
+      const extraMetadata: Record<string, string> = {}
+      if (settingType) extraMetadata.settingType = settingType
+      if (importance) extraMetadata.importance = importance
+
       const vectorIds = await indexContent(
         c.env,
         sourceType,
@@ -68,8 +76,7 @@ router.post(
         novelId,
         title,
         content ?? null,
-        settingType,
-        importance
+        Object.keys(extraMetadata).length > 0 ? extraMetadata : undefined
       )
 
       return c.json({
@@ -214,5 +221,156 @@ router.get('/status', async (c) => {
     })
   }
 })
+
+/**
+ * GET /stats/:novelId - 获取向量索引统计信息
+ * @description 统计指定小说的向量索引情况，包括总数、分类统计、未索引数量等
+ * @param {string} novelId - 小说ID
+ * @returns {Object} { total, byType, lastIndexedAt, unindexedCounts }
+ */
+router.get('/stats/:novelId', async (c) => {
+  const novelId = c.req.param('novelId')
+  const db = drizzle(c.env.DB)
+
+  try {
+    const totalResult = await db
+      .select({ count: count() })
+      .from(vectorIndex)
+      .where(eq(vectorIndex.novelId, novelId))
+      .get()
+
+    const byTypeResult = await db
+      .select({
+        sourceType: vectorIndex.sourceType,
+        count: count(),
+      })
+      .from(vectorIndex)
+      .where(eq(vectorIndex.novelId, novelId))
+      .groupBy(vectorIndex.sourceType)
+      .all()
+
+    const lastIndexedResult = await db
+      .select({ createdAt: vectorIndex.createdAt })
+      .from(vectorIndex)
+      .where(eq(vectorIndex.novelId, novelId))
+      .orderBy(sql`${vectorIndex.createdAt} DESC`)
+      .limit(1)
+      .get()
+
+    const unindexedSettings = await db
+      .select({ count: count() })
+      .from(novelSettings)
+      .where(
+        and(
+          eq(novelSettings.novelId, novelId),
+          isNull(novelSettings.deletedAt),
+          sql`${novelSettings.vectorId} IS NULL`
+        )
+      )
+      .get()
+
+    const unindexedCharacters = await db
+      .select({ count: count() })
+      .from(charactersTable)
+      .where(
+        and(
+          eq(charactersTable.novelId, novelId),
+          isNull(charactersTable.deletedAt),
+          sql`${charactersTable.vectorId} IS NULL`
+        )
+      )
+      .get()
+
+    const unindexedForeshadowing = await db
+      .select({ count: count() })
+      .from(foreshadowing)
+      .where(
+        and(
+          eq(foreshadowing.novelId, novelId),
+          isNull(foreshadowing.deletedAt),
+          sql`${foreshadowing.description} IS NOT NULL`,
+          sql`${foreshadowing.description} != ''`
+        )
+      )
+      .get()
+
+    const byType: Record<string, number> = {}
+    byTypeResult.forEach((row) => {
+      byType[row.sourceType] = row.count
+    })
+
+    return c.json({
+      total: totalResult?.count || 0,
+      byType,
+      lastIndexedAt: lastIndexedResult?.createdAt || null,
+      unindexedCounts: {
+        settings: unindexedSettings?.count || 0,
+        characters: unindexedCharacters?.count || 0,
+        foreshadowing: unindexedForeshadowing?.count || 0,
+      },
+    })
+  } catch (error) {
+    console.error('Failed to get vector stats:', error)
+    return c.json(
+      {
+        error: 'Failed to get vector stats',
+        details: (error as Error).message,
+      },
+      500
+    )
+  }
+})
+
+/**
+ * POST /reindex-all - 全量重建向量索引
+ * @description 清除旧索引并重建指定小说的所有内容向量索引
+ * @param {string} novelId - 小说ID
+ * @param {string[]} [types] - 可选，指定要重建的类型列表
+ * @returns {Object} { indexed, failed, details }
+ */
+router.post(
+  '/reindex-all',
+  zValidator(
+    'json',
+    z.object({
+      novelId: z.string().min(1),
+      types: z.array(z.enum(['setting', 'character', 'outline', 'foreshadowing'])).optional(),
+      clearExisting: z.boolean().optional(),
+    })
+  ),
+  async (c) => {
+    const body = c.req.valid('json')
+    const { novelId, types, clearExisting } = body
+
+    if (!c.env.VECTORIZE) {
+      return c.json({ error: 'Vectorize binding not configured' }, 503)
+    }
+
+    try {
+      await enqueue(c.env, c, {
+        type: 'reindex_all',
+        payload: {
+          novelId,
+          types,
+          clearExisting,
+        },
+      })
+
+      return c.json({
+        ok: true,
+        message: `Reindex task enqueued for novel ${novelId}`,
+      })
+    } catch (error) {
+      console.error('Failed to enqueue reindex-all:', error)
+      return c.json(
+        {
+          error: 'Failed to enqueue reindex task',
+          details: (error as Error).message,
+        },
+        500
+      )
+    }
+  }
+)
 
 export { router as vectorize }

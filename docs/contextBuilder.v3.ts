@@ -467,7 +467,8 @@ async function fetchMasterOutlineSummary(db: any, novelId: string): Promise<stri
     if (!row) return ''
     // 如果没有summary，取content前500字作为摘要
     return row.summary || ''
-  } catch {
+  } catch (error) {
+    console.error('[contextBuilder] fetchMasterOutlineSummary failed:', error)
     return ''
   }
 }
@@ -490,7 +491,8 @@ async function fetchVolumeInfo(db: any, volumeId: string | null): Promise<{
       blueprint: row?.blueprint || '',
       eventLine: row?.eventLine || '',
     }
-  } catch {
+  } catch (error) {
+    console.error('[contextBuilder] fetchVolumeInfo failed:', error)
     return { blueprint: '', eventLine: '' }
   }
 }
@@ -511,7 +513,8 @@ async function fetchPrevChapterSummary(
       .get()
     if (!row?.summary) return ''
     return `[上一章: ${row.title}] ${row.summary}`
-  } catch {
+  } catch (error) {
+    console.error('[contextBuilder] fetchPrevChapterSummary failed:', error)
     return ''
   }
 }
@@ -534,7 +537,8 @@ async function fetchRecentSummaries(
       .all()
 
     return rows.reverse().map((r: any) => `[第${r.sortOrder}章 ${r.title}] ${r.summary}`)
-  } catch {
+  } catch (error) {
+    console.error('[contextBuilder] fetchRecentSummaries failed:', error)
     return []
   }
 }

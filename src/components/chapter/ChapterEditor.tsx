@@ -12,6 +12,7 @@ import { useDebouncedCallback } from 'use-debounce'
 import type { Chapter } from '@/lib/types'
 import { api } from '@/lib/api'
 import { htmlToMarkdown } from '@/lib/html-to-markdown'
+import { formatContentForEditor } from '@/lib/formatContent'
 import { Button } from '@/components/ui/button'
 import { PenLine, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
@@ -61,20 +62,25 @@ export function ChapterEditor({ chapter, injectedContent, onContentInserted }: C
    */
   const doInsert = (editor: any, content: string) => {
     try {
-      // 有已有内容时在末尾另起段落插入，空编辑器直接设置
-      if (editor.getText().trim()) {
-        editor.commands.insertContentAt(editor.state.doc.content.size, content)
-      } else {
-        editor.commands.setContent(content)
+      const formattedContent = formatContentForEditor(content)
+
+      if (!formattedContent) {
+        toast.warn('内容为空，无法写入')
+        return
       }
-      // 插入后立即触发保存
+
+      if (editor.getText().trim()) {
+        editor.commands.insertContentAt(editor.state.doc.content.size, formattedContent)
+      } else {
+        editor.commands.setContent(formattedContent)
+      }
       save(htmlToMarkdown(editor.getHTML()))
 
       lastInsertedRef.current = content
       setShowInsertBanner(true)
       setTimeout(() => setShowInsertBanner(false), 3000)
       onContentInsertedRef.current?.()
-      toast.success('内容已成功写入')
+      toast.success('内容已成功写入（已自动排版）')
     } catch (error) {
       console.error('[ChapterEditor] Insert failed:', error)
       toast.error('内容写入失败，请重试')

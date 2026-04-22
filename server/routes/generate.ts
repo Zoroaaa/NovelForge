@@ -22,6 +22,7 @@ import {
   confirmBatchChapterCreation,
   generateNextChapter,
 } from '../services/agent'
+import { buildChapterContext } from '../services/contextBuilder'
 import { generateOutline } from '../services/llm'
 
 const router = new Hono<{ Bindings: Env }>()
@@ -337,6 +338,55 @@ router.post('/next-chapter', zValidator('json', z.object({
   }
   
   return c.json(result)
+})
+
+/**
+ * POST /preview-context - 预览章节生成的上下文信息
+ * @description 查看指定章节生成时会注入的上下文各层内容，用于调试和诊断
+ * @param {string} novelId - 小说ID
+ * @param {string} chapterId - 章节ID
+ * @returns {Object} { contextBundle, debugInfo }
+ */
+router.post('/preview-context', zValidator('json', z.object({
+  novelId: z.string().min(1),
+  chapterId: z.string().min(1),
+})), async (c) => {
+  const { novelId, chapterId } = c.req.valid('json')
+
+  try {
+    const startTime = Date.now()
+    const contextBundle = await buildChapterContext(c.env, novelId, chapterId)
+    const buildTimeMs = Date.now() - startTime
+
+    if (!contextBundle) {
+      return c.json({
+        ok: false,
+        error: 'Failed to build context',
+      }, 500)
+    }
+
+    return c.json({
+      ok: true,
+      contextBundle,
+      buildTimeMs,
+      summary: {
+        totalLayers: contextBundle.core.length + contextBundle.dynamic.length + (contextBundle.ragResults?.length || 0),
+        coreLayerCount: contextBundle.core.length,
+        dynamicLayerCount: contextBundle.dynamic.length,
+        ragResultCount: contextBundle.ragResults?.length || 0,
+        ragQueryTimeMs: contextBundle.ragQueryTimeMs,
+      },
+    })
+  } catch (error) {
+    console.error('Preview context failed:', error)
+    return c.json(
+      {
+        error: 'Preview context failed',
+        details: (error as Error).message,
+      },
+      500
+    )
+  }
 })
 
 export { router as generate }

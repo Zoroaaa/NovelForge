@@ -20,6 +20,7 @@ import RegisterPage from '@/pages/RegisterPage'
 import AccountPage from '@/pages/AccountPage'
 import ModelConfigPage from '@/pages/ModelConfigPage'
 import SetupPage from '@/pages/SetupPage'
+import AiMonitorPage from '@/pages/AiMonitorPage'
 
 const qc = new QueryClient({
   defaultOptions: { queries: { staleTime: 1000 * 30 } },
@@ -159,7 +160,13 @@ export default function App() {
               <ModelConfigPage />
             </ProtectedRoute>
           } />
-          
+
+          <Route path="/ai-monitor" element={
+            <ProtectedRoute>
+              <AiMonitorPage />
+            </ProtectedRoute>
+          } />
+
           <Route path="/novels" element={
             <ProtectedRoute>
               <NovelsPage />

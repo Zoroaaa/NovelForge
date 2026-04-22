@@ -240,6 +240,30 @@ export const api = {
     rebuild: (body: { novelId: string }) => req<any>('/api/entities/rebuild', { method: 'POST', body: j(body) }),
   },
 
+  // AI 监控中心：向量索引管理
+  vectorize: {
+    getStats: (novelId: string) =>
+      req<{
+        total: number
+        byType: Record<string, number>
+        lastIndexedAt: number | null
+        unindexedCounts: { settings: number; characters: number; foreshadowing: number }
+      }>(`/api/vectorize/stats/${novelId}`),
+    search: (query: string, novelId?: string) => {
+      const params = novelId ? `?q=${encodeURIComponent(query)}&novelId=${novelId}` : `?q=${encodeURIComponent(query)}`
+      return req<{
+        ok: boolean
+        query: string
+        resultsCount: number
+        results: Array<{ id: string; score: number; title: string; sourceType: string; preview: string }>
+      }>(`/api/vectorize/search${params}`)
+    },
+    reindexAll: (body: { novelId: string; types?: string[] }) =>
+      req<{ ok: boolean; indexed: number; failed: number; details: string[]; message: string }>('/api/vectorize/reindex-all', { method: 'POST', body: j(body), timeout: 300000 }),
+    getStatus: () =>
+      req<{ status: string; message: string; embeddingModel?: string; dimensions?: number }>('/api/vectorize/status'),
+  },
+
   // 模型配置管理
   modelConfigs: {
     list:   (params?: { novelId?: string; stage?: string }) => {
@@ -292,6 +316,20 @@ export const api = {
         summary?: string
         error?: string
       }>('/api/generate/volume-summary', { method: 'POST', body: j(body) }),
+    previewContext: (novelId: string, chapterId: string) =>
+      req<{
+        ok: boolean
+        contextBundle: any
+        buildTimeMs: number
+        summary: {
+          totalLayers: number
+          coreLayerCount: number
+          dynamicLayerCount: number
+          ragResultCount: number
+          ragQueryTimeMs?: number
+        }
+        error?: string
+      }>('/api/generate/preview-context', { method: 'POST', body: j({ novelId, chapterId }) }),
   },
 
   // 认证系统API

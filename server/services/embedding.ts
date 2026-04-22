@@ -218,6 +218,7 @@ function hashContent(content: string): string {
  * @param {string} novelId - 小说ID
  * @param {string} title - 内容标题
  * @param {string | null} content - 内容文本
+ * @param {Record<string, string>} [extraMetadata] - 扩展元数据（settingType, importance等）
  * @returns {Promise<string[]>} 创建的向量ID数组
  */
 export async function indexContent(
@@ -227,8 +228,7 @@ export async function indexContent(
   novelId: string,
   title: string,
   content: string | null,
-  settingType?: string,
-  importance?: string
+  extraMetadata?: Record<string, string>
 ): Promise<string[]> {
   if (!content || !content.trim()) {
     return []
@@ -288,8 +288,7 @@ export async function indexContent(
       sourceId,
       title: i === 0 ? title : `${title} (Part ${i + 1})`,
       content: chunks[i],
-      ...(settingType ? { settingType } : {}),
-      ...(importance ? { importance } : {}),
+      ...extraMetadata,
     })
 
     // 记录到vector_index表

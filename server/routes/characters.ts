@@ -11,25 +11,11 @@ import { drizzle } from 'drizzle-orm/d1'
 import { characters as t } from '../db/schema'
 import { eq, and, isNull } from 'drizzle-orm'
 import type { Env } from '../lib/types'
+import { enqueue } from '../lib/queue'
 import {
   uploadAndAnalyzeImage,
   analyzeCharacterImage,
 } from '../services/vision'
-import { indexContent, deindexContent } from '../services/embedding'
-
-/**
- * 异步执行任务（不阻塞主流程）
- * @param {any} c - Hono上下文对象
- * @param {Promise<void> | void} fn - 要异步执行的函数
- */
-async function safeWaitUntil(c: any, fn: Promise<void> | void) {
-  const ctx = (c as any).executionContext
-  if (ctx?.waitUntil) {
-    ctx.waitUntil(Promise.resolve(fn).catch((e) => console.warn('Async task failed:', e)))
-  } else {
-    Promise.resolve(fn).catch((e) => console.warn('Async task failed:', e))
-  }
-}
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -85,6 +71,20 @@ router.get('/:id', async (c) => {
 router.post('/', zValidator('json', CreateSchema), async (c) => {
   const db = drizzle(c.env.DB)
   const [row] = await db.insert(t).values(c.req.valid('json')).returning()
+
+  if (row?.description && c.env.VECTORIZE) {
+    await enqueue(c.env, c, {
+      type: 'index_content',
+      payload: {
+        sourceType: 'character',
+        sourceId: row.id,
+        novelId: row.novelId,
+        title: row.name,
+        content: row.description,
+      },
+    })
+  }
+
   return c.json(row, 201)
 })
 
@@ -106,14 +106,16 @@ router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
     .returning()
 
   if (body.description !== undefined && row && c.env.VECTORIZE) {
-    safeWaitUntil(c, indexContent(
-      c.env,
-      'character',
-      row.id,
-      row.novelId,
-      row.name,
-      body.description
-    ).then(() => {}).catch((err) => console.warn('Character vectorization failed:', err)))
+    await enqueue(c.env, c, {
+      type: 'index_content',
+      payload: {
+        sourceType: 'character',
+        sourceId: row.id,
+        novelId: row.novelId,
+        title: row.name,
+        content: body.description ?? '',
+      },
+    })
   }
 
   return c.json(row)

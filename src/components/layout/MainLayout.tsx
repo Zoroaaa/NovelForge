@@ -37,6 +37,7 @@ import {
   MessageSquare,
   HelpCircle,
   Cpu,
+  Activity,
 } from 'lucide-react'
 
 interface NavItem {
@@ -55,6 +56,7 @@ const MAIN_NAV: NavItem[] = [
 
 const SECONDARY_NAV: NavItem[] = [
   { icon: Cpu, label: '模型配置', href: '/model-config' },
+  { icon: Activity, label: 'AI 监控中心', href: '/ai-monitor' },
   { icon: User, label: '账号设置', href: '/account' },
 ]
 

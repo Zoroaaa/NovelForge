@@ -11,6 +11,8 @@ import { drizzle } from 'drizzle-orm/d1'
 import { novelSettings } from '../db/schema'
 import { eq, and, desc, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
+import { enqueue } from '../lib/queue'
+import { deindexContent } from '../services/embedding'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -159,6 +161,20 @@ router.post('/', zValidator('json', CreateSettingSchema), async (c) => {
       relatedIds: body.relatedIds,
     }).returning().get()
 
+    if (c.env.VECTORIZE && newSetting.content) {
+      await enqueue(c.env, c, {
+        type: 'index_content',
+        payload: {
+          sourceType: 'setting',
+          sourceId: newSetting.id,
+          novelId: newSetting.novelId,
+          title: newSetting.name,
+          content: newSetting.content,
+          extraMetadata: { settingType: newSetting.type, importance: newSetting.importance },
+        },
+      })
+    }
+
     return c.json({ ok: true, setting: newSetting }, 201)
   } catch (error) {
     console.error('Failed to create setting:', error)
@@ -207,6 +223,20 @@ router.put('/:id', zValidator('json', UpdateSettingSchema), async (c) => {
       .returning()
       .get()
 
+    if (c.env.VECTORIZE && body.content !== undefined && updated.content) {
+      await enqueue(c.env, c, {
+        type: 'index_content',
+        payload: {
+          sourceType: 'setting',
+          sourceId: updated.id,
+          novelId: updated.novelId,
+          title: updated.name,
+          content: updated.content,
+          extraMetadata: { settingType: updated.type, importance: updated.importance },
+        },
+      })
+    }
+
     return c.json({ ok: true, setting: updated })
   } catch (error) {
     console.error('Failed to update setting:', error)
@@ -225,6 +255,10 @@ router.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB)
 
   try {
+    if (c.env.VECTORIZE) {
+      deindexContent(c.env, 'setting', id).then(() => {}).catch(e => console.warn('Setting deindex failed:', e))
+    }
+
     await db
       .update(novelSettings)
       .set({ deletedAt: Math.floor(Date.now() / 1000) })

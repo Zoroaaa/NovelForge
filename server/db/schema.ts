@@ -358,3 +358,21 @@ export const systemSettings = sqliteTable('system_settings', {
   description: text('description'),
   updatedAt: integer('updated_at').notNull().default(sql`(unixepoch())`),
 })
+
+// ============================================================
+// 18. 队列任务日志表
+// ============================================================
+export const queueTaskLogs = sqliteTable('queue_task_logs', {
+  id: text('id').primaryKey(),
+  novelId: text('novel_id'),
+  taskType: text('task_type').notNull(),
+  status: text('status').notNull().default('pending'),
+  payload: text('payload'),
+  errorMsg: text('error_msg'),
+  retryCount: integer('retry_count').notNull().default(0),
+  createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
+  finishedAt: integer('finished_at'),
+}, (table) => [
+  index('idx_queue_logs_novel').on(table.novelId, table.createdAt),
+  index('idx_queue_logs_status').on(table.status, table.createdAt),
+])

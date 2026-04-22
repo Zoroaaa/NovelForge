@@ -21,7 +21,7 @@
  * @version 3.0.0
  */
 
-import { drizzle } from 'drizzle-orm/d1'
+import { drizzle, type DrizzleD1Database } from 'drizzle-orm/d1'
 import {
   chapters, volumes, characters, modelConfigs, foreshadowing,
   novelSettings, masterOutline, writingRules
@@ -29,6 +29,9 @@ import {
 import { eq, and, sql, desc, inArray } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { embedText, searchSimilar } from './embedding'
+
+// 数据库实例类型（基于项目schema）
+type AppDb = DrizzleD1Database<typeof import('../db/schema')>
 
 // ============================================================
 // 类型定义
@@ -454,7 +457,7 @@ function buildSettingsSlot(
  * 关键改造：只取 masterOutline.summary 字段，不取全文
  * 总纲全文可能数万字，summary 是 LLM 生成的精炼摘要
  */
-async function fetchMasterOutlineSummary(db: any, novelId: string): Promise<string> {
+async function fetchMasterOutlineSummary(db: AppDb, novelId: string): Promise<string> {
   try {
     const row = await db
       .select({ summary: masterOutline.summary, title: masterOutline.title })
@@ -467,7 +470,8 @@ async function fetchMasterOutlineSummary(db: any, novelId: string): Promise<stri
     if (!row) return ''
     // 如果没有summary，取content前500字作为摘要
     return row.summary || ''
-  } catch {
+  } catch (error) {
+    console.error('[contextBuilder] fetchMasterOutlineSummary failed:', error)
     return ''
   }
 }
@@ -475,7 +479,7 @@ async function fetchMasterOutlineSummary(db: any, novelId: string): Promise<stri
 /**
  * 卷信息：只取 blueprint + eventLine，不取 summary（summary可能冗余）
  */
-async function fetchVolumeInfo(db: any, volumeId: string | null): Promise<{
+async function fetchVolumeInfo(db: AppDb, volumeId: string | null): Promise<{
   blueprint: string
   eventLine: string
 }> {
@@ -490,13 +494,14 @@ async function fetchVolumeInfo(db: any, volumeId: string | null): Promise<{
       blueprint: row?.blueprint || '',
       eventLine: row?.eventLine || '',
     }
-  } catch {
+  } catch (error) {
+    console.error('[contextBuilder] fetchVolumeInfo failed:', error)
     return { blueprint: '', eventLine: '' }
   }
 }
 
 async function fetchPrevChapterSummary(
-  db: any, novelId: string, currentSortOrder: number
+  db: AppDb, novelId: string, currentSortOrder: number
 ): Promise<string> {
   try {
     const row = await db
@@ -511,13 +516,14 @@ async function fetchPrevChapterSummary(
       .get()
     if (!row?.summary) return ''
     return `[上一章: ${row.title}] ${row.summary}`
-  } catch {
+  } catch (error) {
+    console.error('[contextBuilder] fetchPrevChapterSummary failed:', error)
     return ''
   }
 }
 
 async function fetchRecentSummaries(
-  db: any, novelId: string, currentSortOrder: number, chainLength: number
+  db: AppDb, novelId: string, currentSortOrder: number, chainLength: number
 ): Promise<string[]> {
   if (chainLength <= 0) return []
   try {
@@ -534,12 +540,13 @@ async function fetchRecentSummaries(
       .all()
 
     return rows.reverse().map((r: any) => `[第${r.sortOrder}章 ${r.title}] ${r.summary}`)
-  } catch {
+  } catch (error) {
+    console.error('[contextBuilder] fetchRecentSummaries failed:', error)
     return []
   }
 }
 
-async function fetchProtagonistCards(db: any, novelId: string): Promise<Array<{
+async function fetchProtagonistCards(db: AppDb, novelId: string): Promise<Array<{
   name: string; description: string; role: string; attributes: string | null
 }>> {
   try {
@@ -552,12 +559,13 @@ async function fetchProtagonistCards(db: any, novelId: string): Promise<Array<{
         sql`${characters.deletedAt} IS NULL`
       ))
       .all()
-  } catch {
+  } catch (error) {
+    console.error('[contextBuilder] fetchProtagonistCards failed:', error)
     return []
   }
 }
 
-async function fetchProtagonistPowerLevel(db: any, novelId: string): Promise<Map<string, string>> {
+async function fetchProtagonistPowerLevel(db: AppDb, novelId: string): Promise<Map<string, string>> {
   const map = new Map<string, string>()
   try {
     const rows = await db
@@ -579,9 +587,13 @@ async function fetchProtagonistPowerLevel(db: any, novelId: string): Promise<Map
         if (p.current) parts.push(`当前境界：${p.current}`)
         if (p.nextMilestone) parts.push(`下一目标：${p.nextMilestone}`)
         map.set(row.name, parts.join('，'))
-      } catch {}
+      } catch (parseError) {
+        console.error('[contextBuilder] parse powerLevel failed:', parseError)
+      }
     }
-  } catch {}
+  } catch (error) {
+    console.error('[contextBuilder] fetchProtagonistPowerLevel failed:', error)
+  }
   return map
 }
 
@@ -598,7 +610,9 @@ function mergeProtagonistAndPower(
         const attrs = JSON.parse(c.attributes)
         const attrStr = Object.entries(attrs).map(([k, v]) => `${k}: ${v}`).join(' | ')
         card += `\n属性：${attrStr}`
-      } catch {}
+      } catch (parseError) {
+        console.error('[contextBuilder] parse attributes failed:', parseError)
+      }
     }
     return card.trim()
   })
@@ -608,7 +622,7 @@ function mergeProtagonistAndPower(
  * 只取最高优先级规则（priority <= 2 的"全局禁忌"类规则）
  * 其余规则由 fetchChapterTypeRules 按章节类型按需注入
  */
-async function fetchTopPriorityRules(db: any, novelId: string): Promise<string[]> {
+async function fetchTopPriorityRules(db: AppDb, novelId: string): Promise<string[]> {
   try {
     const rows = await db
       .select({ category: writingRules.category, title: writingRules.title, content: writingRules.content })
@@ -628,7 +642,8 @@ async function fetchTopPriorityRules(db: any, novelId: string): Promise<string[]
       world: '世界观', taboo: '禁忌', custom: '自定义'
     }
     return rows.map((r: any) => `[${catLabel[r.category] || r.category}·核心] ${r.title}\n${r.content}`)
-  } catch {
+  } catch (error) {
+    console.error('[contextBuilder] fetchTopPriorityRules failed:', error)
     return []
   }
 }
@@ -637,7 +652,7 @@ async function fetchTopPriorityRules(db: any, novelId: string): Promise<string[]
  * 按章节类型匹配规则分类
  * chapterTypeHint 包含关键词 → 注入对应 category 的规则
  */
-async function fetchChapterTypeRules(db: any, novelId: string, chapterTypeHint: string): Promise<string[]> {
+async function fetchChapterTypeRules(db: AppDb, novelId: string, chapterTypeHint: string): Promise<string[]> {
   const neededCategories: string[] = []
 
   if (/战斗|打斗|对决|厮杀|交手/.test(chapterTypeHint)) neededCategories.push('pacing', 'plot')
@@ -657,7 +672,7 @@ async function fetchChapterTypeRules(db: any, novelId: string, chapterTypeHint: 
         eq(writingRules.novelId, novelId),
         eq(writingRules.isActive, 1),
         sql`${writingRules.priority} > 2`,  // 高优先级规则已在 core 层注入，不重复
-        sql`${writingRules.category} IN (${categories.map(c => `'${c}'`).join(',')})`,
+        inArray(writingRules.category, categories),
         sql`${writingRules.deletedAt} IS NULL`
       ))
       .orderBy(writingRules.priority)
@@ -669,7 +684,8 @@ async function fetchChapterTypeRules(db: any, novelId: string, chapterTypeHint: 
       world: '世界观', taboo: '禁忌', custom: '自定义'
     }
     return rows.map((r: any) => `[${catLabel[r.category] || r.category}] ${r.title}\n${r.content}`)
-  } catch {
+  } catch (error) {
+    console.error('[contextBuilder] fetchChapterTypeRules failed:', error)
     return []
   }
 }
@@ -678,7 +694,7 @@ async function fetchChapterTypeRules(db: any, novelId: string, chapterTypeHint: 
  * 获取未收尾伏笔的 ID 集合（用于 foreshadowing 槽的二次过滤）
  */
 async function fetchOpenForeshadowingIds(
-  db: any, novelId: string, currentSortOrder: number
+  db: AppDb, novelId: string, currentSortOrder: number
 ): Promise<Set<string>> {
   try {
     const rows = await db
@@ -700,7 +716,7 @@ async function fetchOpenForeshadowingIds(
     const chapterRows = await db
       .select({ id: chapters.id, sortOrder: chapters.sortOrder })
       .from(chapters)
-      .where(sql`${chapters.id} IN (${chapterIds.map((id: string) => `'${id}'`).join(',')})`)
+      .where(inArray(chapters.id, chapterIds))
       .all()
 
     const sortMap = new Map(chapterRows.map((c: any) => [c.id, c.sortOrder]))
@@ -713,7 +729,8 @@ async function fetchOpenForeshadowingIds(
       }
     }
     return openIds
-  } catch {
+  } catch (error) {
+    console.error('[contextBuilder] fetchOpenForeshadowingIds failed:', error)
     return new Set()
   }
 }

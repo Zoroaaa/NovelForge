@@ -11,6 +11,8 @@ import { drizzle } from 'drizzle-orm/d1'
 import { foreshadowing } from '../db/schema'
 import { eq, and, desc, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
+import { enqueue } from '../lib/queue'
+import { deindexContent } from '../services/embedding'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -90,6 +92,20 @@ router.post('/', zValidator('json', CreateForeshadowingSchema), async (c) => {
       status: 'open',
     }).returning().get()
 
+    if (c.env.VECTORIZE && newForeshadowing.description) {
+      await enqueue(c.env, c, {
+        type: 'index_content',
+        payload: {
+          sourceType: 'foreshadowing',
+          sourceId: newForeshadowing.id,
+          novelId: newForeshadowing.novelId,
+          title: newForeshadowing.title,
+          content: newForeshadowing.description,
+          extraMetadata: { importance: newForeshadowing.importance },
+        },
+      })
+    }
+
     return c.json({ ok: true, foreshadowing: newForeshadowing }, 201)
   } catch (error) {
     console.error('Failed to create foreshadowing:', error)
@@ -141,6 +157,20 @@ router.put('/:id', zValidator('json', UpdateForeshadowingSchema), async (c) => {
       .returning()
       .get()
 
+    if (c.env.VECTORIZE && body.description !== undefined && updated.description) {
+      await enqueue(c.env, c, {
+        type: 'index_content',
+        payload: {
+          sourceType: 'foreshadowing',
+          sourceId: updated.id,
+          novelId: updated.novelId,
+          title: updated.title,
+          content: updated.description,
+          extraMetadata: { importance: updated.importance },
+        },
+      })
+    }
+
     return c.json({ ok: true, foreshadowing: updated })
   } catch (error) {
     console.error('Failed to update foreshadowing:', error)
@@ -159,6 +189,10 @@ router.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB)
 
   try {
+    if (c.env.VECTORIZE) {
+      deindexContent(c.env, 'foreshadowing', id).then(() => {}).catch(e => console.warn('Foreshadowing deindex failed:', e))
+    }
+
     await db
       .update(foreshadowing)
       .set({ deletedAt: Math.floor(Date.now() / 1000) })
