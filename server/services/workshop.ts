@@ -434,7 +434,7 @@ export async function processWorkshopMessage(
         }
         onChunk(text)
       },
-      onDone: () => {
+      onDone: async () => {
         // 8. 尝试从 AI 回复中提取结构化数据
         const newExtractedData = extractStructuredData(fullResponse, session.stage, currentData)
 
@@ -445,15 +445,16 @@ export async function processWorkshopMessage(
           timestamp: Date.now(),
         }
 
-        // 10. 更新数据库
-        updateSession(db, sessionId, {
+        // 10. 更新数据库（必须await确保持久化完成）
+        await updateSession(db, sessionId, {
           messages,
           extractedData: { ...currentData, ...newExtractedData },
         })
 
+        console.log('[workshop] ✅ Assistant message saved to DB, length:', fullResponse.length)
         onDone(newExtractedData)
       },
-      onError: (error) => {
+      onError: async (error) => {
         // 错误时也保存已生成的部分内容
         if (fullResponse) {
           messages[messages.length - 1] = {
@@ -461,7 +462,8 @@ export async function processWorkshopMessage(
             content: fullResponse + '\n\n[生成中断]',
             timestamp: Date.now(),
           }
-          updateSession(db, sessionId, { messages, extractedData: currentData })
+          await updateSession(db, sessionId, { messages, extractedData: currentData })
+          console.log('[workshop] ⚠️ Partial message saved after error, length:', fullResponse.length)
         }
         onError(error)
       },
