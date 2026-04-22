@@ -153,28 +153,4 @@ router.post('/:id/cover', async (c) => {
   return c.json({ ok: true, coverUrl: `/api/novels/${id}/cover` })
 })
 
-/**
- * GET /:id/cover - 获取小说封面
- * @description 从R2存储获取封面图片
- * @param {string} id - 小说ID
- * @returns {Blob} 封面图片二进制数据
- * @throws {404} 封面不存在
- */
-router.get('/:id/cover', async (c) => {
-  const id = c.req.param('id')
-  const db = drizzle(c.env.DB)
-
-  const novel = await db.select({ coverR2Key: t.coverR2Key }).from(t).where(eq(t.id, id)).get()
-  if (!novel?.coverR2Key) return c.json({ error: 'No cover' }, 404)
-
-  const obj = await c.env.STORAGE.get(novel.coverR2Key)
-  if (!obj) return c.json({ error: 'Cover not found' }, 404)
-
-  const blob = await obj.arrayBuffer()
-  return c.body(blob, 200, {
-    'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
-    'Cache-Control': 'public, max-age=31536000',
-  })
-})
-
 export { router as novels }

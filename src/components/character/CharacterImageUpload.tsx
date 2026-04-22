@@ -44,13 +44,9 @@ export function CharacterImageUpload({
   onAnalysisComplete,
 }: CharacterImageUploadProps) {
   const [open, setOpen] = useState(false)
-  // 从R2 key构建公开URL
-  const getImageUrl = (r2Key: string | null) => {
-    if (!r2Key) return null
-    // 使用Cloudflare R2公开访问URL格式
-    return `https://pub-${import.meta.env.VITE_R2_ACCOUNT_ID || ''}.r2.dev/${r2Key}`
-  }
-  const [previewUrl, setPreviewUrl] = useState<string | null>(getImageUrl(currentImageR2Key || null))
+  const [previewUrl, setPreviewUrl] = useState<string | null>(
+    currentImageR2Key ? `/api/characters/${characterId}/image` : null
+  )
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<any>(null)
@@ -80,7 +76,7 @@ export function CharacterImageUpload({
     },
     onSuccess: (data) => {
       if (data.imageR2Key) {
-        setPreviewUrl(getImageUrl(data.imageR2Key))
+        setPreviewUrl(`/api/characters/${characterId}/image`)
         onUploadSuccess?.()
         toast.success('✅ 图片上传成功')
       }

@@ -217,7 +217,7 @@ router.patch('/session/:id', async (c) => {
     }
 
     await db.update(workshopSessions)
-      .set({ ...updateData, updatedAt: new Date().toISOString() })
+      .set({ ...updateData, updatedAt: Math.floor(Date.now() / 1000) })
       .where(eq(workshopSessions.id, sessionId))
       .run()
 

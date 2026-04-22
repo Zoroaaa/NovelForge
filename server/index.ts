@@ -210,6 +210,30 @@ app.get('/novels/:id/cover', async (c) => {
   }
 })
 
+// GET /api/characters/:id/image（角色图片是 <img src> 直接加载，浏览器不带 Authorization header，必须公开）
+app.get('/characters/:id/image', async (c) => {
+  const id = c.req.param('id')
+  try {
+    const character = await c.env.DB.prepare(
+      'SELECT image_r2_key FROM characters WHERE id = ? AND deleted_at IS NULL'
+    ).bind(id).first<{ image_r2_key: string }>()
+
+    if (!character?.image_r2_key) return c.json({ error: 'No image' }, 404)
+
+    const obj = await c.env.STORAGE.get(character.image_r2_key)
+    if (!obj) return c.json({ error: 'Image not found' }, 404)
+
+    const blob = await obj.arrayBuffer()
+    return c.body(blob, 200, {
+      'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
+      'Cache-Control': 'public, max-age=31536000',
+    })
+  } catch (error) {
+    console.error('Get character image error:', error)
+    return c.json({ error: 'Internal Server Error' }, 500)
+  }
+})
+
 // ─── API Key 保护路由（初始化管理员）──────────────────────────────────────────
 const apiKeyProtectedApi = new Hono<AppType>()
 apiKeyProtectedApi.use('*', async (c, next) => {
