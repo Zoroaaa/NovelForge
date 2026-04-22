@@ -186,6 +186,30 @@ app.get('/system-settings/registration', async (c) => {
   }
 })
 
+// GET /api/novels/:id/cover（封面是 <img src> 直接加载，浏览器不带 Authorization header，必须公开）
+app.get('/novels/:id/cover', async (c) => {
+  const id = c.req.param('id')
+  try {
+    const novel = await c.env.DB.prepare(
+      'SELECT cover_r2_key FROM novels WHERE id = ? AND deleted_at IS NULL'
+    ).bind(id).first<{ cover_r2_key: string }>()
+
+    if (!novel?.cover_r2_key) return c.json({ error: 'No cover' }, 404)
+
+    const obj = await c.env.STORAGE.get(novel.cover_r2_key)
+    if (!obj) return c.json({ error: 'Cover not found' }, 404)
+
+    const blob = await obj.arrayBuffer()
+    return c.body(blob, 200, {
+      'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
+      'Cache-Control': 'public, max-age=31536000',
+    })
+  } catch (error) {
+    console.error('Get cover error:', error)
+    return c.json({ error: 'Internal Server Error' }, 500)
+  }
+})
+
 // ─── API Key 保护路由（初始化管理员）──────────────────────────────────────────
 const apiKeyProtectedApi = new Hono<AppType>()
 apiKeyProtectedApi.use('*', async (c, next) => {
