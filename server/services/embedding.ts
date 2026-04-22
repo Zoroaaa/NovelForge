@@ -234,6 +234,10 @@ export async function indexContent(
     return []
   }
 
+  if (!env.VECTORIZE) {
+    throw new Error('Vectorize binding not available (503)')
+  }
+
   const db = drizzle(env.DB)
   const contentHash = hashContent(content)
   const chunks = chunkText(content)

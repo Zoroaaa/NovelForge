@@ -439,7 +439,7 @@ router.post(
 
 /**
  * POST /reindex-items - 同步执行一批索引（前端并发调用）
- * @param items - IndexItem 数组（每批建议 3~5 条）
+ * @param items - IndexItem 数组（每批建议 1~2 条，最多 5 条）
  * @returns { ok, indexed, failed, errors }
  */
 router.post(
@@ -452,33 +452,53 @@ router.post(
         sourceId: z.string().min(1),
         novelId: z.string().min(1),
         title: z.string(),
-        content: z.string(),
+        content: z.string().max(50000),
         extraMetadata: z.record(z.string(), z.string()).optional(),
-      }))
+      })).max(5, '单次请求最多 5 条，请分批处理')
     })
   ),
   async (c) => {
+    const startTime = Date.now()
     const { items } = c.req.valid('json')
 
+    console.log(`[reindex-items] Received ${items.length} items to index`)
+
     if (!c.env.VECTORIZE) {
-      return c.json({ error: 'Vectorize binding not configured' }, 503)
+      return c.json({
+        error: 'Vectorize service unavailable',
+        code: 'VECTORIZE_NOT_CONFIGURED',
+        message: '向量索引服务未配置。请在 Cloudflare 控制台创建 Vectorize 索引，或在 wrangler.toml 中确认绑定配置。',
+        docs: 'https://developers.cloudflare.com/vectorize/get-started/'
+      }, 503)
     }
 
     let indexed = 0
     let failed = 0
     const errors: string[] = []
 
-    await Promise.all(items.map(async (item) => {
+    // 串行处理以避免并发过高导致 CPU 超时
+    for (const item of items) {
       try {
-        await indexContent(c.env, item.sourceType as any, item.sourceId, item.novelId, item.title, item.content, item.extraMetadata)
+        console.log(`[reindex-items] Indexing ${item.sourceType}:${item.sourceId}...`)
+        const result = await indexContent(c.env, item.sourceType as any, item.sourceId, item.novelId, item.title, item.content, item.extraMetadata)
         indexed++
+        if (result.length > 0) {
+          console.log(`[reindex-items] ✓ ${item.sourceType}:${item.sourceId} - ${result.length} vectors`)
+        } else {
+          console.log(`[reindex-items] ⊘ ${item.sourceType}:${item.sourceId} - skipped (unchanged or empty)`)
+        }
       } catch (e) {
         failed++
-        errors.push(`${item.sourceType}:${item.sourceId} - ${(e as Error).message}`)
+        const errorMsg = e instanceof Error ? e.message : String(e)
+        errors.push(`${item.sourceType}:${item.sourceId} - ${errorMsg}`)
+        console.error(`[reindex-items] ✗ Failed to index ${item.sourceType}:${item.sourceId}:`, e)
       }
-    }))
+    }
 
-    return c.json({ ok: true, indexed, failed, errors })
+    const duration = Date.now() - startTime
+    console.log(`[reindex-items] Completed in ${duration}ms: ${indexed} indexed, ${failed} failed`)
+
+    return c.json({ ok: true, indexed, failed, errors, duration })
   }
 )
 

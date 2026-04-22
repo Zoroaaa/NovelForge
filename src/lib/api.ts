@@ -63,7 +63,14 @@ async function req<T>(
         throw new Error('未授权，请重新登录')
       }
       const err = await res.json().catch(() => ({ error: res.statusText }))
-      throw new Error((err as Record<string, unknown>).error ? String((err as Record<string, unknown>).error) : res.statusText)
+      const errorMessage = (err as Record<string, unknown>).error ? String((err as Record<string, unknown>).error) : res.statusText
+      const apiError = new Error(errorMessage)
+      Object.assign(apiError, {
+        status: res.status,
+        code: (err as Record<string, unknown>).code,
+        details: (err as Record<string, unknown>).message || (err as Record<string, unknown>).details
+      })
+      throw apiError
     }
 
     return res.json()

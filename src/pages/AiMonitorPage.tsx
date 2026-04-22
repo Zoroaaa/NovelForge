@@ -117,8 +117,8 @@ export default function AiMonitorPage() {
       setReindexTotal(total)
       setReindexProgress(`共 ${total} 条，开始索引...`)
 
-      const BATCH_SIZE = 3
-      const CONCURRENCY = 4
+      const BATCH_SIZE = 1
+      const CONCURRENCY = 2
       const batches: ReindexItem[][] = []
       for (let i = 0; i < items.length; i += BATCH_SIZE) {
         batches.push(items.slice(i, i + BATCH_SIZE))
@@ -127,18 +127,38 @@ export default function AiMonitorPage() {
       let done = 0
       for (let i = 0; i < batches.length; i += CONCURRENCY) {
         const window = batches.slice(i, i + CONCURRENCY)
-        await Promise.allSettled(
+        const results = await Promise.allSettled(
           window.map(batch => api.vectorize.reindexItems({ items: batch }))
         )
+
+        // 检查是否有失败
+        for (const result of results) {
+          if (result.status === 'rejected') {
+            console.error('Batch failed:', result.reason)
+          } else if (result.value.failed > 0) {
+            console.warn(`Batch had ${result.value.failed} failures:`, result.value.errors)
+          }
+        }
+
         done += window.reduce((s, b) => s + b.length, 0)
         setReindexDone(done)
         setReindexProgress(`进度：${done} / ${total}`)
+
+        // 添加短暂延迟，避免触发 Cloudflare 速率限制
+        if (i + CONCURRENCY < batches.length) {
+          await new Promise(resolve => setTimeout(resolve, 200))
+        }
       }
 
       toast.success(`索引重建完成，共处理 ${total} 条`)
       queryClient.invalidateQueries({ queryKey: ['vector-stats'] })
     } catch (e: any) {
-      toast.error(`索引重建失败：${e.message}`)
+      const isServiceUnavailable = e?.status === 503 || e?.code === 'VECTORIZE_NOT_CONFIGURED'
+      const errorMessage = isServiceUnavailable
+        ? '向量索引服务未配置（503）。请确保：\n1. 已在 Cloudflare 控制台创建 Vectorize 索引\n2. wrangler.toml 中已正确绑定 VECTORIZE\n3. 生产环境已重新部署'
+        : `索引重建失败：${e.message || '未知错误'}`
+      toast.error(errorMessage, { duration: 8000 })
+      console.error('Reindex failed:', e)
     } finally {
       setIsReindexing(false)
       setReindexProgress('')
