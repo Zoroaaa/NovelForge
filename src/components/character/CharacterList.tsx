@@ -184,7 +184,7 @@ export function CharacterList({ novelId }: CharacterListProps) {
               {/* 图片上传 */}
               <div className="flex justify-center">
                 <CharacterImageUpload
-                  characterId="temp"
+                  characterId={editingId || 'temp'}
                   characterName={name || '新角色'}
                   onUploadSuccess={() => {}}
                   onAnalysisComplete={handleAnalysisComplete}

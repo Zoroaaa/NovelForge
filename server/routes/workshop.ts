@@ -149,7 +149,7 @@ router.post('/session/:id/commit', async (c) => {
   }
 })
 
-// GET /api/workshop/sessions - 列出所有活跃会话（可选）
+// GET /api/workshop/sessions - 列出所有活跃会话
 router.get('/sessions', async (c) => {
   try {
     const { drizzle } = await import('drizzle-orm/d1')
@@ -159,22 +159,71 @@ router.get('/sessions', async (c) => {
     const db = drizzle(c.env.DB)
     const sessions = await db.select().from(workshopSessions)
       .where(eq(workshopSessions.status, 'active'))
-      .orderBy(desc(workshopSessions.createdAt))
+      .orderBy(desc(workshopSessions.updatedAt))
       .all()
 
     return c.json({
       ok: true,
       sessions: sessions.map(s => ({
         id: s.id,
-        novelId: s.novelId,
+        title: s.title || undefined,
         stage: s.stage,
         status: s.status,
-        messageCount: JSON.parse(s.messages || '[]').length,
-        createdAt: s.createdAt,
+        updatedAt: s.updatedAt,
       })),
     })
   } catch (error) {
     console.error('List workshop sessions failed:', error)
+    return c.json({ ok: false, error: (error as Error).message }, 500)
+  }
+})
+
+// DELETE /api/workshop/session/:id - 删除会话
+router.delete('/session/:id', async (c) => {
+  try {
+    const sessionId = c.req.param('id')
+    const { drizzle } = await import('drizzle-orm/d1')
+    const { eq } = await import('drizzle-orm')
+    const { workshopSessions } = await import('../db/schema')
+
+    const db = drizzle(c.env.DB)
+    await db.delete(workshopSessions).where(eq(workshopSessions.id, sessionId)).run()
+
+    return c.json({ ok: true, message: '会话已删除' })
+  } catch (error) {
+    console.error('Delete workshop session failed:', error)
+    return c.json({ ok: false, error: (error as Error).message }, 500)
+  }
+})
+
+// PATCH /api/workshop/session/:id - 更新会话（如标题）
+router.patch('/session/:id', async (c) => {
+  try {
+    const sessionId = c.req.param('id')
+    const body = await c.req.json()
+    
+    const { drizzle } = await import('drizzle-orm/d1')
+    const { eq } = await import('drizzle-orm')
+    const { workshopSessions } = await import('../db/schema')
+
+    const db = drizzle(c.env.DB)
+    
+    const updateData: Record<string, any> = {}
+    if (body.title !== undefined) updateData.title = body.title
+    if (body.stage !== undefined) updateData.stage = body.stage
+    
+    if (Object.keys(updateData).length === 0) {
+      return c.json({ ok: false, error: '没有要更新的字段' }, 400)
+    }
+
+    await db.update(workshopSessions)
+      .set({ ...updateData, updatedAt: new Date().toISOString() })
+      .where(eq(workshopSessions.id, sessionId))
+      .run()
+
+    return c.json({ ok: true, message: '会话已更新' })
+  } catch (error) {
+    console.error('Update workshop session failed:', error)
     return c.json({ ok: false, error: (error as Error).message }, 500)
   }
 })

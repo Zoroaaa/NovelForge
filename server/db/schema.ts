@@ -298,6 +298,7 @@ export const entityIndex = sqliteTable('entity_index', {
 // ============================================================
 export const workshopSessions = sqliteTable('workshop_sessions', {
   id: id(),
+  title: text('title'),
   novelId: text('novel_id'),
   stage: text('stage').notNull(),
   messages: text('messages').notNull().default('[]'),

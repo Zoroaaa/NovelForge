@@ -1,12 +1,12 @@
 /**
  * @file WorkshopPage.tsx
- * @description 创作工坊页面 - 对话式创作引擎前端界面（v2.0）
- * @version 2.0.0
- * @modified 2026-04-22 - 集成MainLayout布局系统
+ * @description 创作工坊页面 - 对话式创作引擎前端界面（v3.0）
+ * @version 3.0.0
+ * @modified 2026-04-22 - 集成会话管理功能（借鉴OSSshelf-main ChatSidebar模式）
  */
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { getToken } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { MainLayout } from '@/components/layout/MainLayout'
+import { WorkshopSidebar } from '@/components/workshop/WorkshopSidebar'
 import {
   MessageSquare,
   Send,
@@ -40,9 +41,12 @@ import {
   CheckCircle2,
   Loader2,
   Plus,
+  PanelLeftClose,
+  PanelLeft,
 } from 'lucide-react'
 
 interface WorkshopMessage {
+  id: string
   role: 'user' | 'assistant'
   content: string
   timestamp: number
@@ -71,6 +75,13 @@ interface ExtractedData {
   }>
 }
 
+interface SessionListItem {
+  id: string
+  title: string
+  updatedAt: string
+  stage?: string
+}
+
 const STAGES = [
   { id: 'concept', label: '概念构思', icon: Sparkles, description: '确定小说类型、核心设定' },
   { id: 'worldbuild', label: '世界观构建', icon: Globe, description: '建立完整的世界观体系' },
@@ -89,15 +100,68 @@ export default function WorkshopPage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [extractedData, setExtractedData] = useState<ExtractedData>({})
   const [showCommitDialog, setShowCommitDialog] = useState(false)
-  const [currentAssistantIndex, setCurrentAssistantIndex] = useState<number | null>(null)
+
+  // 会话管理状态（借鉴OSSshelf-main AIChat.tsx:216-219）
+  const [showSidebar, setShowSidebar] = useState(() => window.innerWidth >= 1024)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // 加载会话列表（借鉴OSSshelf-main AIChat.tsx:392-396）
+  const { data: sessions = [] } = useQuery({
+    queryKey: ['workshop-sessions'],
+    queryFn: async () => {
+      const token = getToken()
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const res = await fetch('/api/workshop/sessions', { headers })
+      if (!res.ok) throw new Error('加载会话列表失败')
+      const data = await res.json()
+      return (data.sessions || []) as SessionListItem[]
+    },
+    staleTime: 30000,
+  })
 
   // 自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // 加载指定会话的内容（借鉴OSSshelf-main AIChat.tsx:459-498）
+  const loadSession = useCallback(async (id: string) => {
+    try {
+      setIsGenerating(true)
+      const token = getToken()
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const res = await fetch(`/api/workshop/session/${id}`, { headers })
+      if (!res.ok) throw new Error('加载会话失败')
+      const data = await res.json()
+      
+      if (data.session) {
+        setSessionId(id)
+        setStage(data.session.stage || 'concept')
+        setMessages(
+          (data.session.messages || []).map((m: any) => ({
+            id: crypto.randomUUID(),
+            role: m.role,
+            content: m.content,
+            timestamp: m.timestamp || Date.now(),
+          }))
+        )
+        if (data.session.extractedData) {
+          setExtractedData(data.session.extractedData)
+        }
+      }
+    } catch (e) {
+      console.error(e)
+      toast.error('加载会话失败')
+    } finally {
+      setIsGenerating(false)
+    }
+  }, [])
 
   // 创建新会话
   const createSessionMutation = useMutation({
@@ -116,26 +180,41 @@ export default function WorkshopPage() {
     onSuccess: (data) => {
       if (data.ok) {
         setSessionId(data.session.id)
+        setMessages([])
+        setExtractedData({})
+        queryClient.invalidateQueries({ queryKey: ['workshop-sessions'] })
         toast.success('会话已创建，开始对话吧！')
       }
     },
   })
 
-  // 发送消息（SSE）
+  // 发送消息（SSE）- 借鉴OSSshelf-main AIChat.tsx 的 UUID+map 模式
   const sendMessage = async () => {
     if (!inputValue.trim() || !sessionId || isGenerating) return
 
     const userMessage = inputValue.trim()
     setInputValue('')
 
-    // 添加用户消息到列表
     const userMsg: WorkshopMessage = {
+      id: crypto.randomUUID(),
       role: 'user',
       content: userMessage,
       timestamp: Date.now(),
     }
     setMessages(prev => [...prev, userMsg])
     setIsGenerating(true)
+
+    // 先添加带UUID的空assistant占位消息（关键：通过ID定位更新）
+    const assistantId = crypto.randomUUID()
+    setMessages(prev => [
+      ...prev,
+      {
+        id: assistantId,
+        role: 'assistant' as const,
+        content: '',
+        timestamp: Date.now(),
+      },
+    ])
 
     try {
       const token = getToken()
@@ -149,23 +228,10 @@ export default function WorkshopPage() {
 
       if (!response.ok) throw new Error('发送消息失败')
 
-      // 处理 SSE 流
       const reader = response.body?.getReader()
       if (!reader) throw new Error('无法读取响应流')
 
-      let assistantContent = ''
       const decoder = new TextDecoder()
-
-      // 初始化助手消息占位（借鉴OSSshelf-main的可靠模式）
-      setMessages(prev => {
-        const newIndex = prev.length
-        setCurrentAssistantIndex(newIndex)
-        return [...prev, {
-          role: 'assistant' as const,
-          content: '',
-          timestamp: Date.now(),
-        }]
-      })
 
       while (true) {
         const { done, value } = await reader.read()
@@ -173,7 +239,6 @@ export default function WorkshopPage() {
 
         const text = decoder.decode(value, { stream: true })
         const lines = text.split('\n')
-        const buffer = lines.pop() || ''
 
         for (const line of lines) {
           const trimmed = line.trim()
@@ -183,43 +248,34 @@ export default function WorkshopPage() {
             const data = JSON.parse(trimmed.slice(5).trim())
 
             if (data.content) {
-              assistantContent += data.content
-
-              // 直接更新当前助手消息（通过index定位，避免复杂条件判断）
-              setMessages(prev => {
-                if (currentAssistantIndex === null || currentAssistantIndex >= prev.length) return prev
-                const newMsgs = [...prev]
-                newMsgs[currentAssistantIndex] = {
-                  ...newMsgs[currentAssistantIndex],
-                  content: assistantContent,
-                }
-                return newMsgs
-              })
+              setMessages(prev =>
+                prev.map(m => (m.id === assistantId ? { ...m, content: m.content + data.content } : m))
+              )
             }
 
             if (data.type === 'done') {
               if (data.extractedData) {
                 setExtractedData(prev => ({ ...prev, ...data.extractedData }))
               }
-              // 重置索引标记流结束
-              setCurrentAssistantIndex(null)
+              setMessages(prev => prev.map(m => (m.id === assistantId ? m : m)))
             }
 
             if (data.type === 'error') {
-              setCurrentAssistantIndex(null)
+              setMessages(prev =>
+                prev.map(m =>
+                  m.id === assistantId ? { ...m, content: (m.content || '') + `\n\n❌ 错误: ${data.error}` } : m
+                )
+              )
               throw new Error(data.error)
             }
           } catch (e) {
-            if (!(e instanceof SyntaxError)) {
-              console.warn('Parse error:', e)
-            }
+            if (!(e instanceof SyntaxError)) console.warn('Parse error:', e)
           }
         }
       }
 
       setIsGenerating(false)
-
-      // 刷新查询缓存
+      queryClient.invalidateQueries({ queryKey: ['workshop-sessions'] })
       queryClient.invalidateQueries({ queryKey: ['workshop', sessionId] })
     } catch (error) {
       setIsGenerating(false)
@@ -256,20 +312,82 @@ export default function WorkshopPage() {
     toast.info(`已切换到 ${STAGES.find(s => s.id === newStage)?.label} 阶段`)
   }
 
-  // 开始新会话
-  const startNewSession = () => {
-    createSessionMutation.mutate()
+  // ────────────────────────────────────────────────────────
+  // 会话管理函数（借鉴OSSshelf-main AIChat.tsx:822-860）
+  // ────────────────────────────────────────────────────────
+
+  // 新建对话
+  const handleNewChat = () => {
+    setMessages([])
+    setExtractedData({})
+    setSessionId(null)
+    setStage('concept')
+  }
+
+  // 选择/切换会话
+  const handleSelectSession = (id: string) => {
+    if (id === sessionId) return
+    loadSession(id)
+    if (window.innerWidth < 1024) setShowSidebar(false)
+  }
+
+  // 删除会话
+  const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    try {
+      const token = getToken()
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const res = await fetch(`/api/workshop/session/${id}`, {
+        method: 'DELETE',
+        headers,
+      })
+      if (!res.ok) throw new Error('删除失败')
+      
+      queryClient.invalidateQueries({ queryKey: ['workshop-sessions'] })
+      if (sessionId === id) handleNewChat()
+      toast.success('会话已删除')
+    } catch (error) {
+      toast.error(`删除失败: ${(error as Error).message}`)
+    }
+  }
+
+  // 确认重命名
+  const handleConfirmRename = async (id: string) => {
+    const v = renameValue.trim()
+    if (v) {
+      try {
+        const token = getToken()
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        await fetch(`/api/workshop/session/${id}`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ title: v }),
+        })
+        queryClient.invalidateQueries({ queryKey: ['workshop-sessions'] })
+      } catch (e) {
+        console.error('重命名失败:', e)
+      }
+    }
+    setRenamingId(null)
   }
 
   // 构建顶栏右侧操作区
   const headerActions = (
     <div className="flex items-center gap-3">
-      {/* 会话ID标识 */}
-      {sessionId && (
-        <Badge variant="secondary" className="text-xs hidden sm:inline-flex">
-          ID: {sessionId.slice(0, 8)}...
-        </Badge>
-      )}
+      {/* 侧边栏切换按钮 */}
+      <button
+        onClick={() => setShowSidebar(!showSidebar)}
+        className={`h-8 w-8 rounded-lg flex items-center justify-center transition-colors ${
+          showSidebar
+            ? 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+            : 'text-violet-600 bg-violet-50 dark:bg-violet-900/20'
+        }`}
+        title={showSidebar ? '隐藏创作历史' : '显示创作历史'}
+      >
+        {showSidebar ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeft className="h-4 w-4" />}
+      </button>
 
       {/* 阶段选择器 */}
       {sessionId && (
@@ -310,10 +428,34 @@ export default function WorkshopPage() {
       }
       headerActions={headerActions}
     >
-      {/* 主内容区域 */}
-      <div className="h-[calc(100vh-8rem)] flex overflow-hidden rounded-lg border bg-background shadow-sm mx-6 mb-6">
-        {/* 左侧：对话区域 */}
-        <div className="flex-1 flex flex-col border-r max-w-[65%]">
+      {/* 主内容区域 - 借鉴OSSshelf-main AIChat.tsx:871 flex布局 */}
+      <div className="flex bg-background overflow-hidden h-[calc(100vh-8rem)] mx-6 mb-6 rounded-lg border shadow-sm">
+        
+        {/* 左侧：会话历史侧边栏 */}
+        <WorkshopSidebar
+          showSidebar={showSidebar}
+          sessions={sessions}
+          currentSessionId={sessionId}
+          renamingId={renamingId}
+          renameValue={renameValue}
+          onNewChat={() => {
+            handleNewChat()
+            createSessionMutation.mutate()
+          }}
+          onSelectSession={handleSelectSession}
+          onDeleteSession={handleDeleteSession}
+          onStartRename={(session) => {
+            setRenamingId(session.id)
+            setRenameValue(session.title || '')
+          }}
+          onConfirmRename={handleConfirmRename}
+          onCancelRename={() => setRenamingId(null)}
+          onRenameValueChange={setRenameValue}
+          onCloseMobile={() => setShowSidebar(false)}
+        />
+
+        {/* 中间：对话区域 */}
+        <div className="flex-1 flex flex-col min-w-0">
           {!sessionId ? (
             /* 开始界面 */
             <div className="flex-1 flex items-center justify-center p-8">
@@ -348,7 +490,7 @@ export default function WorkshopPage() {
 
                 <Button
                   size="lg"
-                  onClick={startNewSession}
+                  onClick={() => createSessionMutation.mutate()}
                   disabled={createSessionMutation.isPending}
                   className="w-full mt-4"
                 >
@@ -371,9 +513,9 @@ export default function WorkshopPage() {
               {/* 对话历史 */}
               <ScrollArea className="flex-1 p-6">
                 <div className="max-w-3xl mx-auto space-y-4">
-                  {messages.map((msg, idx) => (
+                  {messages.map((msg) => (
                     <div
-                      key={idx}
+                      key={msg.id}
                       className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                     >
                       <div
@@ -439,7 +581,7 @@ export default function WorkshopPage() {
         </div>
 
         {/* 右侧：实时预览面板 */}
-        <div className="flex-1 bg-muted/30 overflow-auto">
+        <div className="hidden lg:flex flex-col w-80 xl:w-96 border-l bg-muted/30 overflow-auto">
           <div className="p-6 space-y-6 sticky top-0">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
               <BookOpen className="h-4 w-4" />
@@ -454,7 +596,6 @@ export default function WorkshopPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {/* 基本信息 */}
                 {(extractedData.title || extractedData.genre || extractedData.description) && (
                   <PreviewCard title="基本信息" icon={Sparkles}>
                     {extractedData.title && (
@@ -479,7 +620,6 @@ export default function WorkshopPage() {
                   </PreviewCard>
                 )}
 
-                {/* 世界观设定 */}
                 {extractedData.worldSettings && extractedData.worldSettings.length > 0 && (
                   <PreviewCard title="世界观设定" icon={Globe}>
                     {extractedData.worldSettings.map((ws, i) => (
@@ -491,7 +631,6 @@ export default function WorkshopPage() {
                   </PreviewCard>
                 )}
 
-                {/* 角色列表 */}
                 {extractedData.characters && extractedData.characters.length > 0 && (
                   <PreviewCard title="角色设计" icon={Users}>
                     {extractedData.characters.map((char, i) => (
@@ -508,7 +647,6 @@ export default function WorkshopPage() {
                   </PreviewCard>
                 )}
 
-                {/* 卷纲 */}
                 {extractedData.volumes && extractedData.volumes.length > 0 && (
                   <PreviewCard title="卷纲规划" icon={Layers}>
                     {extractedData.volumes.map((vol, i) => (
