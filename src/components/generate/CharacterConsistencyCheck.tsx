@@ -6,6 +6,7 @@
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { getToken } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -45,9 +46,12 @@ export function CharacterConsistencyCheck({ chapterId, novelId }: CharacterConsi
     setResult(null)
 
     try {
+      const token = getToken()
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
       const resp = await fetch('/api/generate/check', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           chapterId,
           characterIds: characters?.map(c => c.id) || [],

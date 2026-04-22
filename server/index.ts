@@ -39,15 +39,20 @@ app.get('/health', (c) => c.json({ status: 'ok', version: '3.0' }))
 
 const publicApi = new Hono<{ Bindings: Env }>()
 
-publicApi.use('*', async (c, next) => {
+publicApi.route('/auth/login', authRouter)
+publicApi.route('/auth/register', authRouter)
+
+app.route('/', publicApi)
+
+const apiKeyProtectedApi = new Hono<{ Bindings: Env }>()
+
+apiKeyProtectedApi.use('*', async (c, next) => {
   return authMiddleware(c.env.API_KEY)(c, next)
 })
 
-publicApi.route('/auth/login', authRouter)
-publicApi.route('/auth/register', authRouter)
-publicApi.route('/setup', setupRouter)
+apiKeyProtectedApi.route('/setup', setupRouter)
 
-app.route('/', publicApi)
+app.route('/', apiKeyProtectedApi)
 
 const protectedApi = new Hono<{ Bindings: Env }>()
 

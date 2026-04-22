@@ -9,6 +9,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { BarChart3, FileText, BookOpen, Clock, TrendingUp, AlertCircle, Calendar, Zap } from 'lucide-react'
+import { getToken } from '@/lib/api'
 
 interface WritingStatsProps {
   novelId?: string
@@ -17,14 +18,22 @@ interface WritingStatsProps {
 export function WritingStats({ novelId }: WritingStatsProps) {
   const { data: logs, isLoading } = useQuery({
     queryKey: ['writing-stats', novelId],
-    queryFn: () =>
-      fetch(`/api/generate/logs?novelId=${novelId || ''}&limit=200`).then((r) => r.json()),
+    queryFn: () => {
+      const token = getToken()
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      return fetch(`/api/generate/logs?novelId=${novelId || ''}&limit=200`, { headers }).then((r) => r.json())
+    },
   })
 
   const { data: chapters } = useQuery({
     queryKey: ['stats-chapters', novelId],
-    queryFn: () =>
-      fetch(`/api/chapters?novelId=${novelId || ''}&includeContent=false`).then((r) => r.json()),
+    queryFn: () => {
+      const token = getToken()
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      return fetch(`/api/chapters?novelId=${novelId || ''}&includeContent=false`, { headers }).then((r) => r.json())
+    },
     enabled: !!novelId,
   })
 

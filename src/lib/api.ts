@@ -82,9 +82,15 @@ export function streamGenerate(
 ): () => void {
   const controller = new AbortController()
 
+  const token = getToken()
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
   fetch('/api/generate/chapter', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: j(payload),
     signal: controller.signal,
   })

@@ -8,6 +8,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { getToken } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -100,9 +101,12 @@ export default function WorkshopPage() {
   // 创建新会话
   const createSessionMutation = useMutation({
     mutationFn: async () => {
+      const token = getToken()
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
       const res = await fetch('/api/workshop/session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ stage }),
       })
       if (!res.ok) throw new Error('创建会话失败')
@@ -133,9 +137,12 @@ export default function WorkshopPage() {
     setIsGenerating(true)
 
     try {
+      const token = getToken()
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
       const response = await fetch(`/api/workshop/session/${sessionId}/message`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ message: userMessage }),
       })
 
@@ -214,8 +221,12 @@ export default function WorkshopPage() {
   const commitMutation = useMutation({
     mutationFn: async () => {
       if (!sessionId) throw new Error('没有活动会话')
+      const token = getToken()
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
       const res = await fetch(`/api/workshop/session/${sessionId}/commit`, {
         method: 'POST',
+        headers,
       })
       if (!res.ok) throw new Error('提交失败')
       return res.json()

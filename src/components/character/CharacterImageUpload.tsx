@@ -6,6 +6,7 @@
  */
 import { useState, useRef } from 'react'
 import { useMutation } from '@tanstack/react-query'
+import { getToken } from '@/lib/api'
 import { toast } from 'sonner'
 import type { Character } from '@/lib/types'
 import { Button } from '@/components/ui/button'
@@ -62,8 +63,12 @@ export function CharacterImageUpload({
       formData.append('image', file)
       formData.append('analyze', 'true')
 
+      const token = getToken()
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
       const response = await fetch(`/api/characters/${characterId}/image`, {
         method: 'POST',
+        headers,
         body: formData,
       })
 

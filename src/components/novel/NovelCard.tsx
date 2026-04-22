@@ -6,6 +6,7 @@
  */
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { getToken } from '@/lib/api'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -82,10 +83,13 @@ export function NovelCard({ novel, onEdit, onDelete, onStatusChange }: NovelCard
 
     setUploading(true)
     try {
+      const token = getToken()
+      const headers: Record<string, string> = { 'Content-Type': file.type }
+      if (token) headers['Authorization'] = `Bearer ${token}`
       const resp = await fetch(`/api/novels/${novel.id}/cover`, {
         method: 'POST',
         body: file,
-        headers: { 'Content-Type': file.type },
+        headers,
       })
       if (!resp.ok) throw new Error('上传失败')
       setCoverUrl(`/api/novels/${novel.id}/cover?t=${Date.now()}`)

@@ -6,6 +6,7 @@
  */
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
+import { getToken } from '@/lib/api'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -84,9 +85,12 @@ export function ExportDialog({ novelId, novelTitle }: ExportDialogProps) {
     mutationFn: async () => {
       setIsExporting(true)
 
+      const token = getToken()
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
       const response = await fetch('/api/export', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           novelId,
           format: selectedFormat,
