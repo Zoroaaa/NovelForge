@@ -1,0 +1,76 @@
+name = "ossshelf-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[ai]
+binding = "AI"
+
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "ossshelf-files"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ossshelf-db"
+database_id = "YOUR_D1_DATABASE_ID"
+
+# ── R2 direct binding (OPTIONAL / LEGACY) ────────────────────────────────
+# This binding is no longer required. Storage buckets are now managed via
+# the in-app "存储桶管理" panel (Settings → 存储桶), where you can add any
+# S3-compatible provider (R2, AWS S3, Aliyun OSS, Tencent COS, etc.).
+#
+# Keep this binding ONLY if you have existing files uploaded before the
+# multi-bucket migration. New uploads will automatically route through the
+# configured storage buckets. You may remove it once all legacy files
+# have been migrated.
+#
+# [[r2_buckets]]
+# binding = "FILES"
+# bucket_name = "ossshelf-files"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "YOUR_KV_NAMESPACE_ID"
+
+# ── AI 批处理队列 ───────────────────────────────────────────────────────
+# 用于一键索引、一键摘要、一键标签等批量任务
+# 避免单个 Worker 超时，每个消息处理一个文件
+[[queues.producers]]
+queue = "ossshelf-ai-tasks"
+binding = "AI_TASKS_QUEUE"
+
+[[queues.consumers]]
+queue = "ossshelf-ai-tasks"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 3
+retry_delay = 60
+
+[vars]
+ENVIRONMENT = "development"
+JWT_SECRET = "your-jwt-secret-change-in-production"
+# CORS允许的域名，多个域名用逗号分隔（必填！部署时请修改为你的前端域名）
+# 示例：CORS_ORIGINS = "https://your-frontend.pages.dev,https://your-custom-domain.com"
+CORS_ORIGINS = "https://your-frontend.pages.dev"
+# ── Cron 告警（可选）──────────────────────────────────────────────────────
+# 配置后，每次 cron 执行完成或失败时会向指定 Telegram Chat 发送通知。
+# ALERT_TG_BOT_TOKEN: 通过 @BotFather 创建的 Bot Token
+# ALERT_TG_CHAT_ID:   接收告警的 Chat ID（个人/群组均可，可通过 @userinfobot 获取）
+# ALERT_TG_BOT_TOKEN = "123456789:AAxxxxxxxxxxxxxxxxxxxx"
+# ALERT_TG_CHAT_ID = "-100xxxxxxxxxx"
+
+# ── Cron Triggers (定时任务) ─────────────────────────────────────────────
+# 每天凌晨 3 点执行回收站清理
+[triggers]
+crons = ["0 3 * * *"]
+
+[env.production]
+vars = { ENVIRONMENT = "production", JWT_SECRET = "YOUR_JWT_SECRET", CORS_ORIGINS = "https://your-frontend.pages.dev" }
+# 生产环境告警：
+# ALERT_TG_BOT_TOKEN = "YOUR_BOT_TOKEN"
+# ALERT_TG_CHAT_ID = "YOUR_CHAT_ID"
+
+# 生产环境 Cron 触发器
+[env.production.triggers]
+crons = ["0 3 * * *"]

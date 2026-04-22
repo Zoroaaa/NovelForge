@@ -266,7 +266,7 @@ export const api = {
         successCount?: number
         volumeOutlinePreview?: string
         error?: string
-      }>('/api/generate/outline-batch', { method: 'POST', body: j(body) }),
+      }>('/api/generate/outline-batch', { method: 'POST', body: j(body), timeout: 300000 }),
   },
 
   // 认证系统API

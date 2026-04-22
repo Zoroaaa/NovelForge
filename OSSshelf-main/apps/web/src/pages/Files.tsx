@@ -1,0 +1,1717 @@
+/**
+ * Files.tsx
+ * 文件管理页面
+ *
+ * 功能:
+ * - 文件列表展示 (列表/网格/瀑布流)
+ * - 右键菜单
+ * - 键盘快捷键
+ * - 批量操作
+ * - 文件上传/下载
+ * - 移动端触摸手势
+ */
+
+import { useCallback, useState, useEffect } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useFileStore, type ViewMode } from '@/stores/files';
+import type { AdvancedSearchCondition } from '@/types/files';
+import { useAuthStore } from '@/stores/auth';
+import {
+  filesApi,
+  bucketsApi,
+  permissionsApi,
+  shareApi,
+  searchApi,
+  migrateApi,
+  type StorageBucket,
+  aiApi,
+} from '@/services/api';
+import { getPresignedDownloadUrl, presignUpload } from '@/services/presignUpload';
+import { useFileKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { useFolderUpload } from '@/hooks/useFolderUpload';
+import { BreadcrumbNav, type BreadcrumbItem } from '@/components/ui/BreadcrumbNav';
+import { FilePreview } from '@/components/files/FilePreview';
+import { RenameDialog } from '@/components/files/dialogs';
+import { MoveFolderPicker } from '@/components/files/dialogs';
+import { FileTagsManager } from '@/components/files/tags';
+import { FilePermissionManager } from '@/components/files/permissions';
+import { FolderSettings } from '@/components/files/FolderSettings';
+import { useToast } from '@/components/ui/useToast';
+import { Button } from '@/components/ui/Button';
+import {
+  Upload,
+  FolderPlus,
+  FilePlus,
+  Grid,
+  List,
+  Trash2,
+  CheckSquare,
+  SortAsc,
+  SortDesc,
+  FolderInput,
+  RefreshCw,
+  CheckCircle2,
+  Tag,
+  X,
+  SlidersHorizontal,
+  Search,
+  History,
+  Trash2 as TrashIcon,
+  Sparkles,
+  Star,
+  Download,
+  Wand2,
+  MessageSquare,
+} from 'lucide-react';
+import type { FileItem } from '@osshelf/shared';
+import { cn, decodeFileName } from '@/utils';
+
+import { NewFolderDialog, NewFileDialog, FILE_TEMPLATES, ShareDialog, FileListContainer, Pagination } from '@/components/files';
+import { MobileFilesToolbar, MobileSearchPanel } from '@/components/files/MobileFilesToolbar';
+import { UploadLinkDialog } from '@/components/files/dialogs';
+import { DirectLinkDialog } from '@/components/files/dialogs';
+import { VersionHistory } from '@/components/files/VersionHistory';
+import { FolderPickerDialog } from '@/components/files/dialogs';
+import { MigrateBucketDialog } from '@/components/files/dialogs';
+import { FileDetailPanel } from '@/components/files/dialogs';
+import { MobileDialog, MobileDialogFooter, MobileDialogAction } from '@/components/ui/MobileDialog';
+import { useFileMutations } from '@/hooks/useFileMutations';
+import { useFileDragDrop } from '@/hooks/useFileDragDrop';
+import { useFileSearch } from '@/hooks/useFileSearch';
+import { useFileContextMenu } from '@/hooks/useFileContextMenu';
+import { useFilesPageState } from '@/hooks/useFilesPageState';
+
+export default function Files() {
+  const { folderId } = useParams<{ folderId: string }>();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const showStarred = searchParams.get('starred') === 'true';
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { token } = useAuthStore();
+  const {
+    viewMode,
+    setViewMode,
+    selectedFiles,
+    selectedFileItems,
+    toggleFileSelection,
+    clearSelection,
+    selectAll,
+    sortBy,
+    sortOrder,
+    setSort,
+    setFocusedFile,
+    getNextFileId,
+  } = useFileStore();
+
+  const pageState = useFilesPageState();
+  const {
+    showNewFolderDialog,
+    setShowNewFolderDialog,
+    newFolderName,
+    setNewFolderName,
+    newFolderBucketId,
+    setNewFolderBucketId,
+    showNewFileDialog,
+    setShowNewFileDialog,
+    newFileName,
+    setNewFileName,
+    newFileContent,
+    setNewFileContent,
+    newFileExtension,
+    setNewFileExtension,
+    newFileParentId,
+    setNewFileParentId,
+    uploadProgresses,
+    setUploadProgresses,
+    shareFileId,
+    setShareFileId,
+    previewFile,
+    setPreviewFile,
+    renameFile,
+    setRenameFile,
+    moveFile,
+    setMoveFile,
+    tagsFile,
+    setTagsFile,
+    permissionFile,
+    setPermissionFile,
+    folderSettingsFile,
+    setFolderSettingsFile,
+    fileInputRef,
+    folderInputRef,
+    searchInputRef,
+    resetNewFolderDialog,
+    resetNewFileDialog,
+  } = pageState;
+
+  // ── Phase 6 new state ──────────────────────────────────────────────────
+  const [uploadLinkFolder, setUploadLinkFolder] = useState<{ id: string; name: string } | null>(null);
+  const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [showMigrateDialog, setShowMigrateDialog] = useState(false);
+  const [shareFileItem, setShareFileItem] = useState<{ id: string; isFolder: boolean } | null>(null);
+  const [directLinkFile, setDirectLinkFile] = useState<{ id: string; name: string } | null>(null);
+
+  // ── Phase 7.5: 版本历史 ────────────────────────────────────────────────────
+  const [versionHistoryFile, setVersionHistoryFile] = useState<FileItem | null>(null);
+
+  // ── 分页状态 ─────────────────────────────────────────────────────────────
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<20 | 50 | 100>(20);
+
+  // ── Phase 7: 搜索历史 ────────────────────────────────────────────────────
+  const [showSearchHistory, setShowSearchHistory] = useState(false);
+  const { data: searchHistoryData, refetch: refetchHistory } = useQuery({
+    queryKey: ['search-history'],
+    queryFn: () => searchApi.history().then((r) => r.data.data ?? []),
+    enabled: false, // 手动触发
+  });
+
+  const fileSearch = useFileSearch({ folderId });
+  const {
+    searchInput,
+    setSearchInput,
+    searchQuery,
+    setSearchQuery,
+    tagSearchQuery,
+    setTagSearchQuery,
+    showAdvancedSearch,
+    setShowAdvancedSearch,
+    advancedConditions,
+    setAdvancedConditions,
+    advancedLogic,
+    setAdvancedLogic,
+    searchSuggestions,
+    showSuggestions,
+    setShowSuggestions,
+    searchResults,
+    tagSearchResults,
+    advancedSearchResults,
+    handleSearchInput,
+    handleSuggestionClick,
+    handleTagClick,
+    clearTagSearch,
+    semanticSearch,
+    setSemanticSearch,
+    ftsSearch,
+    setFtsSearch,
+    aiConfigured,
+  } = fileSearch;
+
+  const { data: breadcrumbs = [] } = useQuery<BreadcrumbItem[]>({
+    queryKey: ['breadcrumbs', folderId],
+    enabled: !!folderId,
+    queryFn: async () => {
+      const crumbs: BreadcrumbItem[] = [];
+      let currentId: string | null = folderId!;
+      while (currentId) {
+        const res = await filesApi.get(currentId);
+        const folder = res.data.data;
+        if (!folder) break;
+        crumbs.unshift({ id: folder.id, name: folder.name });
+        currentId = (folder as any).parentId ?? null;
+      }
+      return crumbs;
+    },
+  });
+
+  const { data: allBuckets = [] } = useQuery<StorageBucket[]>({
+    queryKey: ['buckets'],
+    queryFn: () => bucketsApi.list().then((r) => r.data.data ?? []),
+    staleTime: 30000,
+  });
+
+  const { data: currentFolderInfo } = useQuery({
+    queryKey: ['folder-info', folderId],
+    enabled: !!folderId,
+    queryFn: () => filesApi.get(folderId!).then((r) => r.data.data),
+    staleTime: 30000,
+  });
+
+  const {
+    data: filesData,
+    isLoading,
+    refetch,
+  } = useQuery<{
+    items: FileItem[];
+    total: number;
+    page: number;
+    limit: number;
+  }>({
+    queryKey: ['files', folderId, showStarred, currentPage, pageSize],
+    queryFn: async () => {
+      const res = await filesApi.list({
+        parentId: folderId || null,
+        starred: showStarred ? 'true' : undefined,
+        page: currentPage,
+        limit: pageSize,
+      });
+      const data = res.data.data;
+      const pagination = (res as any).data?.pagination;
+      if (Array.isArray(data)) {
+        return {
+          items: data,
+          total: pagination?.total ?? data.length,
+          page: pagination?.page ?? currentPage,
+          limit: pagination?.limit ?? pageSize,
+        };
+      }
+      return data ?? { items: [], total: 0, page: 1, limit: pageSize };
+    },
+  });
+
+  const files = filesData?.items ?? [];
+  const totalFiles = filesData?.total ?? 0;
+  const totalPages = Math.ceil(totalFiles / pageSize);
+
+  // ── 分页：切换文件夹/搜索/收藏状态时重置到第1页 ─────────────────────
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [folderId, showStarred]);
+
+  const handlePageSizeChange = (size: 20 | 50 | 100) => {
+    setPageSize(size);
+    setCurrentPage(1);
+  };
+
+  const fileIds = files.map((f) => f.id);
+  const { data: fileTagsMap = {} } = useQuery<Record<string, any[]>>({
+    queryKey: ['file-tags-batch', fileIds.sort().join(',')],
+    queryFn: async () => {
+      if (fileIds.length === 0) return {};
+      const res = await permissionsApi.getBatchFileTags(fileIds);
+      return res.data.data ?? {};
+    },
+    enabled: fileIds.length > 0,
+    staleTime: 30000,
+  });
+
+  const displayFiles = tagSearchQuery
+    ? (tagSearchResults ?? [])
+    : showAdvancedSearch && advancedConditions.length > 0
+      ? (advancedSearchResults ?? [])
+      : searchQuery && searchResults
+        ? (searchResults ?? [])
+        : [...files]
+            .filter((f) => !searchQuery || f.name.toLowerCase().includes(searchQuery.toLowerCase()))
+            .sort((a, b) => {
+              if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
+              const av = (a as any)[sortBy] ?? '',
+                bv = (b as any)[sortBy] ?? '';
+              return sortOrder === 'asc' ? (av > bv ? 1 : -1) : av < bv ? 1 : -1;
+            });
+
+  const imageFiles = displayFiles.filter((f) => f.mimeType?.startsWith('image/'));
+  const hasImages = imageFiles.length > 0;
+
+  // ── AI Chat deep-link: ?preview=<fileId> opens preview directly ──────────
+  useEffect(() => {
+    const previewId = searchParams.get('preview') || searchParams.get('highlight');
+    if (!previewId) return;
+
+    // Try current directory listing first (instant)
+    const local = files.find((f) => f.id === previewId);
+    if (local) {
+      setPreviewFile(local);
+      const next = new URLSearchParams(searchParams);
+      next.delete('preview');
+      next.delete('highlight');
+      setSearchParams(next, { replace: true });
+      return;
+    }
+
+    // File not in current listing — fetch it directly
+    // Only run once files have loaded (avoids double-fetch during mount)
+    if (files.length === 0 && !searchParams.get('preview') && !searchParams.get('highlight')) return;
+
+    filesApi
+      .get(previewId)
+      .then((res) => {
+        const file = res.data.data;
+        if (!file) return;
+        if (file.isFolder) {
+          navigate(`/files/${file.id}`, { replace: true });
+        } else {
+          setPreviewFile(file);
+          const next = new URLSearchParams(searchParams);
+          next.delete('preview');
+          next.delete('highlight');
+          setSearchParams(next, { replace: true });
+        }
+      })
+      .catch(() => {
+        // File not found or no permission — silently ignore
+        const next = new URLSearchParams(searchParams);
+        next.delete('preview');
+        next.delete('highlight');
+        setSearchParams(next, { replace: true });
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const fileMutations = useFileMutations();
+  const {
+    createFolderMutation,
+    createFileMutation,
+    deleteMutation,
+    renameMutation,
+    moveMutation,
+    shareMutation,
+    batchDeleteMutation,
+    batchZipMutation,
+    checkTelegramLimit,
+  } = fileMutations;
+
+  // Upload link creation
+  const createUploadLinkMutation = useMutation({
+    mutationFn: (params: Parameters<typeof shareApi.createUploadLink>[0]) => shareApi.createUploadLink(params),
+    onSuccess: (res) => {
+      const d = res.data.data;
+      if (d?.uploadToken) {
+        const url = `${window.location.origin}/upload/${d.uploadToken}`;
+        navigator.clipboard.writeText(url).then(() => toast({ title: '上传链接已复制', description: url }));
+      }
+      setUploadLinkFolder(null);
+    },
+    onError: () => toast({ title: '创建上传链接失败', variant: 'destructive' }),
+  });
+
+  function getEffectiveBucket(): StorageBucket | null {
+    const folderBucketId = (currentFolderInfo as any)?.bucketId ?? null;
+    if (folderBucketId) {
+      return allBuckets.find((b) => b.id === folderBucketId) ?? null;
+    }
+    return allBuckets.find((b) => b.isDefault) ?? null;
+  }
+
+  const handleUpload = useCallback(
+    async (file: File, key: string) => {
+      const bucket = getEffectiveBucket();
+      const limitErr = checkTelegramLimit(file, bucket);
+      if (limitErr) {
+        toast({ title: '上传失败', description: limitErr, variant: 'destructive' });
+        return;
+      }
+      setUploadProgresses((p) => ({ ...p, [key]: 0 }));
+      try {
+        await presignUpload({
+          file,
+          parentId: folderId || null,
+          bucketId: bucket?.id ?? null,
+          onProgress: (progress) => setUploadProgresses((prev) => ({ ...prev, [key]: progress })),
+        });
+        setUploadProgresses((p) => {
+          const n = { ...p };
+          delete n[key];
+          return n;
+        });
+        queryClient.invalidateQueries({ queryKey: ['files'] });
+        queryClient.invalidateQueries({ queryKey: ['stats'] });
+        toast({ title: '上传成功' });
+      } catch (e: any) {
+        setUploadProgresses((p) => {
+          const n = { ...p };
+          delete n[key];
+          return n;
+        });
+        toast({
+          title: '上传失败',
+          description: e?.message || e?.response?.data?.error?.message,
+          variant: 'destructive',
+        });
+      }
+    },
+    [folderId, queryClient, toast, setUploadProgresses, checkTelegramLimit]
+  );
+
+  const { isDragActive, handleDragOver, handleDragLeave, handleDrop } = useFileDragDrop({
+    folderId: folderId ?? null,
+    setUploadProgresses,
+  });
+
+  const { uploadFilesWithRelativePath } = useFolderUpload({
+    currentFolderId: folderId ?? undefined,
+    onFileStart: (name, key) => setUploadProgresses((p) => ({ ...p, [key]: 0 })),
+    onFileProgress: (key, progress) => setUploadProgresses((p) => ({ ...p, [key]: progress })),
+    onFileDone: (key) => {
+      setUploadProgresses((p) => {
+        const n = { ...p };
+        delete n[key];
+        return n;
+      });
+    },
+    onFileError: (key, error) => {
+      setUploadProgresses((p) => {
+        const n = { ...p };
+        delete n[key];
+        return n;
+      });
+      toast({
+        title: '上传失败',
+        description: error?.response?.data?.error?.message || error?.message,
+        variant: 'destructive',
+      });
+    },
+    onAllDone: (stats) => {
+      if (stats) {
+        if (stats.failed === 0) {
+          toast({ title: '文件夹上传完成', description: `成功上传 ${stats.uploaded} 个文件` });
+        } else {
+          toast({
+            title: '文件夹上传完成（部分失败）',
+            description: `成功 ${stats.uploaded} 个，失败 ${stats.failed} 个`,
+            variant: 'destructive',
+          });
+        }
+      }
+    },
+  });
+
+  const handleDownload = useCallback(
+    async (file: FileItem) => {
+      // 强制下载辅助函数：将 blob 以 octet-stream 强制触发下载，避免浏览器 inline 打开
+      const forceBlobDownload = (blob: Blob, name: string) => {
+        const forceBlob = new Blob([blob], { type: 'application/octet-stream' });
+        const blobUrl = URL.createObjectURL(forceBlob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+      };
+
+      try {
+        const result = await getPresignedDownloadUrl(file.id);
+        const { url, fileName } = result;
+
+        // 统一使用 fetch + blob 方式下载，避免跨域时 <a download> 属性无效导致浏览器直接打开
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('download failed');
+        const blob = await resp.blob();
+        forceBlobDownload(blob, fileName || file.name);
+      } catch {
+        try {
+          const downloadToken = token || useAuthStore.getState().token;
+          const downloadUrl = `${import.meta.env.VITE_API_URL || ''}/api/files/${file.id}/download${downloadToken ? `?token=${encodeURIComponent(downloadToken)}` : ''}`;
+          const resp = await fetch(downloadUrl);
+          if (!resp.ok) throw new Error('download failed');
+          const blob = await resp.blob();
+          forceBlobDownload(blob, file.name);
+        } catch {
+          toast({ title: '下载失败', variant: 'destructive' });
+        }
+      }
+    },
+    [toast, token]
+  );
+
+  const handleFileClick = useCallback(
+    (file: FileItem) => {
+      if (file.isFolder) {
+        clearSelection();
+        navigate(`/files/${file.id}`);
+      } else setPreviewFile(file);
+    },
+    [clearSelection, navigate, setPreviewFile]
+  );
+
+  // ── 跨桶移动确认状态 ──────────────────────────────────────────────
+  const [crossBucketMove, setCrossBucketMove] = useState<{
+    fileIds: string[];
+    targetBucketId: string;
+    targetFolderId?: string;
+    sourceBucketId: string;
+  } | null>(null);
+
+  // ── 文件详情面板状态（功能4）──────────────────────────────────────
+  const [detailFile, setDetailFile] = useState<FileItem | null>(null);
+
+  // ── 换桶对话框状态（功能5）────────────────────────────────────────
+  const [migrateBucketFile, setMigrateBucketFile] = useState<FileItem | null>(null);
+  // ── 改默认桶对话框状态────────────────────────────────────────────
+  const [changeFolderBucketFile, setChangeFolderBucketFile] = useState<FileItem | null>(null);
+  const [changeFolderBucketTargetId, setChangeFolderBucketTargetId] = useState('');
+  const [changingFolderBucket, setChangingFolderBucket] = useState(false);
+
+  const handleBatchDelete = useCallback(() => {
+    if (!selectedFiles.length) return;
+    if (!confirm(`确定将选中的 ${selectedFiles.length} 个项目移入回收站？`)) return;
+    batchDeleteMutation.mutate(selectedFiles);
+  }, [selectedFiles, batchDeleteMutation]);
+
+  const handleSort = useCallback(
+    (field: typeof sortBy) => setSort(field, sortBy === field ? (sortOrder === 'asc' ? 'desc' : 'asc') : 'desc'),
+    [sortBy, sortOrder, setSort]
+  );
+
+  const { ContextMenuComponent, handleContextMenu } = useFileContextMenu();
+
+  const fileContextMenuCallbacks = {
+    onOpen: handleFileClick,
+    onDownload: handleDownload,
+    onShare: (file: FileItem) => {
+      setShareFileItem({ id: file.id, isFolder: file.isFolder });
+      setShareFileId(file.id);
+    },
+    onUploadLink: (file: FileItem) => {
+      if (file.isFolder) {
+        setUploadLinkFolder({ id: file.id, name: file.name });
+      }
+    },
+    onDirectLink: (file: FileItem) => {
+      if (!file.isFolder) {
+        setDirectLinkFile({ id: file.id, name: file.name });
+      }
+    },
+    onVersionHistory: (file: FileItem) => {
+      if (!file.isFolder) {
+        setVersionHistoryFile(file);
+      }
+    },
+    onTags: (file: FileItem) => setTagsFile(file),
+    onPermissions: (file: FileItem) => setPermissionFile(file),
+    onFolderSettings: (file: FileItem) => setFolderSettingsFile(file),
+    onRename: (file: FileItem) => setRenameFile(file),
+    onMove: (file: FileItem) => setMoveFile(file),
+    onDetail: (file: FileItem) => setDetailFile(file),
+    onMigrateBucket: (file: FileItem) => setMigrateBucketFile(file),
+    onChangeFolderBucket: (file: FileItem) => {
+      setChangeFolderBucketTargetId('');
+      setChangeFolderBucketFile(file);
+    },
+    onDelete: (file: FileItem) => {
+      if (confirm(`将 "${decodeFileName(file.name)}" 移入回收站？`)) {
+        deleteMutation.mutate(file.id);
+      }
+    },
+    onStar: async (file: FileItem) => {
+      try {
+        if ((file as any).isStarred) {
+          await filesApi.unstar(file.id);
+          toast({ title: '已取消收藏' });
+        } else {
+          await filesApi.star(file.id);
+          toast({ title: '已收藏' });
+        }
+        refetch();
+      } catch (error) {
+        toast({ title: '操作失败', variant: 'destructive' });
+      }
+    },
+    bucketsCount: allBuckets.length,
+  };
+
+  const backgroundContextMenuCallbacks = {
+    onRefresh: () => refetch(),
+    onSelectAll: () => selectAll(displayFiles),
+    onUpload: () => fileInputRef.current?.click(),
+    onNewFolder: () => setShowNewFolderDialog(true),
+    onNewFile: () => setShowNewFileDialog(true),
+  };
+
+  const onContextMenu = useCallback(
+    (e: React.MouseEvent, file?: FileItem) => {
+      handleContextMenu(e, file, fileContextMenuCallbacks, backgroundContextMenuCallbacks);
+    },
+    [handleContextMenu, fileContextMenuCallbacks, backgroundContextMenuCallbacks]
+  );
+
+  useFileKeyboardShortcuts({
+    onSelectAll: () => selectAll(displayFiles),
+    onClearSelection: clearSelection,
+    onDelete: handleBatchDelete,
+    onRename: () => {
+      const file = selectedFileItems[0];
+      if (selectedFileItems.length === 1 && file) {
+        setRenameFile(file);
+      }
+    },
+    onOpen: () => {
+      const file = selectedFileItems[0];
+      if (selectedFileItems.length === 1 && file) {
+        handleFileClick(file);
+      }
+    },
+    onNavigateUp: () => {
+      const nextId = getNextFileId(displayFiles, 'up');
+      if (nextId) {
+        setFocusedFile(nextId);
+        toggleFileSelection(nextId);
+      }
+    },
+    onNavigateDown: () => {
+      const nextId = getNextFileId(displayFiles, 'down');
+      if (nextId) {
+        setFocusedFile(nextId);
+        toggleFileSelection(nextId);
+      }
+    },
+    onNewFolder: () => setShowNewFolderDialog(true),
+    onUpload: () => fileInputRef.current?.click(),
+    onToggleGridView: () => {
+      setViewMode('grid');
+    },
+    onToggleListView: () => {
+      setViewMode('list');
+    },
+    onFocusSearch: () => searchInputRef.current?.focus(),
+    selectedCount: selectedFiles.length,
+    hasFiles: displayFiles.length > 0,
+  });
+
+  const activeUploads = Object.entries(uploadProgresses);
+
+  const viewModes: { mode: ViewMode; icon: typeof List; label: string }[] = [
+    { mode: 'list', icon: List, label: '列表' },
+    { mode: 'grid', icon: Grid, label: '网格' },
+  ];
+
+  const handleShareConfirm = useCallback(
+    (params: { password?: string; expiresAt?: string; downloadLimit?: number }) => {
+      if (!shareFileId) return;
+      shareMutation.mutate({ fileId: shareFileId, ...params }, { onSuccess: () => setShareFileId(null) });
+    },
+    [shareFileId, shareMutation, setShareFileId]
+  );
+
+  return (
+    <div className="space-y-6" onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+      <ContextMenuComponent />
+
+      {isDragActive && (
+        <div className="fixed inset-0 z-50 bg-primary/10 flex items-center justify-center pointer-events-none">
+          <div className="bg-card border-2 border-dashed border-primary rounded-xl p-12 text-center shadow-2xl">
+            <Upload className="h-14 w-14 mx-auto mb-4 text-primary" />
+            <p className="text-lg font-semibold">松开上传（支持整个文件夹）</p>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-xl lg:text-2xl font-bold">文件管理</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">管理您的文件与文件夹</p>
+        </div>
+        <div className="text-muted-foreground text-sm">
+          <BreadcrumbNav items={breadcrumbs} />
+        </div>
+
+        <MobileSearchPanel
+          searchInput={searchInput}
+          tagSearchQuery={tagSearchQuery}
+          showAdvancedSearch={showAdvancedSearch}
+          advancedLogic={advancedLogic}
+          advancedConditions={advancedConditions}
+          searchSuggestions={searchSuggestions}
+          showSuggestions={showSuggestions}
+          showSearchHistory={showSearchHistory}
+          searchHistoryData={searchHistoryData ?? []}
+          aiConfigured={aiConfigured}
+          semanticSearch={semanticSearch}
+          onSearchInputChange={handleSearchInput}
+          onClearSearch={() => {
+            setSearchInput('');
+            setSearchQuery('');
+            setTagSearchQuery(null);
+            setShowSuggestions(false);
+            setShowSearchHistory(false);
+          }}
+          onToggleAdvancedSearch={() => setShowAdvancedSearch(!showAdvancedSearch)}
+          onSuggestionClick={(suggestion) => {
+            setSearchInput(suggestion);
+            setSearchQuery(suggestion);
+            setShowSuggestions(false);
+            setShowSearchHistory(false);
+          }}
+          onAdvancedLogicChange={(logic) => setAdvancedLogic(logic)}
+          onAddCondition={() => {
+            setAdvancedConditions([...advancedConditions, { field: 'name', operator: 'contains', value: '' }]);
+          }}
+          onRemoveCondition={(idx) => {
+            setAdvancedConditions(advancedConditions.filter((_, i) => i !== idx));
+          }}
+          onUpdateCondition={(idx, key, value) => {
+            const newConditions = [...advancedConditions];
+            const current = newConditions[idx];
+            if (!current) return;
+            if (key === 'field') {
+              newConditions[idx] = {
+                field: value as AdvancedSearchCondition['field'],
+                operator: current.operator,
+                value: current.value,
+              };
+            } else if (key === 'operator') {
+              newConditions[idx] = {
+                field: current.field,
+                operator: value as AdvancedSearchCondition['operator'],
+                value: current.value,
+              };
+            } else {
+              newConditions[idx] = {
+                field: current.field,
+                operator: current.operator,
+                value,
+              };
+            }
+            setAdvancedConditions(newConditions);
+          }}
+          onClearConditions={() => setAdvancedConditions([])}
+          onToggleSemanticSearch={() => setSemanticSearch(!semanticSearch)}
+          ftsSearch={ftsSearch}
+          onToggleFtsSearch={() => setFtsSearch(!ftsSearch)}
+          onClearTagSearch={clearTagSearch}
+          onClearHistory={async () => {
+            await searchApi.clearHistory();
+            refetchHistory();
+            setShowSearchHistory(false);
+          }}
+          onDeleteHistoryItem={async (id) => {
+            await searchApi.deleteHistory(id);
+            refetchHistory();
+          }}
+          onFocus={() => {
+            if (searchInput.length >= 2 && searchSuggestions.length > 0) {
+              setShowSuggestions(true);
+            } else if (searchInput.length === 0) {
+              refetchHistory();
+              setShowSearchHistory(true);
+            }
+          }}
+          onBlur={() => {
+            setTimeout(() => {
+              setShowSuggestions(false);
+              setShowSearchHistory(false);
+            }, 200);
+          }}
+        />
+
+        <MobileFilesToolbar
+          viewMode={viewMode}
+          hasImages={hasImages}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onViewModeChange={(mode) => {
+            setViewMode(mode);
+          }}
+          onSort={handleSort}
+          onNewFile={() => setShowNewFileDialog(true)}
+          onNewFolder={() => setShowNewFolderDialog(true)}
+          onUpload={() => fileInputRef.current?.click()}
+          onUploadFolder={() => folderInputRef.current?.click()}
+        />
+
+        <div className="hidden md:flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              ref={searchInputRef}
+              className={cn(
+                'pl-8 pr-16 h-9 w-40 sm:w-52 rounded-md border bg-background text-sm outline-none focus:ring-2 focus:ring-ring',
+                tagSearchQuery && 'border-primary ring-2 ring-primary/20'
+              )}
+              placeholder={tagSearchQuery ? `标签: ${tagSearchQuery}` : '搜索文件...'}
+              value={searchInput}
+              onChange={(e) => handleSearchInput(e.target.value)}
+              onBlur={() =>
+                setTimeout(() => {
+                  setShowSuggestions(false);
+                  setShowSearchHistory(false);
+                }, 200)
+              }
+              onFocus={() => {
+                if (searchInput.length >= 2 && searchSuggestions.length > 0) {
+                  setShowSuggestions(true);
+                } else if (searchInput.length === 0) {
+                  refetchHistory();
+                  setShowSearchHistory(true);
+                }
+              }}
+            />
+            {(searchInput || tagSearchQuery) && (
+              <button
+                className="absolute right-9 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  setSearchInput('');
+                  setSearchQuery('');
+                  setTagSearchQuery(null);
+                  setShowSuggestions(false);
+                  setShowSearchHistory(false);
+                }}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+            <button
+              className={cn(
+                'absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded transition-colors',
+                showAdvancedSearch ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'
+              )}
+              onClick={() => setShowAdvancedSearch(!showAdvancedSearch)}
+              title="高级搜索"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+            </button>
+            {/* 自动补全建议 */}
+            {showSuggestions && searchSuggestions.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-card border rounded-md shadow-lg z-50 max-h-48 overflow-auto">
+                {searchSuggestions.map((suggestion, idx) => (
+                  <button
+                    key={idx}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors"
+                    onMouseDown={() => handleSuggestionClick(suggestion)}
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* 搜索历史下拉（仅输入框为空时显示） */}
+            {showSearchHistory &&
+              !showSuggestions &&
+              searchInput.length === 0 &&
+              (searchHistoryData?.length ?? 0) > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-card border rounded-md shadow-lg z-50 max-h-56 overflow-auto">
+                  <div className="flex items-center justify-between px-3 py-1.5 border-b">
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <History className="h-3 w-3" />
+                      搜索历史
+                    </span>
+                    <button
+                      className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                      onMouseDown={async () => {
+                        await searchApi.clearHistory();
+                        refetchHistory();
+                        setShowSearchHistory(false);
+                      }}
+                    >
+                      清空
+                    </button>
+                  </div>
+                  {searchHistoryData?.map((item) => (
+                    <div key={item.id} className="flex items-center group hover:bg-muted/50 transition-colors">
+                      <button
+                        className="flex-1 px-3 py-2 text-left text-sm"
+                        onMouseDown={() => {
+                          handleSuggestionClick(item.query);
+                          setShowSearchHistory(false);
+                        }}
+                      >
+                        {item.query}
+                      </button>
+                      <button
+                        className="px-2 py-2 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all touch-visible"
+                        onMouseDown={async (e) => {
+                          e.stopPropagation();
+                          await searchApi.deleteHistory(item.id);
+                          refetchHistory();
+                        }}
+                      >
+                        <TrashIcon className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+          </div>
+
+          {aiConfigured && (
+            <Button
+              variant={semanticSearch ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSemanticSearch(!semanticSearch)}
+              title={semanticSearch ? '语义搜索已开启' : '开启语义搜索'}
+            >
+              <Sparkles className="h-3.5 w-3.5 mr-1" />
+              {semanticSearch ? '语义' : '关键词'}
+            </Button>
+          )}
+
+          <Button
+            variant={ftsSearch ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setFtsSearch(!ftsSearch)}
+            title={ftsSearch ? 'FTS5全文搜索已开启' : '开启FTS5全文搜索'}
+          >
+            <Search className="h-3.5 w-3.5 mr-1" />
+            {ftsSearch ? 'FTS5' : '普通'}
+          </Button>
+
+          {showAdvancedSearch && (
+            <div className="flex items-center gap-2 p-2 bg-muted/30 border rounded-md">
+              <select
+                className="h-7 px-2 text-xs border rounded bg-background"
+                value={advancedLogic}
+                onChange={(e) => setAdvancedLogic(e.target.value as 'and' | 'or')}
+              >
+                <option value="and">且</option>
+                <option value="or">或</option>
+              </select>
+              <button
+                className="h-7 px-2 text-xs border rounded bg-background hover:bg-muted/50"
+                onClick={() => {
+                  setAdvancedConditions([...advancedConditions, { field: 'name', operator: 'contains', value: '' }]);
+                }}
+              >
+                + 添加条件
+              </button>
+              {advancedConditions.length > 0 && (
+                <button
+                  className="h-7 px-2 text-xs border rounded bg-background hover:bg-muted/50"
+                  onClick={() => setAdvancedConditions([])}
+                >
+                  清除
+                </button>
+              )}
+            </div>
+          )}
+
+          {advancedConditions.map((condition, idx) => (
+            <div key={idx} className="flex items-center gap-1 p-1.5 bg-muted/20 border rounded text-xs">
+              <select
+                className="h-6 px-1.5 border rounded bg-background"
+                value={condition.field}
+                onChange={(e) => {
+                  const newConditions = [...advancedConditions];
+                  newConditions[idx] = { ...condition, field: e.target.value as any };
+                  setAdvancedConditions(newConditions);
+                }}
+              >
+                <option value="name">文件名</option>
+                <option value="mimeType">类型</option>
+                <option value="size">大小</option>
+                <option value="createdAt">创建时间</option>
+                <option value="updatedAt">修改时间</option>
+                <option value="tags">标签</option>
+              </select>
+              <select
+                className="h-6 px-1.5 border rounded bg-background"
+                value={condition.operator}
+                onChange={(e) => {
+                  const newConditions = [...advancedConditions];
+                  newConditions[idx] = { ...condition, operator: e.target.value as any };
+                  setAdvancedConditions(newConditions);
+                }}
+              >
+                <option value="contains">包含</option>
+                <option value="equals">等于</option>
+                <option value="startsWith">开头是</option>
+                <option value="endsWith">结尾是</option>
+                {condition.field === 'size' && (
+                  <>
+                    <option value="gt">大于</option>
+                    <option value="lt">小于</option>
+                  </>
+                )}
+              </select>
+              <input
+                className="h-6 w-24 px-1.5 border rounded bg-background"
+                value={condition.value as string}
+                onChange={(e) => {
+                  const newConditions = [...advancedConditions];
+                  newConditions[idx] = { ...condition, value: e.target.value };
+                  setAdvancedConditions(newConditions);
+                }}
+                placeholder="输入值..."
+              />
+              <button
+                className="h-6 w-6 flex items-center justify-center hover:bg-muted/50 rounded"
+                onClick={() => {
+                  setAdvancedConditions(advancedConditions.filter((_, i) => i !== idx));
+                }}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+
+          {tagSearchQuery && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-primary/10 border border-primary/20 rounded-md text-sm">
+              <Tag className="h-3.5 w-3.5 text-primary" />
+              <span className="text-primary font-medium">{tagSearchQuery}</span>
+              <button onClick={clearTagSearch} className="ml-1 hover:bg-primary/20 rounded p-0.5">
+                <X className="h-3 w-3 text-primary" />
+              </button>
+            </div>
+          )}
+
+          <Button variant="outline" size="sm" onClick={() => handleSort('name')} className="hidden sm:flex gap-1">
+            名称{' '}
+            {sortBy === 'name' &&
+              (sortOrder === 'asc' ? <SortAsc className="h-3.5 w-3.5" /> : <SortDesc className="h-3.5 w-3.5" />)}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleSort('size')} className="hidden sm:flex gap-1">
+            大小{' '}
+            {sortBy === 'size' &&
+              (sortOrder === 'asc' ? <SortAsc className="h-3.5 w-3.5" /> : <SortDesc className="h-3.5 w-3.5" />)}
+          </Button>
+
+          <div className="flex border rounded-md overflow-hidden">
+            {viewModes.map(({ mode, icon: Icon, label }) => (
+              <Button
+                key={mode}
+                variant="ghost"
+                size="icon"
+                className={cn('rounded-none h-9 w-9', viewMode === mode && 'bg-accent')}
+                onClick={() => setViewMode(mode)}
+                title={label}
+              >
+                <Icon className="h-4 w-4" />
+              </Button>
+            ))}
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => selectAll(displayFiles)}
+            disabled={displayFiles.length === 0}
+          >
+            <CheckSquare className="h-4 w-4 mr-1.5" />
+            全选
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={() => refetch()} title="刷新当前目录">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+
+          <Button
+            variant={showStarred ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => {
+              if (showStarred) {
+                searchParams.delete('starred');
+              } else {
+                searchParams.set('starred', 'true');
+              }
+              setSearchParams(searchParams);
+            }}
+            title={showStarred ? '显示全部文件' : '只显示收藏文件'}
+          >
+            <Star className={cn('h-4 w-4', showStarred && 'fill-current')} />
+            {showStarred ? '全部' : '收藏'}
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={() => setShowNewFileDialog(true)} className="hidden sm:flex">
+            <FilePlus className="h-4 w-4 mr-1.5" />
+            新建文件
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={() => setShowNewFolderDialog(true)} className="hidden sm:flex">
+            <FolderPlus className="h-4 w-4 mr-1.5" />
+            新建文件夹
+          </Button>
+
+          {aiConfigured && folderId && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(`/ai-chat?folderId=${folderId}`)}
+              className="hidden sm:flex"
+              title="对此文件夹提问，AI 将优先在此目录内搜索和操作"
+            >
+              <MessageSquare className="h-4 w-4 mr-1.5" />
+              AI 提问
+            </Button>
+          )}
+
+          <label className="inline-flex">
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+              disabled={!currentFolderInfo?.permissions?.some((p) => p.permission === 'write')}
+            >
+              <span>
+                <Upload className="h-4 w-4 mr-1.5" />
+                上传文件
+              </span>
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              multiple
+              onChange={(e) => {
+                Array.from(e.target.files || []).forEach((file) => {
+                  const key = `${file.name}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                  handleUpload(file, key);
+                });
+                e.target.value = '';
+              }}
+            />
+          </label>
+
+          <label className="inline-flex">
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+              disabled={!currentFolderInfo?.permissions?.some((p) => p.permission === 'write')}
+            >
+              <span>
+                <FolderInput className="h-4 w-4 mr-1.5" />
+                上传文件夹
+              </span>
+            </Button>
+            <input
+              ref={folderInputRef}
+              type="file"
+              className="hidden"
+              webkitdirectory=""
+              directory=""
+              multiple
+              onChange={(e) => {
+                const files = e.target.files;
+                if (!files || files.length === 0) return;
+                const rootFolderName = (files[0] as any).webkitRelativePath?.split('/')[0] || '文件夹';
+                const folderCount = new Set(
+                  Array.from(files)
+                    .map((f) => (f as any).webkitRelativePath?.split('/').slice(0, -1).join('/'))
+                    .filter(Boolean)
+                ).size;
+                toast({
+                  title: `开始上传文件夹 "${rootFolderName}"`,
+                  description: `${folderCount} 个文件夹，${files.length} 个文件`,
+                });
+                uploadFilesWithRelativePath(files);
+                e.target.value = '';
+              }}
+            />
+          </label>
+        </div>
+      </div>
+
+      {selectedFiles.length > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-primary/10 border border-primary/20 rounded-lg text-sm">
+          <CheckCircle2 className="h-4 w-4 text-primary" />
+          <span className="font-medium">已选中 {selectedFiles.length} 个</span>
+          <div className="flex-1" />
+          <Button variant="outline" size="sm" onClick={clearSelection}>
+            <X className="h-3.5 w-3.5 mr-1" />
+            取消
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              const selectedItems = selectedFileItems;
+              const hasEditable = selectedItems.some((f) => {
+                const ext = f.name.split('.').pop()?.toLowerCase() || '';
+                const codeExts = [
+                  'js',
+                  'ts',
+                  'jsx',
+                  'tsx',
+                  'py',
+                  'java',
+                  'go',
+                  'rs',
+                  'c',
+                  'cpp',
+                  'h',
+                  'cs',
+                  'rb',
+                  'php',
+                  'swift',
+                  'kt',
+                  'scala',
+                  'r',
+                  'sql',
+                  'sh',
+                  'bash',
+                  'yaml',
+                  'yml',
+                  'json',
+                  'xml',
+                  'html',
+                  'css',
+                  'scss',
+                  'vue',
+                  'svelte',
+                  'md',
+                  'txt',
+                  'log',
+                  'csv',
+                ];
+                const docExts = ['pdf', 'doc', 'docx', 'rtf', 'odt'];
+                const sheetExts = ['xls', 'xlsx', 'ods'];
+                const isEditable =
+                  f.mimeType?.startsWith('text/') ||
+                  f.mimeType === 'application/json' ||
+                  codeExts.includes(ext) ||
+                  docExts.includes(ext) ||
+                  sheetExts.includes(ext) ||
+                  ext === 'md';
+                return isEditable;
+              });
+              const hasImages = selectedItems.some((f) => f.mimeType?.startsWith('image/'));
+
+              if (!hasEditable && !hasImages) {
+                toast({
+                  title: '无可处理文件',
+                  description: '选中的文件中没有可生成摘要或标签的文件',
+                  variant: 'destructive',
+                });
+                return;
+              }
+
+              const types: ('summary' | 'tags')[] = [];
+              if (hasEditable) types.push('summary');
+              if (hasImages) types.push('tags');
+
+              try {
+                const res = await aiApi.processSelected({ fileIds: selectedFiles, types });
+                if (res.data.success && res.data.data) {
+                  toast({
+                    title: 'AI处理任务已提交',
+                    description: res.data.data.message,
+                  });
+                  clearSelection();
+                }
+              } catch (e: any) {
+                toast({
+                  title: '提交失败',
+                  description: e?.response?.data?.error?.message || e?.message,
+                  variant: 'destructive',
+                });
+              }
+            }}
+          >
+            <Wand2 className="h-3.5 w-3.5 mr-1" />
+            AI处理
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => batchZipMutation.mutate({ fileIds: selectedFiles })}
+            disabled={batchZipMutation.isPending}
+          >
+            <Download className="h-3.5 w-3.5 mr-1" />
+            批量下载
+          </Button>
+          <Button variant="destructive" size="sm" onClick={handleBatchDelete} disabled={batchDeleteMutation.isPending}>
+            <Trash2 className="h-3.5 w-3.5 mr-1" />
+            批量删除
+          </Button>
+        </div>
+      )}
+
+      {activeUploads.length > 0 && (
+        <div className="space-y-2">
+          {activeUploads.map(([key, progress]) => (
+            <div key={key} className="bg-card border rounded-lg px-4 py-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-sm font-medium truncate flex-1 min-w-0">
+                  {decodeFileName(key.split('-').slice(0, -2).join('-'))}
+                </span>
+                <span className="text-sm text-muted-foreground ml-2">{progress}%</span>
+              </div>
+              <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <NewFolderDialog
+        open={showNewFolderDialog}
+        isRoot={!folderId}
+        name={newFolderName}
+        bucketId={newFolderBucketId}
+        onNameChange={setNewFolderName}
+        onBucketChange={setNewFolderBucketId}
+        onConfirm={() => {
+          if (!newFolderName.trim()) return;
+          createFolderMutation.mutate(
+            {
+              name: newFolderName.trim(),
+              parentId: folderId || null,
+              bucketId: newFolderBucketId,
+            },
+            {
+              onSuccess: () => resetNewFolderDialog(),
+            }
+          );
+        }}
+        onCancel={resetNewFolderDialog}
+        loading={createFolderMutation.isPending}
+      />
+
+      {showNewFileDialog && (
+        <NewFileDialog
+          isRoot={!folderId}
+          name={newFileName}
+          content={newFileContent}
+          selectedExtension={newFileExtension}
+          parentId={newFileParentId}
+          onNameChange={setNewFileName}
+          onContentChange={setNewFileContent}
+          onExtensionChange={setNewFileExtension}
+          onParentIdChange={setNewFileParentId}
+          onConfirm={() => {
+            if (!newFileName.trim()) return;
+            const trimmedName = newFileName.trim();
+            const finalName = trimmedName.includes('.') ? trimmedName : `${trimmedName}${newFileExtension}`;
+            const selectedTemplate = FILE_TEMPLATES.find((t) => t.extension === newFileExtension);
+            createFileMutation.mutate(
+              {
+                name: finalName,
+                content: newFileContent,
+                parentId: folderId || null,
+                mimeType: selectedTemplate?.mimeType,
+              },
+              {
+                onSuccess: () => resetNewFileDialog(),
+              }
+            );
+          }}
+          onCancel={resetNewFileDialog}
+          loading={createFileMutation.isPending}
+        />
+      )}
+
+      {shareFileId && (
+        <ShareDialog
+          fileId={shareFileId}
+          isFolder={shareFileItem?.isFolder ?? false}
+          isPending={shareMutation.isPending}
+          onConfirm={handleShareConfirm}
+          onCancel={() => {
+            setShareFileId(null);
+            setShareFileItem(null);
+          }}
+        />
+      )}
+
+      {/* Upload link folder picker */}
+      {showFolderPicker && (
+        <FolderPickerDialog
+          onConfirm={(id, name) => {
+            setUploadLinkFolder({ id, name });
+            setShowFolderPicker(false);
+          }}
+          onCancel={() => setShowFolderPicker(false)}
+        />
+      )}
+
+      {/* Upload link config dialog */}
+      {uploadLinkFolder && (
+        <UploadLinkDialog
+          folderId={uploadLinkFolder.id}
+          folderName={uploadLinkFolder.name}
+          isPending={createUploadLinkMutation.isPending}
+          onConfirm={(params) => createUploadLinkMutation.mutate({ folderId: uploadLinkFolder.id, ...params })}
+          onCancel={() => setUploadLinkFolder(null)}
+        />
+      )}
+
+      {/* Migrate bucket dialog */}
+      {showMigrateDialog && <MigrateBucketDialog onClose={() => setShowMigrateDialog(false)} />}
+
+      {/* 文件详情面板（功能4）- Phase 4 实现 */}
+      {detailFile && <FileDetailPanel file={detailFile} onClose={() => setDetailFile(null)} />}
+
+      {/* 换桶对话框（功能5）- Phase 5 实现 */}
+      {migrateBucketFile && <MigrateBucketDialog file={migrateBucketFile} onClose={() => setMigrateBucketFile(null)} />}
+
+      {/* 改默认桶对话框 — 仅修改文件夹的 bucketId，不迁移实体文件 */}
+      {changeFolderBucketFile && (
+        <MobileDialog
+          open={!!changeFolderBucketFile}
+          onClose={() => setChangeFolderBucketFile(null)}
+          title="改默认桶"
+          mode="sheet"
+          className="sm:max-w-sm"
+        >
+          <div className="space-y-4 mt-2">
+            <p className="text-sm text-muted-foreground">
+              修改文件夹{' '}
+              <span className="font-medium text-foreground">「{decodeFileName(changeFolderBucketFile.name)}」</span>{' '}
+              的默认存储桶。 新上传到此文件夹的文件将使用新桶，<span className="font-medium">已有文件不会移动</span>。
+            </p>
+            <select
+              className="w-full h-9 px-3 text-sm border rounded-lg bg-background"
+              value={changeFolderBucketTargetId}
+              onChange={(e) => setChangeFolderBucketTargetId(e.target.value)}
+            >
+              <option value="">请选择目标存储桶...</option>
+              {allBuckets
+                .filter((b) => b.id !== (changeFolderBucketFile as any).bucketId)
+                .map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+          <MobileDialogFooter>
+            <MobileDialogAction variant="default" onClick={() => setChangeFolderBucketFile(null)}>
+              取消
+            </MobileDialogAction>
+            <MobileDialogAction
+              variant="primary"
+              disabled={!changeFolderBucketTargetId || changingFolderBucket}
+              onClick={async () => {
+                if (!changeFolderBucketTargetId) return;
+                setChangingFolderBucket(true);
+                try {
+                  const res = await filesApi.changeFolderBucket(changeFolderBucketFile.id, changeFolderBucketTargetId);
+                  if (res.data.success) {
+                    toast({ title: '默认桶已更新', description: res.data.data?.message });
+                    queryClient.invalidateQueries({ queryKey: ['files'] });
+                    setChangeFolderBucketFile(null);
+                  }
+                } catch {
+                  toast({ title: '更新失败', variant: 'destructive' });
+                } finally {
+                  setChangingFolderBucket(false);
+                }
+              }}
+            >
+              {changingFolderBucket ? '更新中...' : '确认'}
+            </MobileDialogAction>
+          </MobileDialogFooter>
+        </MobileDialog>
+      )}
+
+      {/* 跨桶移动确认对话框（功能1）*/}
+      {crossBucketMove && (
+        <MobileDialog open={!!crossBucketMove} onClose={() => setCrossBucketMove(null)} title="跨桶移动确认">
+          <p className="text-sm text-muted-foreground pb-2">目标文件夹位于不同存储桶，需要迁移文件内容。是否继续？</p>
+          <MobileDialogFooter>
+            <MobileDialogAction variant="default" onClick={() => setCrossBucketMove(null)}>
+              取消
+            </MobileDialogAction>
+            <MobileDialogAction
+              variant="primary"
+              onClick={() => {
+                migrateApi
+                  .start({
+                    sourceBucketId: crossBucketMove.sourceBucketId,
+                    targetBucketId: crossBucketMove.targetBucketId,
+                    fileIds: crossBucketMove.fileIds,
+                    targetFolderId: crossBucketMove.targetFolderId,
+                  })
+                  .then(() => {
+                    toast({ title: '迁移任务已启动' });
+                    setCrossBucketMove(null);
+                    refetch();
+                  })
+                  .catch(() => {
+                    toast({ title: '迁移启动失败', variant: 'destructive' });
+                  });
+              }}
+            >
+              确认迁移
+            </MobileDialogAction>
+          </MobileDialogFooter>
+        </MobileDialog>
+      )}
+
+      {/* Direct link dialog */}
+      {directLinkFile && (
+        <DirectLinkDialog
+          fileId={directLinkFile.id}
+          fileName={directLinkFile.name}
+          onClose={() => setDirectLinkFile(null)}
+        />
+      )}
+
+      {/* Version history dialog */}
+      {versionHistoryFile && (
+        <VersionHistory
+          fileId={versionHistoryFile.id}
+          fileName={versionHistoryFile.name}
+          mimeType={versionHistoryFile.mimeType}
+          onClose={() => setVersionHistoryFile(null)}
+          onVersionRestored={() => {
+            refetch();
+            toast({ title: '版本已恢复' });
+          }}
+        />
+      )}
+
+      <RenameDialog
+        open={!!renameFile}
+        currentName={renameFile?.name || ''}
+        isPending={renameMutation.isPending}
+        onConfirm={(name) =>
+          renameMutation.mutate({ id: renameFile!.id, name }, { onSuccess: () => setRenameFile(null) })
+        }
+        onCancel={() => setRenameFile(null)}
+      />
+
+      {moveFile && (
+        <MoveFolderPicker
+          excludeIds={[moveFile.id]}
+          isPending={moveMutation.isPending}
+          sourceBucketId={(moveFile as any).bucketId}
+          onConfirm={(targetParentId) =>
+            moveMutation.mutate(
+              { id: moveFile.id, targetParentId },
+              {
+                onSuccess: () => setMoveFile(null),
+                onError: (error: any) => {
+                  // 检查是否为跨桶移动错误
+                  if (error?.response?.data?.error?.code === 'CROSS_BUCKET') {
+                    setCrossBucketMove({
+                      fileIds: [moveFile.id],
+                      targetBucketId: error.response.data.error.targetBucketId,
+                      targetFolderId: targetParentId ?? undefined,
+                      sourceBucketId: error.response.data.error.sourceBucketId,
+                    });
+                    setMoveFile(null);
+                  }
+                },
+              }
+            )
+          }
+          onCancel={() => setMoveFile(null)}
+        />
+      )}
+
+      {previewFile && (
+        <FilePreview
+          file={previewFile}
+          token={token || ''}
+          onClose={() => setPreviewFile(null)}
+          onDownload={handleDownload}
+          onShare={(id) => {
+            setPreviewFile(null);
+            setShareFileId(id);
+          }}
+          onEdit={() => {
+            // 编辑功能已集成在 FilePreview 内部
+          }}
+          onVersionHistory={(file) => {
+            if (!file.isFolder) {
+              setVersionHistoryFile(file);
+            }
+          }}
+        />
+      )}
+
+      {tagsFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-card border rounded-xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">标签管理</h2>
+              <button onClick={() => setTagsFile(null)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4 truncate">文件: {decodeFileName(tagsFile.name)}</p>
+            <FileTagsManager fileId={tagsFile.id} />
+            <div className="flex justify-end mt-4">
+              <Button variant="outline" onClick={() => setTagsFile(null)}>
+                关闭
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {permissionFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-card border rounded-xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">权限管理</h2>
+              <button onClick={() => setPermissionFile(null)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4 truncate">文件: {decodeFileName(permissionFile.name)}</p>
+            <FilePermissionManager fileId={permissionFile.id} isOwner={true} />
+            <div className="flex justify-end mt-4">
+              <Button variant="outline" onClick={() => setPermissionFile(null)}>
+                关闭
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {folderSettingsFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-card border rounded-xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">文件夹设置</h2>
+              <button
+                onClick={() => setFolderSettingsFile(null)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4 truncate">
+              文件夹: {decodeFileName(folderSettingsFile.name)}
+            </p>
+            <FolderSettings
+              folderId={folderSettingsFile.id}
+              folderName={decodeFileName(folderSettingsFile.name)}
+              currentAllowedTypes={
+                (folderSettingsFile as any).allowedMimeTypes
+                  ? JSON.parse((folderSettingsFile as any).allowedMimeTypes)
+                  : null
+              }
+              onClose={() => setFolderSettingsFile(null)}
+            />
+          </div>
+        </div>
+      )}
+
+      <FileListContainer
+        viewMode={viewMode}
+        displayFiles={displayFiles}
+        isLoading={isLoading}
+        searchQuery={searchQuery}
+        selectedFiles={selectedFiles}
+        fileTagsMap={fileTagsMap}
+        token={token || ''}
+        onFileClick={handleFileClick}
+        onToggleSelect={toggleFileSelection}
+        onDownload={handleDownload}
+        onShare={(id) => {
+          // Find file in displayFiles to get isFolder
+          const f = displayFiles.find((x) => x.id === id);
+          setShareFileItem(f ? { id, isFolder: f.isFolder } : { id, isFolder: false });
+          setShareFileId(id);
+        }}
+        onDelete={(file) => deleteMutation.mutate(file.id)}
+        onRename={setRenameFile}
+        onPreview={setPreviewFile}
+        onMove={setMoveFile}
+        onContextMenu={onContextMenu}
+        onTagClick={handleTagClick}
+        onUploadLink={(file) => {
+          if (file.isFolder) {
+            setUploadLinkFolder({ id: file.id, name: file.name });
+          }
+        }}
+        onDirectLink={(file) => {
+          if (!file.isFolder) {
+            setDirectLinkFile({ id: file.id, name: file.name });
+          }
+        }}
+        onVersionHistory={(file) => {
+          if (!file.isFolder) {
+            setVersionHistoryFile(file);
+          }
+        }}
+      />
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={totalFiles}
+        pageSize={pageSize}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={handlePageSizeChange}
+      />
+    </div>
+  );
+}

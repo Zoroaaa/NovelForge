@@ -383,15 +383,17 @@ export async function processWorkshopMessage(
       llmConfig.apiKey = llmConfig.apiKey || ''
       console.log('[workshop] Using workshop-specific model config')
     } catch (workshopError) {
-      console.warn('[workshop] Workshop config not found, falling back to chapter_gen:', workshopError.message)
+      const workshopErrorMsg = workshopError instanceof Error ? workshopError.message : String(workshopError)
+      console.warn('[workshop] Workshop config not found, falling back to chapter_gen:', workshopErrorMsg)
       try {
         llmConfig = await resolveConfig(drizzle(env.DB), 'chapter_gen', session.novelId || '')
         llmConfig.apiKey = llmConfig.apiKey || ''
         console.log('[workshop] Using chapter_gen as fallback')
       } catch (chapterError) {
+        const chapterErrorMsg = chapterError instanceof Error ? chapterError.message : String(chapterError)
         console.error('[workshop] No suitable model config found:', {
-          workshopError: workshopError.message,
-          chapterError: chapterError.message,
+          workshopError: workshopErrorMsg,
+          chapterError: chapterErrorMsg,
           novelId: session.novelId,
           sessionId
         })
@@ -401,33 +403,47 @@ export async function processWorkshopMessage(
           `1. 用途选择"创作工坊"(workshop) - 推荐\n` +
           `2. 或用途选择"章节生成"(chapter_gen) 作为备选\n\n` +
           `当前状态：\n` +
-          `- workshop 配置：${workshopError.message}\n` +
-          `- chapter_gen 配置：${chapterError.message}`
+          `- workshop 配置：${workshopErrorMsg}\n` +
+          `- chapter_gen 配置：${chapterErrorMsg}`
         )
       }
     }
 
-    // 7. 调用 LLM 流式生成
+    // 6. 调用 LLM 流式生成
     let fullResponse = ''
 
     // 导入 streamGenerate
     const { streamGenerate } = await import('./llm')
 
+    // 6.5 先插入占位助手消息（确保即使中断也有记录，借鉴OSSshelf-main模式）
+    const placeholderAssistantMsg: WorkshopMessage = {
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+    }
+    messages.push(placeholderAssistantMsg)
+    await updateSession(db, sessionId, { messages, extractedData: currentData })
+
     await streamGenerate(llmConfig, llmMessages, {
       onChunk: (text) => {
         fullResponse += text
+        // 实时更新占位消息内容
+        messages[messages.length - 1] = {
+          ...placeholderAssistantMsg,
+          content: fullResponse,
+        }
         onChunk(text)
       },
       onDone: () => {
         // 8. 尝试从 AI 回复中提取结构化数据
         const newExtractedData = extractStructuredData(fullResponse, session.stage, currentData)
 
-        // 9. 添加助手回复到历史
-        messages.push({
+        // 9. 更新占位消息为最终内容（而非push新消息）
+        messages[messages.length - 1] = {
           role: 'assistant',
           content: fullResponse,
           timestamp: Date.now(),
-        })
+        }
 
         // 10. 更新数据库
         updateSession(db, sessionId, {
@@ -438,6 +454,15 @@ export async function processWorkshopMessage(
         onDone(newExtractedData)
       },
       onError: (error) => {
+        // 错误时也保存已生成的部分内容
+        if (fullResponse) {
+          messages[messages.length - 1] = {
+            role: 'assistant',
+            content: fullResponse + '\n\n[生成中断]',
+            timestamp: Date.now(),
+          }
+          updateSession(db, sessionId, { messages, extractedData: currentData })
+        }
         onError(error)
       },
     })

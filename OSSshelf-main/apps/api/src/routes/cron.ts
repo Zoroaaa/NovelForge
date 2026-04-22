@@ -1,0 +1,364 @@
+/**
+ * cron.ts
+ * 定时任务路由
+ *
+ * 功能:
+ * - 回收站自动清理
+ * - 会话/设备自动清理
+ * - 分享链接过期清理
+ * - 全量清理任务
+ */
+
+import { Hono } from 'hono';
+import { eq, and, or, isNotNull, lt } from 'drizzle-orm';
+import {
+  getDb,
+  files,
+  shares,
+  uploadTasks,
+  loginAttempts,
+  userDevices,
+  emailTokens,
+  searchHistory,
+  notifications,
+  aiTasks,
+  aiConfirmRequests,
+} from '../db';
+import { TRASH_RETENTION_DAYS, DEVICE_SESSION_EXPIRY, logger } from '@osshelf/shared';
+import type { Env } from '../types/env';
+import { s3Delete } from '../lib/s3client';
+import { resolveBucketConfig, updateBucketStats, updateUserStorage } from '../lib/bucketResolver';
+import { getEncryptionKey } from '../lib/crypto';
+import { releaseFileRef } from '../lib/dedup';
+import { cleanExpiredVersions } from '../lib/versionManager';
+
+const app = new Hono<{ Bindings: Env }>();
+
+app.post('/cron/trash-cleanup', async (c) => {
+  const db = getDb(c.env.DB);
+  const encKey = getEncryptionKey(c.env);
+
+  const retentionDate = new Date();
+  retentionDate.setDate(retentionDate.getDate() - TRASH_RETENTION_DAYS);
+  const threshold = retentionDate.toISOString();
+
+  const expiredFiles = await db
+    .select()
+    .from(files)
+    .where(and(isNotNull(files.deletedAt), lt(files.deletedAt, threshold)))
+    .all();
+
+  let deletedCount = 0;
+  let freedBytes = 0;
+  const userStorageChanges: Map<string, number> = new Map();
+
+  for (const file of expiredFiles) {
+    if (!file.isFolder) {
+      try {
+        const { shouldDeleteStorage } = await releaseFileRef(db, file.id);
+
+        if (shouldDeleteStorage) {
+          const bucketConfig = await resolveBucketConfig(db, file.userId, encKey, file.bucketId, file.parentId);
+          if (bucketConfig) {
+            await s3Delete(bucketConfig, file.r2Key);
+            await updateBucketStats(db, bucketConfig.id, -file.size, -1);
+          } else if (c.env.FILES) {
+            await c.env.FILES.delete(file.r2Key);
+          }
+        }
+
+        const currentChange = userStorageChanges.get(file.userId) || 0;
+        userStorageChanges.set(file.userId, currentChange + file.size);
+        freedBytes += file.size;
+      } catch (error) {
+        logger.error('CRON', '删除文件失败', { fileId: file.id }, error);
+        continue;
+      }
+    }
+
+    await db.delete(files).where(eq(files.id, file.id));
+    deletedCount++;
+  }
+
+  for (const [userId, freedSize] of userStorageChanges) {
+    await updateUserStorage(db, userId, -freedSize);
+  }
+
+  // ── 清理过期直链 token ────────────────────────────────────────────────
+  const now = new Date().toISOString();
+  const expiredDirectLinks = await db
+    .update(files)
+    .set({ directLinkToken: null, directLinkExpiresAt: null })
+    .where(
+      and(isNotNull(files.directLinkToken), isNotNull(files.directLinkExpiresAt), lt(files.directLinkExpiresAt, now))
+    )
+    .returning({ id: files.id });
+
+  logger.info(
+    'CRON',
+    `回收站清理完成: ${deletedCount} 文件, ${(freedBytes / 1024 / 1024).toFixed(2)} MB, ${expiredDirectLinks.length} 链接过期`
+  );
+
+  return c.json({
+    success: true,
+    data: {
+      deletedCount,
+      freedBytes,
+      expiredDirectLinks: expiredDirectLinks.length,
+      message: `已清理 ${deletedCount} 个过期文件，释放 ${(freedBytes / 1024 / 1024).toFixed(2)} MB 空间，清除 ${expiredDirectLinks.length} 个过期直链`,
+    },
+  });
+});
+
+app.post('/cron/session-cleanup', async (c) => {
+  const db = getDb(c.env.DB);
+  const now = new Date().toISOString();
+
+  const expiredUploadTasks = await db
+    .select()
+    .from(uploadTasks)
+    .where(and(lt(uploadTasks.expiresAt, now), eq(uploadTasks.status, 'pending')))
+    .all();
+
+  for (const task of expiredUploadTasks) {
+    const bucketConfig = await resolveBucketConfig(db, task.userId, getEncryptionKey(c.env), task.bucketId, null);
+    if (bucketConfig) {
+      try {
+        const { s3AbortMultipartUpload } = await import('../lib/s3client');
+        await s3AbortMultipartUpload(bucketConfig, task.r2Key, task.uploadId);
+      } catch (error) {
+        logger.error('CRON', '中止过期上传失败', { taskId: task.id }, error);
+      }
+    }
+    await db.update(uploadTasks).set({ status: 'expired', updatedAt: now }).where(eq(uploadTasks.id, task.id));
+  }
+
+  const oldLoginAttempts = await db
+    .delete(loginAttempts)
+    .where(lt(loginAttempts.createdAt, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()))
+    .returning({ id: loginAttempts.id });
+
+  const deviceExpiryThreshold = new Date(Date.now() - DEVICE_SESSION_EXPIRY).toISOString();
+  const expiredDevices = await db
+    .delete(userDevices)
+    .where(lt(userDevices.lastActive, deviceExpiryThreshold))
+    .returning({ id: userDevices.id });
+
+  const expiredEmailTokens = await db
+    .delete(emailTokens)
+    .where(or(lt(emailTokens.expiresAt, now), isNotNull(emailTokens.usedAt)))
+    .returning({ id: emailTokens.id });
+
+  return c.json({
+    success: true,
+    data: {
+      uploadTasksExpired: expiredUploadTasks.length,
+      loginAttemptsCleaned: oldLoginAttempts.length,
+      devicesCleaned: expiredDevices.length,
+      emailTokensCleaned: expiredEmailTokens.length,
+    },
+  });
+});
+
+app.post('/cron/share-cleanup', async (c) => {
+  const db = getDb(c.env.DB);
+  const now = new Date().toISOString();
+
+  const expiredShares = await db
+    .delete(shares)
+    .where(and(isNotNull(shares.expiresAt), lt(shares.expiresAt, now)))
+    .returning({ id: shares.id });
+
+  return c.json({
+    success: true,
+    data: {
+      sharesCleaned: expiredShares.length,
+    },
+  });
+});
+
+// ── Version cleanup ────────────────────────────────────────────────────────
+app.post('/cron/version-cleanup', async (c) => {
+  const db = getDb(c.env.DB);
+
+  try {
+    const result = await cleanExpiredVersions(db, c.env);
+
+    logger.info(
+      'CRON',
+      `版本清理完成: ${result.prunedCount} 版本, ${result.freedBytes} bytes, ${result.errors.length} 错误`
+    );
+
+    return c.json({
+      success: true,
+      data: {
+        deletedVersions: result.prunedCount,
+        freedBytes: result.freedBytes,
+        errors: result.errors.length,
+        errorDetails: result.errors.length > 0 ? result.errors.slice(0, 10) : undefined,
+        message: `已清理 ${result.prunedCount} 个过期版本，释放 ${(result.freedBytes / 1024).toFixed(2)} KB`,
+      },
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    logger.error('CRON', '版本清理失败', {}, error);
+    return c.json(
+      {
+        success: false,
+        error: { code: 'VERSION_CLEANUP_FAILED', message: msg },
+      },
+      500
+    );
+  }
+});
+
+// ── AI Confirm Requests cleanup ─────────────────────────────────────────────
+app.post('/cron/ai-confirm-cleanup', async (c) => {
+  const db = getDb(c.env.DB);
+
+  // 清理 7 天前的已处理记录（expired 和 consumed 状态）
+  const retentionDays = 7;
+  const threshold = new Date(Date.now() - retentionDays * 86_400_000).toISOString();
+
+  const cleanedRecords = await db
+    .delete(aiConfirmRequests)
+    .where(
+      and(
+        or(eq(aiConfirmRequests.status, 'expired'), eq(aiConfirmRequests.status, 'consumed')),
+        lt(aiConfirmRequests.createdAt, threshold)
+      )
+    )
+    .returning({ id: aiConfirmRequests.id });
+
+  logger.info('CRON', `AI确认请求清理完成: ${cleanedRecords.length} 条记录`);
+
+  return c.json({
+    success: true,
+    data: {
+      cleanedCount: cleanedRecords.length,
+    },
+  });
+});
+
+app.post('/cron/data-cleanup', async (c) => {
+  const db = getDb(c.env.DB);
+  const now = new Date().toISOString();
+
+  const searchRetentionDays = 30;
+  const searchThreshold = new Date(Date.now() - searchRetentionDays * 86_400_000).toISOString();
+  const oldSearchHistory = await db
+    .delete(searchHistory)
+    .where(lt(searchHistory.createdAt, searchThreshold))
+    .returning({ id: searchHistory.id });
+
+  const notificationRetentionDays = 30;
+  const notificationThreshold = new Date(Date.now() - notificationRetentionDays * 86_400_000).toISOString();
+  const oldNotifications = await db
+    .delete(notifications)
+    .where(and(eq(notifications.isRead, true), lt(notifications.createdAt, notificationThreshold)))
+    .returning({ id: notifications.id });
+
+  const aiTaskRetentionDays = 7;
+  const aiTaskThreshold = new Date(Date.now() - aiTaskRetentionDays * 86_400_000).toISOString();
+  const completedAiTasks = await db
+    .delete(aiTasks)
+    .where(
+      and(
+        or(eq(aiTasks.status, 'completed'), eq(aiTasks.status, 'failed'), eq(aiTasks.status, 'cancelled')),
+        lt(aiTasks.updatedAt, aiTaskThreshold)
+      )
+    )
+    .returning({ id: aiTasks.id });
+
+  logger.info(
+    'CRON',
+    `数据清理完成: ${oldSearchHistory.length} 搜索历史, ${oldNotifications.length} 通知, ${completedAiTasks.length} AI任务`
+  );
+
+  return c.json({
+    success: true,
+    data: {
+      searchHistoryCleaned: oldSearchHistory.length,
+      notificationsCleaned: oldNotifications.length,
+      aiTasksCleaned: completedAiTasks.length,
+    },
+  });
+});
+
+app.post('/cron/all', async (c) => {
+  const results = {
+    trash: null as unknown,
+    sessions: null as unknown,
+    shares: null as unknown,
+    versions: null as unknown,
+    data: null as unknown,
+    aiConfirm: null as unknown,
+  };
+
+  try {
+    const trashRes = await fetch(new URL('/cron/trash-cleanup', c.req.url), {
+      method: 'POST',
+      headers: c.req.raw.headers,
+    });
+    results.trash = await trashRes.json();
+  } catch (e) {
+    results.trash = { error: String(e) };
+  }
+
+  try {
+    const sessionRes = await fetch(new URL('/cron/session-cleanup', c.req.url), {
+      method: 'POST',
+      headers: c.req.raw.headers,
+    });
+    results.sessions = await sessionRes.json();
+  } catch (e) {
+    results.sessions = { error: String(e) };
+  }
+
+  try {
+    const shareRes = await fetch(new URL('/cron/share-cleanup', c.req.url), {
+      method: 'POST',
+      headers: c.req.raw.headers,
+    });
+    results.shares = await shareRes.json();
+  } catch (e) {
+    results.shares = { error: String(e) };
+  }
+
+  try {
+    const versionRes = await fetch(new URL('/cron/version-cleanup', c.req.url), {
+      method: 'POST',
+      headers: c.req.raw.headers,
+    });
+    results.versions = await versionRes.json();
+  } catch (e) {
+    results.versions = { error: String(e) };
+  }
+
+  try {
+    const dataRes = await fetch(new URL('/cron/data-cleanup', c.req.url), {
+      method: 'POST',
+      headers: c.req.raw.headers,
+    });
+    results.data = await dataRes.json();
+  } catch (e) {
+    results.data = { error: String(e) };
+  }
+
+  try {
+    const aiConfirmRes = await fetch(new URL('/cron/ai-confirm-cleanup', c.req.url), {
+      method: 'POST',
+      headers: c.req.raw.headers,
+    });
+    results.aiConfirm = await aiConfirmRes.json();
+  } catch (e) {
+    results.aiConfirm = { error: String(e) };
+  }
+
+  return c.json({
+    success: true,
+    data: results,
+  });
+});
+
+export default app;

@@ -89,6 +89,7 @@ export default function WorkshopPage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [extractedData, setExtractedData] = useState<ExtractedData>({})
   const [showCommitDialog, setShowCommitDialog] = useState(false)
+  const [currentAssistantIndex, setCurrentAssistantIndex] = useState<number | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -155,6 +156,17 @@ export default function WorkshopPage() {
       let assistantContent = ''
       const decoder = new TextDecoder()
 
+      // 初始化助手消息占位（借鉴OSSshelf-main的可靠模式）
+      setMessages(prev => {
+        const newIndex = prev.length
+        setCurrentAssistantIndex(newIndex)
+        return [...prev, {
+          role: 'assistant' as const,
+          content: '',
+          timestamp: Date.now(),
+        }]
+      })
+
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -173,18 +185,13 @@ export default function WorkshopPage() {
             if (data.content) {
               assistantContent += data.content
 
-              // 实时更新助手消息
+              // 直接更新当前助手消息（通过index定位，避免复杂条件判断）
               setMessages(prev => {
+                if (currentAssistantIndex === null || currentAssistantIndex >= prev.length) return prev
                 const newMsgs = [...prev]
-                const lastMsg = newMsgs[newMsgs.length - 1]
-                if (lastMsg?.role === 'assistant' && lastMsg.content === assistantContent.slice(0, -data.content.length)) {
-                  newMsgs[newMsgs.length - 1] = { ...lastMsg, content: assistantContent }
-                } else {
-                  newMsgs.push({
-                    role: 'assistant',
-                    content: assistantContent,
-                    timestamp: Date.now(),
-                  })
+                newMsgs[currentAssistantIndex] = {
+                  ...newMsgs[currentAssistantIndex],
+                  content: assistantContent,
                 }
                 return newMsgs
               })
@@ -194,9 +201,12 @@ export default function WorkshopPage() {
               if (data.extractedData) {
                 setExtractedData(prev => ({ ...prev, ...data.extractedData }))
               }
+              // 重置索引标记流结束
+              setCurrentAssistantIndex(null)
             }
 
             if (data.type === 'error') {
+              setCurrentAssistantIndex(null)
               throw new Error(data.error)
             }
           } catch (e) {

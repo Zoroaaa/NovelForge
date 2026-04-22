@@ -33,6 +33,7 @@ dist-ssr
 *.sln
 *.sw?
 .trae/*
+OSSshelf-main/*
 
 # Environment
 .dev.vars
