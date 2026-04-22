@@ -26,9 +26,9 @@ index_name = "novelforge-index"
 binding = "TASK_QUEUE"
 queue = "novelforge-tasks"
 
-[[queues.consumers]]
-queue = "novelforge-tasks"
-max_batch_size = 10
-max_batch_timeout = 5
-max_retries = 3
-dead_letter_queue = "novelforge-tasks-dlq"
+# [[queues.consumers]]
+# queue = "novelforge-tasks"
+# max_batch_size = 10
+# max_batch_timeout = 5
+# max_retries = 3
+# dead_letter_queue = "novelforge-tasks-dlq"
