@@ -10,6 +10,7 @@ invocation_logs = true
 
 [assets]
 directory = "dist"
+notFoundHandling = "single-page-application"
 
 [[d1_databases]]
 binding = "DB"
