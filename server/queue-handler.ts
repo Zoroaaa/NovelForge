@@ -9,11 +9,10 @@ import { novelSettings, characters, masterOutline, foreshadowing, chapters, queu
 import { eq, and, sql } from 'drizzle-orm'
 import { enqueueBatch } from './lib/queue'
 
-export default {
-  async queue(
-    batch: MessageBatch<QueueMessage>,
-    env: Env
-  ): Promise<void> {
+export async function handleQueueBatch(
+  batch: MessageBatch<QueueMessage>,
+  env: Env
+): Promise<void> {
     for (const message of batch.messages) {
       try {
         await logTaskStart(env, message)
@@ -26,8 +25,7 @@ export default {
         message.retry()
       }
     }
-  },
-}
+  }
 
 async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
   switch (msg.type) {

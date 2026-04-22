@@ -285,7 +285,9 @@ mcpApi.use('*', jwtAuthMiddleware())
 mcpApi.route('/', mcp)
 app.route('/', mcpApi)
 
-import queueHandler from './queue-handler'
+import { handleQueueBatch } from './queue-handler'
 
-export default app
-export const queue = queueHandler.queue
+export default {
+  fetch: app.fetch,
+  queue: handleQueueBatch,
+}
