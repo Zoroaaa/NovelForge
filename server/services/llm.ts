@@ -94,8 +94,8 @@ const PROVIDER_BASES: Record<string, string> = {
  * 解析模型配置
  * @description 按优先级获取模型配置：小说级配置 > 全局配置 > 硬编码fallback
  * @param {DrizzleD1Database} db - 数据库实例
- * @param {string} stage - 生成阶段（如chapter_gen, summary_gen）
- * @param {string} novelId - 小说ID
+ * @param {string} stage - 生成阶段（如chapter_gen, summary_gen, workshop）
+ * @param {string} novelId - 小说ID（可选，为空时直接查全局配置）
  * @returns {Promise<LLMConfig>} LLM配置对象
  * @throws {Error} 未找到对应阶段的配置
  */
@@ -104,28 +104,33 @@ export async function resolveConfig(
   stage: string,
   novelId: string
 ): Promise<LLMConfig> {
-  // 1. 尝试获取小说级别的 stage 配置（novelId + stage 双过滤）
-  const novelConfig = await db
-    .select()
-    .from(modelConfigs)
-    .where(
-      and(
-        eq(modelConfigs.novelId, novelId),
-        eq(modelConfigs.stage, stage),
-        eq(modelConfigs.isActive, 1)
-      )
-    )
-    .orderBy(desc(modelConfigs.createdAt))
-    .limit(1)
-    .get()
+  console.log(`[resolveConfig] Looking for config: stage=${stage}, novelId=${novelId || '(none)'}`)
 
-  if (novelConfig) {
-    return {
-      provider: novelConfig.provider as ProviderType,
-      modelId: novelConfig.modelId,
-      apiBase: novelConfig.apiBase || getDefaultBase(novelConfig.provider),
-      apiKey: novelConfig.apiKey || '',
-      params: novelConfig.params ? JSON.parse(novelConfig.params) : undefined,
+  // 1. 如果有 novelId，尝试获取小说级别的 stage 配置
+  if (novelId && novelId.trim() !== '') {
+    const novelConfig = await db
+      .select()
+      .from(modelConfigs)
+      .where(
+        and(
+          eq(modelConfigs.novelId, novelId),
+          eq(modelConfigs.stage, stage),
+          eq(modelConfigs.isActive, 1)
+        )
+      )
+      .orderBy(desc(modelConfigs.createdAt))
+      .limit(1)
+      .get()
+
+    if (novelConfig) {
+      console.log(`[resolveConfig] Found novel-level config for ${stage}`)
+      return {
+        provider: novelConfig.provider as ProviderType,
+        modelId: novelConfig.modelId,
+        apiBase: novelConfig.apiBase || getDefaultBase(novelConfig.provider),
+        apiKey: novelConfig.apiKey || '',
+        params: novelConfig.params ? JSON.parse(novelConfig.params) : undefined,
+      }
     }
   }
 
@@ -145,6 +150,7 @@ export async function resolveConfig(
     .get()
 
   if (globalConfig) {
+    console.log(`[resolveConfig] Found global config for ${stage}: provider=${globalConfig.provider}, model=${globalConfig.modelId}`)
     return {
       provider: globalConfig.provider as ProviderType,
       modelId: globalConfig.modelId,
@@ -154,7 +160,8 @@ export async function resolveConfig(
     }
   }
 
-  // 3. Fallback 默认配置
+  // 3. 未找到配置，抛出详细错误
+  console.error(`[resolveConfig] No config found for stage=${stage}, novelId=${novelId || '(none)'}`)
   throw new Error(`No model config found for stage: ${stage}`)
 }
 

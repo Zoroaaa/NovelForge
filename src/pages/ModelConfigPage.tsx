@@ -192,7 +192,6 @@ export default function ModelConfigPage() {
         setTestResult('success')
         toast.success('连接测试成功 ✓')
       } else {
-        const errText = await resp.text()
         setTestResult('error')
         toast.error(`连接失败: ${resp.status}`)
       }
@@ -538,27 +537,110 @@ export default function ModelConfigPage() {
         {/* 使用说明 */}
         <div className="bg-muted/30 rounded-xl p-5 space-y-4">
           <h4 className="font-medium text-sm flex items-center gap-2">
-            💡 配置指南
+            💡 配置指南与用途说明
           </h4>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div className="space-y-2">
-              <p className="font-medium text-xs uppercase tracking-wider text-muted-foreground">基本规则</p>
-              <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                <li>每个用途只能有一个<strong className="text-foreground">激活的</strong>配置</li>
-                <li>小说级配置优先于全局配置</li>
-                <li>未配置用途将使用默认模型</li>
-              </ul>
+
+          {/* 全局专用用途 */}
+          <div className="space-y-2">
+            <p className="font-medium text-xs uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1">
+              <Globe className="w-3 h-3" />
+              全局专用用途（仅在全局配置中可用）
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-purple-100 dark:border-purple-900">
+                <div className="flex items-center gap-2 mb-1">
+                  <MessageSquare className="w-4 h-4 text-purple-500" />
+                  <span className="font-semibold">创作工坊 (workshop)</span>
+                </div>
+                <p className="text-xs text-muted-foreground">AI创作助手对话 · 创意工坊页面的对话式创作引擎</p>
+                <p className="text-xs text-muted-foreground mt-1">📍 调用位置：/workshop 页面</p>
+              </div>
             </div>
-            
-            <div className="space-y-2">
-              <p className="font-medium text-xs uppercase tracking-wider text-muted-foreground">推荐配置</p>
-              <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                <li><strong className="text-foreground">章节生成</strong>: GPT-4o / Claude 3.5</li>
-                <li><strong className="text-foreground">大纲规划</strong>: GPT-4o / DeepSeek</li>
-                <li><strong className="text-foreground">创作工坊</strong>: Claude 3 / GPT-4</li>
-              </ul>
+          </div>
+
+          {/* 小说工作台 + 全局通用用途 */}
+          <div className="space-y-2">
+            <p className="font-medium text-xs uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1">
+              <FileText className="w-3 h-3" />
+              通用用途（可在全局或小说工作台中配置）
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-blue-100 dark:border-blue-900">
+                <div className="flex items-center gap-2 mb-1">
+                  <FileText className="w-4 h-4 text-blue-500" />
+                  <span className="font-semibold">章节生成 (chapter_gen)</span>
+                </div>
+                <p className="text-xs text-muted-foreground">生成小说章节正文内容</p>
+                <p className="text-xs text-muted-foreground mt-1">📍 小说工作台 → 章节编辑</p>
+              </div>
+
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-blue-100 dark:border-blue-900">
+                <div className="flex items-center gap-2 mb-1">
+                  <Layers className="w-4 h-4 text-blue-500" />
+                  <span className="font-semibold">大纲生成 (outline_gen)</span>
+                </div>
+                <p className="text-xs text-muted-foreground">生成卷纲、章节大纲</p>
+                <p className="text-xs text-muted-foreground mt-1">📍 小说工作台 → 大纲管理</p>
+              </div>
+
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-blue-100 dark:border-blue-900">
+                <div className="flex items-center gap-2 mb-1">
+                  <FileText className="w-4 h-4 text-blue-500" />
+                  <span className="font-semibold">摘要生成 (summary_gen)</span>
+                </div>
+                <p className="text-xs text-muted-foreground">生成章节摘要、总览</p>
+                <p className="text-xs text-muted-foreground mt-1">📍 小说工作台 → 章节列表</p>
+              </div>
+
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-blue-100 dark:border-blue-900">
+                <div className="flex items-center gap-2 mb-1">
+                  <Brain className="w-4 h-4 text-blue-500" />
+                  <span className="font-semibold">文本嵌入 (embedding)</span>
+                </div>
+                <p className="text-xs text-muted-foreground">向量嵌入、语义搜索</p>
+                <p className="text-xs text-muted-foreground mt-1">📍 全局搜索、知识库</p>
+              </div>
+
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-blue-100 dark:border-blue-900">
+                <div className="flex items-center gap-2 mb-1">
+                  <Eye className="w-4 h-4 text-blue-500" />
+                  <span className="font-semibold">视觉理解 (vision)</span>
+                </div>
+                <p className="text-xs text-muted-foreground">图片分析、OCR识别</p>
+                <p className="text-xs text-muted-foreground mt-1">📍 图片上传处理</p>
+              </div>
+
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-blue-100 dark:border-blue-900">
+                <div className="flex items-center gap-2 mb-1">
+                  <Cpu className="w-4 h-4 text-blue-500" />
+                  <span className="font-semibold">智能分析 (analysis)</span>
+                </div>
+                <p className="text-xs text-muted-foreground">一致性检查、伏笔检测等</p>
+                <p className="text-xs text-muted-foreground mt-1">📍 质量检查工具</p>
+              </div>
             </div>
+          </div>
+
+          {/* 基本规则 */}
+          <div className="space-y-2 pt-2 border-t">
+            <p className="font-medium text-xs uppercase tracking-wider text-muted-foreground">基本规则</p>
+            <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+              <li>每个用途只能有一个<strong className="text-foreground">激活的</strong>配置</li>
+              <li><strong className="text-foreground">小说级配置优先于全局配置</strong>：如果在小说工作台为某用途配置了模型，将优先使用该配置</li>
+              <li>未配置用途时，对应功能将无法使用并提示错误</li>
+              <li><strong className="text-purple-600">创作工坊(workshop)</strong> 仅限全局配置，不可在小说工作台中设置</li>
+            </ul>
+          </div>
+
+          {/* 推荐配置 */}
+          <div className="space-y-2 pt-2 border-t">
+            <p className="font-medium text-xs uppercase tracking-wider text-muted-foreground">推荐配置方案</p>
+            <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+              <li><strong className="text-foreground">章节生成</strong>: GPT-4o / Claude 3.5 Sonnet / DeepSeek-V3（需要较强的创意写作能力）</li>
+              <li><strong className="text-foreground">大纲规划</strong>: GPT-4o / Claude 3 / DeepSeek（需要结构化思维）</li>
+              <li><strong className="text-foreground">创作工坊</strong>: Claude 3.5 / GPT-4o（需要长对话和多轮交互能力）</li>
+              <li><strong className="text-foreground">智能分析</strong>: GPT-4o / Claude 3（需要逻辑推理能力）</li>
+            </ul>
           </div>
         </div>
       </div>

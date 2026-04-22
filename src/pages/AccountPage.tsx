@@ -184,6 +184,9 @@ export default function AccountPage() {
 
   const isAdmin = user.role === 'admin'
 
+  // 调试日志（生产环境可移除）
+  console.log('[AccountPage] User info:', { id: user.id, username: user.username, role: user.role, isAdmin })
+
   // 顶栏右侧操作（角色徽章 + 退出登录）
   const headerActions = (
     <div className="flex items-center gap-3">

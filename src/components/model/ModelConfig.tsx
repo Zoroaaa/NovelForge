@@ -123,7 +123,7 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
     if (!modelId) return
 
     const data = {
-      stage: stage as 'outline_gen' | 'chapter_gen' | 'summary_gen' | 'embedding' | 'vision' | 'analysis' | 'workshop',
+      stage: stage as 'outline_gen' | 'chapter_gen' | 'summary_gen' | 'embedding' | 'vision' | 'analysis',
       provider,
       modelId,
       scope: (novelId ? 'novel' : 'global') as 'global' | 'novel',
@@ -188,8 +188,10 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
     'embedding': '文本嵌入',
     'vision': '视觉理解',
     'analysis': '智能分析',
-    'workshop': '创作工坊',
   }
+
+  // 小说工作台可用的用途列表（排除全局用途：workshop）
+  const novelStageOptions = Object.entries(stageLabels).map(([k, v]) => ({ value: k, label: v }))
 
   if (isLoading) return <div className="animate-pulse space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-20 bg-muted rounded-lg" />)}</div>
 
@@ -231,8 +233,8 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
                   <Select value={stage} onValueChange={setStage}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {Object.entries(stageLabels).map(([k, v]) => (
-                        <SelectItem key={k} value={k}>{v}</SelectItem>
+                      {novelStageOptions.map(({ value, label }) => (
+                        <SelectItem key={value} value={value}>{label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -353,13 +355,16 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
           <li>小说级配置优先于全局配置</li>
           <li>激活的配置会被用于对应的生成任务</li>
         </ul>
-        {!novelId && (
+        {novelId && (
           <>
-            <p className="font-medium mt-2 mb-1">📌 全局配置用途说明：</p>
+            <p className="font-medium mt-2 mb-1">📖 小说工作台可用用途：</p>
             <ul className="list-disc list-inside space-y-0.5">
-              <li><strong>智能分析(analysis)</strong>：一致性检查、境界检测、伏笔提取等分析任务</li>
-              <li><strong>创作工坊(workshop)</strong>：AI创作助手的对话生成</li>
-              <li><strong>其他用途</strong>：作为小说级配置的fallback默认值</li>
+              <li><strong>章节生成(chapter_gen)</strong>：生成小说章节正文内容</li>
+              <li><strong>大纲生成(outline_gen)</strong>：生成卷纲、章节大纲</li>
+              <li><strong>摘要生成(summary_gen)</strong>：生成章节摘要、总览</li>
+              <li><strong>文本嵌入(embedding)</strong>：向量嵌入、语义搜索</li>
+              <li><strong>视觉理解(vision)</strong>：图片分析、OCR识别</li>
+              <li><strong>智能分析(analysis)</strong>：一致性检查、伏笔检测等</li>
             </ul>
           </>
         )}

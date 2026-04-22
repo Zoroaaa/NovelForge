@@ -375,17 +375,35 @@ export async function processWorkshopMessage(
       })),
     ]
 
-    // 6. 获取模型配置（使用 'workshop' stage 或 fallback 到 'chapter_gen'）
+    // 6. 获取模型配置（优先使用 'workshop' stage，fallback 到 'chapter_gen'）
     let llmConfig
     try {
+      console.log('[workshop] Trying to get workshop model config...')
       llmConfig = await resolveConfig(env.DB as any, 'workshop', session.novelId || '')
       llmConfig.apiKey = llmConfig.apiKey || ''
-    } catch {
+      console.log('[workshop] Using workshop-specific model config')
+    } catch (workshopError) {
+      console.warn('[workshop] Workshop config not found, falling back to chapter_gen:', workshopError.message)
       try {
         llmConfig = await resolveConfig(env.DB as any, 'chapter_gen', session.novelId || '')
         llmConfig.apiKey = llmConfig.apiKey || ''
-      } catch (error) {
-        throw new Error(`❌ 未配置"创作工坊"模型！请在全局配置中设置 workshop 阶段的模型（用于AI创作助手对话）`)
+        console.log('[workshop] Using chapter_gen as fallback')
+      } catch (chapterError) {
+        console.error('[workshop] No suitable model config found:', {
+          workshopError: workshopError.message,
+          chapterError: chapterError.message,
+          novelId: session.novelId,
+          sessionId
+        })
+        throw new Error(
+          `❌ 未配置"创作工坊"模型！\n\n` +
+          `请在全局模型配置页面（/model-config）添加以下任一配置：\n` +
+          `1. 用途选择"创作工坊"(workshop) - 推荐\n` +
+          `2. 或用途选择"章节生成"(chapter_gen) 作为备选\n\n` +
+          `当前状态：\n` +
+          `- workshop 配置：${workshopError.message}\n` +
+          `- chapter_gen 配置：${chapterError.message}`
+        )
       }
     }
 
