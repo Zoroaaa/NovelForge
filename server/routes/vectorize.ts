@@ -193,33 +193,124 @@ router.get('/search', async (c) => {
 })
 
 /**
- * GET /status - 获取向量化服务状态
- * @description 检查Vectorize服务配置和运行状态
- * @returns {Object} { status: string, message: string, embeddingModel?: string, dimensions?: number }
+ * GET /status - 获取向量化服务状态（含完整诊断信息）
+ * @description 检查所有 bindings 配置和运行状态，用于排查 503 问题
+ * @returns {Object} { status, bindings, diagnostics, recommendations }
  */
 router.get('/status', async (c) => {
+  const diagnostics = {
+    timestamp: new Date().toISOString(),
+    environment: c.req.url.includes('pages.dev') ? 'preview' : 'production',
+    bindings: {} as Record<string, any>,
+    issues: [] as string[],
+    recommendations: [] as string[]
+  }
+
   try {
-    if (!c.env.VECTORIZE) {
-      return c.json({
-        status: 'not_configured',
-        message: 'Vectorize binding not configured in wrangler.toml',
-      })
+    // 检测 DB binding
+    diagnostics.bindings.DB = {
+      configured: !!c.env.DB,
+      type: c.env.DB ? 'D1Database' : 'undefined'
+    }
+    if (!c.env.DB) {
+      diagnostics.issues.push('DB (D1) binding 未配置')
     }
 
-    await embedText(c.env.AI, 'test')
+    // 检测 AI binding
+    diagnostics.bindings.AI = {
+      configured: !!c.env.AI,
+      type: c.env.AI ? 'Ai' : 'undefined'
+    }
+    if (!c.env.AI) {
+      diagnostics.issues.push('AI (Workers AI) binding 未配置')
+    }
 
-    return c.json({
-      status: 'ok',
-      message: 'Vectorize service is operational',
-      embeddingModel: '@cf/baai/bge-m3',
-      dimensions: 1024,
-    })
+    // 检测 VECTORIZE binding（关键！）
+    diagnostics.bindings.VECTORIZE = {
+      configured: !!c.env.VECTORIZE,
+      type: c.env.VECTORIZE ? c.env.VECTORIZE.constructor?.name || 'object' : 'undefined',
+      hasUpsert: typeof c.env.VECTORIZE?.upsert === 'function',
+      hasQuery: typeof c.env.VECTORIZE?.query === 'function',
+      hasDeleteByIds: typeof c.env.VECTORIZE?.deleteByIds === 'function'
+    }
+
+    if (!c.env.VECTORIZE) {
+      diagnostics.issues.push('❌ VECTORIZE binding 未配置或不可用（这是 503 的根本原因）')
+      diagnostics.recommendations.push(
+        '1. 在 Cloudflare Dashboard → Workers & Pages → novelforge → Settings → Bindings 中确认 VECTORIZE 绑定存在',
+        '2. 绑定后必须重新部署项目（Redeploy）才能生效',
+        '3. 检查 wrangler.toml 中的 [[vectorize]] 配置是否正确',
+        '4. 确认 Vectorize 索引 "novelforge-index" 已创建且未过期'
+      )
+
+      return c.json({
+        status: 'error',
+        code: 'VECTORIZE_UNAVAILABLE',
+        message: 'Vectorize 服务不可用（503）',
+        diagnostics,
+        quickFix: '请访问 Cloudflare Dashboard 确认绑定并重新部署'
+      }, 503)
+    }
+
+    // 测试 AI embedding
+    let aiWorking = false
+    try {
+      await embedText(c.env.AI, 'test')
+      aiWorking = true
+      diagnostics.bindings.AI.working = true
+    } catch (e) {
+      diagnostics.bindings.AI.working = false
+      diagnostics.bindings.AI.error = (e as Error).message
+      diagnostics.issues.push(`AI embedding 测试失败: ${(e as Error).message}`)
+    }
+
+    // 测试 Vectorize 基本操作
+    let vectorizeWorking = false
+    try {
+      const testVector = {
+        id: '__diagnostic_test__',
+        values: Array(1024).fill(0.1),
+        metadata: { test: true, ts: Date.now() }
+      }
+      await c.env.VECTORIZE.upsert([testVector])
+      await c.env.VECTORIZE.deleteByIds(['__diagnostic_test__'])
+      vectorizeWorking = true
+      diagnostics.bindings.VECTORIZE.working = true
+    } catch (e) {
+      diagnostics.bindings.VECTORIZE.working = false
+      diagnostics.bindings.VECTORIZE.error = (e as Error).message
+      diagnostics.issues.push(`Vectorize 操作测试失败: ${(e as Error).message}`)
+      diagnostics.recommendations.push(
+        'Vectorize binding 存在但无法执行操作，可能是：',
+        '- 索引已损坏或需要重建',
+        '- 权限不足',
+        '- 账户配额已用尽'
+      )
+    }
+
+    if (diagnostics.issues.length === 0 && aiWorking && vectorizeWorking) {
+      return c.json({
+        status: 'ok',
+        message: '✅ 所有服务正常运行',
+        diagnostics,
+        embeddingModel: '@cf/baai/bge-m3',
+        dimensions: 1024
+      })
+    } else {
+      return c.json({
+        status: 'warning',
+        message: `⚠️ 发现 ${diagnostics.issues.length} 个问题`,
+        diagnostics
+      })
+    }
   } catch (error) {
     return c.json({
       status: 'error',
-      message: 'Vectorize service check failed',
+      message: '诊断过程出错',
       error: (error as Error).message,
-    })
+      stack: (error as Error).stack,
+      diagnostics
+    }, 500)
   }
 })
 
