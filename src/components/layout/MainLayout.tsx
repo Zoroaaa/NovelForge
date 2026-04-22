@@ -19,6 +19,7 @@ import {
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
@@ -221,6 +222,7 @@ export function MainLayout({ children, headerActions, headerTitle, headerSubtitl
         </Button>
       </div>
     </div>
+    </TooltipProvider>
   )
 
   return (
@@ -336,5 +338,6 @@ export function MainLayout({ children, headerActions, headerTitle, headerSubtitl
         </main>
       </div>
     </div>
+    </TooltipProvider>
   )
 }
