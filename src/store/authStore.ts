@@ -71,7 +71,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   fetchUser: async () => {
     try {
-      const user = await api.auth.getMe()
+      const response = await api.auth.getMe()
+      const user = response.data
       set({ user, isAuthenticated: true })
     } catch {
       removeToken()

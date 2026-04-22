@@ -278,7 +278,7 @@ export const api = {
       req<{ success: boolean; data: { token: string; user: UserInfo } }>('/api/auth/register', { method: 'POST', body: j(body) }),
     
     getMe: () =>
-      req<UserInfo>('/api/auth/me'),
+      req<{ success: boolean; data: UserInfo }>('/api/auth/me'),
     
     changePassword: (body: { currentPassword: string; newPassword: string }) =>
       req<{ success: boolean; message: string }>('/api/auth/password', { method: 'PUT', body: j(body) }),

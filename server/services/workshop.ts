@@ -379,13 +379,13 @@ export async function processWorkshopMessage(
     let llmConfig
     try {
       console.log('[workshop] Trying to get workshop model config...')
-      llmConfig = await resolveConfig(env.DB as any, 'workshop', session.novelId || '')
+      llmConfig = await resolveConfig(drizzle(env.DB), 'workshop', session.novelId || '')
       llmConfig.apiKey = llmConfig.apiKey || ''
       console.log('[workshop] Using workshop-specific model config')
     } catch (workshopError) {
       console.warn('[workshop] Workshop config not found, falling back to chapter_gen:', workshopError.message)
       try {
-        llmConfig = await resolveConfig(env.DB as any, 'chapter_gen', session.novelId || '')
+        llmConfig = await resolveConfig(drizzle(env.DB), 'chapter_gen', session.novelId || '')
         llmConfig.apiKey = llmConfig.apiKey || ''
         console.log('[workshop] Using chapter_gen as fallback')
       } catch (chapterError) {
