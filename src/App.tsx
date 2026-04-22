@@ -27,6 +27,7 @@ const qc = new QueryClient({
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
+  const user = useAuthStore((state) => state.user)
   const checkAuth = useAuthStore((state) => state.checkAuth)
   const [isLoading, setIsLoading] = useState(true)
   const location = useLocation()
@@ -35,12 +36,14 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     const token = getToken()
     if (token && !isAuthenticated) {
       checkAuth().finally(() => setIsLoading(false))
+    } else if (token && isAuthenticated && !user) {
+      checkAuth().finally(() => setIsLoading(false))
     } else {
       setIsLoading(false)
     }
-  }, [])
+  }, [isAuthenticated, user])
 
-  if (isLoading) {
+  if (isLoading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="text-center space-y-4">
@@ -60,6 +63,20 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
+  const isLoading = useAuthStore((state) => state.isLoading)
+  const [hydrated, setHydrated] = useState(false)
+
+  useEffect(() => {
+    setHydrated(true)
+  }, [])
+
+  if (!hydrated || isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="w-8 h-8 border-4 border-purple-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
 
   if (isAuthenticated) {
     return <Navigate to="/novels" replace />
