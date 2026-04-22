@@ -68,16 +68,10 @@ export async function extractForeshadowingFromChapter(
     // 解析模型配置
     let extractConfig
     try {
-      extractConfig = await resolveConfig(db, 'summary_gen', novelId)
-      extractConfig.apiKey = extractConfig.apiKey || (env as any)[extractConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
-    } catch {
-      extractConfig = {
-        provider: 'volcengine',
-        modelId: 'doubao-lite-32k',
-        apiBase: 'https://ark.cn-beijing.volces.com/api/v3',
-        apiKey: (env as any).VOLCENGINE_API_KEY || '',
-        params: { temperature: 0.3, max_tokens: 2000 },
-      }
+      extractConfig = await resolveConfig(db, 'analysis', novelId)
+      extractConfig.apiKey = extractConfig.apiKey || ''
+    } catch (error) {
+      throw new Error(`❌ 未配置"智能分析"模型！请在全局配置中设置 analysis 阶段的模型（用于伏笔提取、境界检测等分析任务）`)
     }
 
     // 构建提示词

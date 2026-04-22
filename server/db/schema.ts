@@ -207,7 +207,6 @@ export const modelConfigs = sqliteTable('model_configs', {
   provider: text('provider').notNull(),
   modelId: text('model_id').notNull(),
   apiBase: text('api_base'),
-  apiKeyEnv: text('api_key_env'),
   apiKey: text('api_key'),
   params: text('params'),
   isActive: integer('is_active').notNull().default(1),
@@ -311,3 +310,50 @@ export const workshopSessions = sqliteTable('workshop_sessions', {
   index('idx_workshop_novel').on(table.novelId),
   index('idx_workshop_stage').on(table.stage),
 ])
+
+// ============================================================
+// 15. 用户表（认证系统）
+// ============================================================
+export const users = sqliteTable('users', {
+  id: id(),
+  username: text('username').notNull().unique(),
+  email: text('email').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  role: text('role').notNull().default('user'),
+  status: text('status').notNull().default('active'),
+  inviteCodeId: text('invite_code_id'),
+  lastLoginAt: integer('last_login_at'),
+  ...timestamps,
+  deletedAt: integer('deleted_at'),
+}, (table) => [
+  index('idx_users_username').on(table.username),
+  index('idx_users_email').on(table.email),
+  index('idx_users_status').on(table.status).where(sql`${table.deletedAt} IS NULL`),
+])
+
+// ============================================================
+// 16. 邀请码表
+// ============================================================
+export const inviteCodes = sqliteTable('invite_codes', {
+  id: id(),
+  code: text('code').notNull().unique(),
+  createdBy: text('created_by').notNull(),
+  maxUses: integer('max_uses').notNull().default(1),
+  usedCount: integer('used_count').notNull().default(0),
+  expiresAt: integer('expires_at'),
+  status: text('status').notNull().default('active'),
+  ...timestamps,
+}, (table) => [
+  index('idx_invite_codes_code').on(table.code),
+  index('idx_invite_codes_status').on(table.status),
+])
+
+// ============================================================
+// 17. 系统设置表
+// ============================================================
+export const systemSettings = sqliteTable('system_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  description: text('description'),
+  updatedAt: integer('updated_at').notNull().default(sql`(unixepoch())`),
+})

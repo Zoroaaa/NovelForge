@@ -9,7 +9,6 @@ import { useEffect, useRef, useState } from 'react'
 import { EditorRoot, EditorContent } from 'novel'
 import StarterKit from '@tiptap/starter-kit'
 import { useDebouncedCallback } from 'use-debounce'
-import type { Editor } from '@tiptap/react'
 import type { Chapter } from '@/lib/types'
 import { api } from '@/lib/api'
 import { htmlToMarkdown } from '@/lib/html-to-markdown'
@@ -46,7 +45,7 @@ export function ChapterEditor({ chapter, injectedContent, onContentInserted }: C
   }, 1500)
 
   // 直接持有 editor 实例，通过 onCreate 赋值，不依赖 useEditor() 的 re-render 时序
-  const editorRef = useRef<Editor | null>(null)
+  const editorRef = useRef<any>(null)
   // 存储在 editor ready 之前到达的内容
   const pendingContentRef = useRef<string | null>(null)
 
@@ -60,7 +59,7 @@ export function ChapterEditor({ chapter, injectedContent, onContentInserted }: C
   /**
    * 核心注入函数：向编辑器写入内容并触发保存
    */
-  const doInsert = (editor: Editor, content: string) => {
+  const doInsert = (editor: any, content: string) => {
     try {
       // 有已有内容时在末尾另起段落插入，空编辑器直接设置
       if (editor.getText().trim()) {
@@ -149,7 +148,7 @@ export function ChapterEditor({ chapter, injectedContent, onContentInserted }: C
           <EditorContent
             extensions={[StarterKit]}
             initialContent={chapter.content || '<p></p>' as any}
-            onCreate={({ editor: createdEditor }: { editor: Editor }) => {
+            onCreate={({ editor: createdEditor }: { editor: any }) => {
               // 编辑器实例就绪，存入 ref
               editorRef.current = createdEditor
               // 如果此前有待注入的内容，立即处理

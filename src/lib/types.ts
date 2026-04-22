@@ -79,11 +79,10 @@ export interface ModelConfig {
   id: string
   novelId: string | null
   scope: 'global' | 'novel'
-  stage: 'outline_gen' | 'chapter_gen' | 'summary_gen' | 'embedding' | 'vision'
+  stage: 'outline_gen' | 'chapter_gen' | 'summary_gen' | 'embedding' | 'vision' | 'analysis' | 'workshop'
   provider: string
   modelId: string
   apiBase: string | null
-  apiKeyEnv: string | null
   apiKey: string | null
   params: string | null
   isActive: number

@@ -1,12 +1,13 @@
 /**
  * @file index.ts
  * @description 后端服务入口文件，配置Hono应用、认证中间件和所有API路由
- * @version 2.1.0
- * @modified 2026-04-21 - P0修复：添加API Key认证中间件
+ * @version 3.0.0
+ * @modified 2026-04-22 - 添加用户认证系统（JWT + 邀请码）
  */
 import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 import type { Env } from './lib/types'
-import { authMiddleware } from './lib/auth'
+import { authMiddleware, jwtAuthMiddleware, adminAuthMiddleware } from './lib/auth'
 
 import { novels } from './routes/novels'
 import { volumes } from './routes/volumes'
@@ -26,34 +27,65 @@ import { foreshadowing } from './routes/foreshadowing'
 import { entityIndexRouter } from './routes/entity-index'
 import { workshop } from './routes/workshop'
 
+import authRouter from './routes/auth'
+import inviteCodesRouter from './routes/invite-codes'
+import systemSettingsRouter from './routes/system-settings'
+import setupRouter from './routes/setup'
+
 const app = new Hono<{ Bindings: Env }>().basePath('/api')
 
-app.get('/health', (c) => c.json({ status: 'ok', version: '2.1' }))
+app.use('*', cors())
+app.get('/health', (c) => c.json({ status: 'ok', version: '3.0' }))
 
-const api = new Hono<{ Bindings: Env }>()
+const publicApi = new Hono<{ Bindings: Env }>()
 
-api.use('*', async (c, next) => {
+publicApi.use('*', async (c, next) => {
   return authMiddleware(c.env.API_KEY)(c, next)
 })
 
-api.route('/novels', novels)
-api.route('/chapters', chapters)
-api.route('/volumes', volumes)
-api.route('/characters', characters)
-api.route('/settings', novelSettingsRouter)
-api.route('/rules', writingRulesRouter)
-api.route('/master-outline', masterOutlineRouter)
-api.route('/generate', generate)
-api.route('/foreshadowing', foreshadowing)
-api.route('/entities', entityIndexRouter)
-api.route('/export', exportRouter)
-api.route('/search', search)
-api.route('/vectorize', vectorize)
-api.route('/config', settings)
-api.route('/workshop', workshop)
+publicApi.route('/auth/login', authRouter)
+publicApi.route('/auth/register', authRouter)
+publicApi.route('/setup', setupRouter)
 
-app.route('/', api)
+app.route('/', publicApi)
 
-app.route('/mcp', mcp)
+const protectedApi = new Hono<{ Bindings: Env }>()
+
+protectedApi.use('*', jwtAuthMiddleware())
+
+protectedApi.route('/auth', authRouter)
+protectedApi.route('/invite-codes', inviteCodesRouter)
+protectedApi.route('/system-settings', systemSettingsRouter)
+
+protectedApi.route('/novels', novels)
+protectedApi.route('/chapters', chapters)
+protectedApi.route('/volumes', volumes)
+protectedApi.route('/characters', characters)
+protectedApi.route('/settings', novelSettingsRouter)
+protectedApi.route('/rules', writingRulesRouter)
+protectedApi.route('/master-outline', masterOutlineRouter)
+protectedApi.route('/generate', generate)
+protectedApi.route('/foreshadowing', foreshadowing)
+protectedApi.route('/entities', entityIndexRouter)
+protectedApi.route('/export', exportRouter)
+protectedApi.route('/search', search)
+protectedApi.route('/vectorize', vectorize)
+protectedApi.route('/config', settings)
+protectedApi.route('/workshop', workshop)
+
+app.route('/', protectedApi)
+
+const adminApi = new Hono<{ Bindings: Env }>()
+
+adminApi.use('*', adminAuthMiddleware())
+adminApi.route('/system-settings', systemSettingsRouter)
+
+app.route('/', adminApi)
+
+const mcpApi = new Hono<{ Bindings: Env }>()
+mcpApi.use('*', jwtAuthMiddleware())
+mcpApi.route('/', mcp)
+
+app.route('/', mcpApi)
 
 export { app }

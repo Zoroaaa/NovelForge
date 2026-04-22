@@ -101,16 +101,10 @@ export async function detectPowerLevelBreakthrough(
     // 解析模型配置
     let detectionConfig
     try {
-      detectionConfig = await resolveConfig(db, 'summary_gen', novelId)
-      detectionConfig.apiKey = detectionConfig.apiKey || (env as any)[detectionConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
-    } catch {
-      detectionConfig = {
-        provider: 'volcengine',
-        modelId: 'doubao-lite-32k',
-        apiBase: 'https://ark.cn-beijing.volces.com/api/v3',
-        apiKey: (env as any).VOLCENGINE_API_KEY || '',
-        params: { temperature: 0.3, max_tokens: 2000 },
-      }
+      detectionConfig = await resolveConfig(db, 'analysis', novelId)
+      detectionConfig.apiKey = detectionConfig.apiKey || ''
+    } catch (error) {
+      throw new Error(`❌ 未配置"智能分析"模型！请在全局配置中设置 analysis 阶段的模型（用于境界检测、伏笔提取等分析任务）`)
     }
 
     // 构建提示词

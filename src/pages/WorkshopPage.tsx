@@ -1,12 +1,12 @@
 /**
  * @file WorkshopPage.tsx
- * @description 创作工坊页面 - 对话式创作引擎前端界面
- * @version 1.0.0
- * @created 2026-04-21 - Phase 3 对话式创作引擎
+ * @description 创作工坊页面 - 对话式创作引擎前端界面（v2.0）
+ * @version 2.0.0
+ * @modified 2026-04-22 - 集成MainLayout布局系统
  */
 import { useState, useRef, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { MainLayout } from '@/components/layout/MainLayout'
 import {
   MessageSquare,
   Send,
@@ -38,8 +39,6 @@ import {
   CheckCircle2,
   Loader2,
   Plus,
-  ArrowLeft,
-  RefreshCw,
 } from 'lucide-react'
 
 interface WorkshopMessage {
@@ -241,85 +240,84 @@ export default function WorkshopPage() {
     createSessionMutation.mutate()
   }
 
+  // 构建顶栏右侧操作区
+  const headerActions = (
+    <div className="flex items-center gap-3">
+      {/* 会话ID标识 */}
+      {sessionId && (
+        <Badge variant="secondary" className="text-xs hidden sm:inline-flex">
+          ID: {sessionId.slice(0, 8)}...
+        </Badge>
+      )}
+
+      {/* 阶段选择器 */}
+      {sessionId && (
+        <Select value={stage} onValueChange={handleStageChange}>
+          <SelectTrigger className="w-[140px] h-8 text-xs">
+            <SelectValue placeholder="选择阶段" />
+          </SelectTrigger>
+          <SelectContent>
+            {STAGES.map((s) => (
+              <SelectItem key={s.id} value={s.id}>
+                <span className="flex items-center gap-1.5">
+                  <s.icon className="h-3.5 w-3.5" />
+                  {s.label}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+
+      {/* 提交按钮 */}
+      {sessionId && Object.keys(extractedData).length > 0 && (
+        <Button size="sm" onClick={() => setShowCommitDialog(true)} className="gap-2">
+          <CheckCircle2 className="h-4 w-4" />
+          提交创建小说
+        </Button>
+      )}
+    </div>
+  )
+
   return (
-    <div className="h-screen flex flex-col bg-background">
-      {/* 顶部导航栏 */}
-      <header className="border-b px-6 py-3 flex items-center justify-between bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/novels')}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            返回小说列表
-          </Button>
-
-          <div className="h-4 w-px bg-border" />
-
-          <h1 className="text-lg font-semibold flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" />
-            创作工坊
-          </h1>
-
-          {sessionId && (
-            <Badge variant="secondary" className="text-xs">
-              会话 ID: {sessionId.slice(0, 8)}...
-            </Badge>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* 阶段选择器 */}
-          {sessionId && (
-            <Select value={stage} onValueChange={handleStageChange}>
-              <SelectTrigger className="w-[160px] h-8 text-xs">
-                <SelectValue placeholder="选择阶段" />
-              </SelectTrigger>
-              <SelectContent>
-                {STAGES.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    <span className="flex items-center gap-1.5">
-                      <s.icon className="h-3.5 w-3.5" />
-                      {s.label}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-
-          {/* 提交按钮 */}
-          {sessionId && Object.keys(extractedData).length > 0 && (
-            <Button size="sm" onClick={() => setShowCommitDialog(true)}>
-              <CheckCircle2 className="h-4 w-4 mr-2" />
-              提交并创建小说
-            </Button>
-          )}
-        </div>
-      </header>
-
-      {/* 主内容区 */}
-      <div className="flex-1 flex overflow-hidden">
+    <MainLayout
+      headerTitle="AI 创作工坊"
+      headerSubtitle={
+        sessionId 
+          ? `当前阶段：${STAGES.find(s => s.id === stage)?.label}`
+          : '通过多轮对话生成完整的小说框架'
+      }
+      headerActions={headerActions}
+    >
+      {/* 主内容区域 */}
+      <div className="h-[calc(100vh-8rem)] flex overflow-hidden rounded-lg border bg-background shadow-sm mx-6 mb-6">
         {/* 左侧：对话区域 */}
         <div className="flex-1 flex flex-col border-r max-w-[65%]">
           {!sessionId ? (
             /* 开始界面 */
             <div className="flex-1 flex items-center justify-center p-8">
               <div className="text-center space-y-6 max-w-md">
-                <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                  <MessageSquare className="h-8 w-8 text-primary" />
+                <div className="mx-auto w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 via-purple-500/10 to-pink-500/20 flex items-center justify-center shadow-lg">
+                  <MessageSquare className="h-10 w-10 text-primary" />
                 </div>
 
                 <div className="space-y-2">
                   <h2 className="text-2xl font-bold">AI 创作助手</h2>
-                  <p className="text-muted-foreground">
-                    通过多轮对话，帮我整理你的创意，生成完整的小说框架。
+                  <p className="text-muted-foreground leading-relaxed">
+                    通过多轮对话，帮我整理你的创意，<br />生成完整的小说框架。
                   </p>
                 </div>
 
                 <div className="space-y-3 pt-4">
-                  <p className="text-sm font-medium text-left">当前阶段：</p>
+                  <p className="text-sm font-medium text-left text-muted-foreground">创作流程：</p>
                   {STAGES.map((s, idx) => (
-                    <div key={s.id} className={`flex items-start gap-3 p-3 rounded-lg border ${idx === 0 ? 'bg-primary/5 border-primary/20' : ''}`}>
-                      <s.icon className={`h-5 w-5 mt-0.5 ${idx === 0 ? 'text-primary' : 'text-muted-foreground'}`} />
-                      <div className="text-left">
+                    <div key={s.id} className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${
+                      idx === 0 
+                        ? 'bg-primary/5 border-primary/30 shadow-sm' 
+                        : 'bg-muted/30 border-transparent hover:border-border'
+                    }`}>
+                      <s.icon className={`h-5 w-5 mt-0.5 shrink-0 ${idx === 0 ? 'text-primary' : 'text-muted-foreground'}`} />
+                      <div className="text-left min-w-0">
                         <p className="font-medium text-sm">{s.label}</p>
                         <p className="text-xs text-muted-foreground">{s.description}</p>
                       </div>
@@ -331,12 +329,12 @@ export default function WorkshopPage() {
                   size="lg"
                   onClick={startNewSession}
                   disabled={createSessionMutation.isPending}
-                  className="w-full"
+                  className="w-full mt-4"
                 >
                   {createSessionMutation.isPending ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      正在创建...
+                      正在创建会话...
                     </>
                   ) : (
                     <>
@@ -386,7 +384,7 @@ export default function WorkshopPage() {
               </ScrollArea>
 
               {/* 输入区域 */}
-              <div className="border-t p-4 bg-background">
+              <div className="border-t p-4 bg-background/50 backdrop-blur-sm">
                 <div className="max-w-3xl mx-auto flex gap-3">
                   <Input
                     ref={inputRef}
@@ -399,12 +397,13 @@ export default function WorkshopPage() {
                         : STAGES.find(s => s.id === stage)?.description || '输入你的想法...'
                     }
                     disabled={isGenerating}
-                    className="flex-1"
+                    className="flex-1 h-10"
                   />
                   <Button
                     onClick={sendMessage}
                     disabled={!inputValue.trim() || isGenerating}
                     size="icon"
+                    className="h-10 w-10"
                   >
                     {isGenerating ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -578,7 +577,7 @@ export default function WorkshopPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </MainLayout>
   )
 }
 

@@ -1,8 +1,8 @@
 /**
  * @file api.ts
  * @description API客户端模块，封装所有后端API调用，提供类型安全的请求方法
- * @version 1.0.0
- * @modified 2026-04-21 - 添加规范化注释
+ * @version 2.0.0
+ * @modified 2026-04-22 - 添加用户认证系统
  */
 import type {
   Novel, Volume, Chapter, Character, SortItem,
@@ -10,15 +10,20 @@ import type {
   MasterOutline, WritingRule, NovelSetting, ForeshadowingItem
 } from './types'
 
-/**
- * 通用请求函数
- * @description 封装fetch请求，统一处理响应和错误，支持超时控制和请求取消
- * @template T - 响应数据类型
- * @param {string} path - API路径
- * @param {RequestInit & { timeout?: number; signal?: AbortSignal }} [init] - fetch初始化选项，支持自定义超时时间和取消信号
- * @returns {Promise<T>} 响应数据
- * @throws {Error} 请求失败或超时时抛出错误
- */
+const TOKEN_KEY = 'auth_token'
+
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+export function setToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token)
+}
+
+export function removeToken(): void {
+  localStorage.removeItem(TOKEN_KEY)
+}
+
 async function req<T>(
   path: string,
   init?: RequestInit & { timeout?: number; signal?: AbortSignal }
@@ -28,12 +33,26 @@ async function req<T>(
 
   const timer = setTimeout(() => controller.abort(), timeout)
 
+  const token = getToken()
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
   try {
     const res = await fetch(path, {
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       signal: init?.signal || controller.signal,
       ...init,
     })
+    
+    if (res.status === 401) {
+      removeToken()
+      window.location.href = '/login'
+      throw new Error('未授权，请重新登录')
+    }
+    
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }))
       throw new Error((err as any).error ?? res.statusText)
@@ -242,5 +261,83 @@ export const api = {
         volumeOutlinePreview?: string
         error?: string
       }>('/api/generate/outline-batch', { method: 'POST', body: j(body) }),
-  }
+  },
+
+  // 认证系统API
+  auth: {
+    login: (body: { username: string; password: string }) =>
+      req<{ success: boolean; data: { token: string; user: UserInfo } }>('/api/auth/login', { method: 'POST', body: j(body) }),
+    
+    register: (body: { username: string; email: string; password: string; inviteCode?: string }) =>
+      req<{ success: boolean; data: { token: string; user: UserInfo } }>('/api/auth/register', { method: 'POST', body: j(body) }),
+    
+    getMe: () =>
+      req<UserInfo>('/api/auth/me'),
+    
+    changePassword: (body: { currentPassword: string; newPassword: string }) =>
+      req<{ success: boolean; message: string }>('/api/auth/password', { method: 'PUT', body: j(body) }),
+    
+    deleteAccount: () =>
+      req<{ success: boolean; message: string }>('/api/auth/account', { method: 'DELETE' }),
+  },
+
+  // 邀请码管理API（管理员）
+  inviteCodes: {
+    list: (params?: { page?: number; pageSize?: number; status?: string }) => {
+      const searchParams = params ? '?' + new URLSearchParams(params as any).toString() : ''
+      return req<{ success: boolean; data: { items: InviteCode[]; pagination: PaginationInfo } }>(`/api/invite-codes${searchParams}`)
+    },
+    create: (body: { maxUses?: number; expiresInDays?: number }) =>
+      req<InviteCode>('/api/invite-codes', { method: 'POST', body: j(body) }),
+    updateStatus: (id: string, status: string) =>
+      req<{ success: boolean; message: string }>(`/api/invite-codes/${id}/status`, { method: 'PATCH', body: j({ status }) }),
+    delete: (id: string) =>
+      req<{ success: boolean; message: string }>(`/api/invite-codes/${id}`, { method: 'DELETE' }),
+  },
+
+  // 系统设置API（管理员）
+  systemSettings: {
+    getRegistrationStatus: () =>
+      req<{ success: boolean; data: { registrationEnabled: boolean } }>('/api/system-settings/registration'),
+    updateRegistrationStatus: (enabled: boolean) =>
+      req<{ success: boolean; data: { registrationEnabled: boolean }; message: string }>('/api/system-settings/registration', { method: 'PUT', body: j({ enabled }) }),
+  },
+
+  // 系统初始化API（首次部署）
+  setup: {
+    checkStatus: () =>
+      req<{ success: boolean; data: { initialized: boolean; adminExists: boolean } }>('/api/setup/status'),
+    initialize: (body: { username: string; email: string; password: string }) =>
+      req<{ success: boolean; data: { token: string; user: UserInfo }; message: string }>('/api/setup', { method: 'POST', body: j(body) }),
+  },
+}
+
+export interface UserInfo {
+  id: string
+  username: string
+  email: string
+  role: string
+  status: string
+  created_at: number
+  last_login_at: number | null
+}
+
+export interface InviteCode {
+  id: string
+  code: string
+  created_by: string
+  max_uses: number
+  used_count: number
+  expires_at: number | null
+  status: string
+  created_at: number
+  updated_at: number
+  created_by_username?: string
+}
+
+export interface PaginationInfo {
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
 }

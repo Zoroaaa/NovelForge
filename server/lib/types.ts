@@ -13,4 +13,19 @@ export type Env = {
   ANTHROPIC_API_KEY: string
   OPENAI_API_KEY: string
   API_KEY?: string
+  JWT_SECRET?: string
+}
+
+export type UserPayload = {
+  userId: string
+  username: string
+  email?: string
+  role: string
+}
+
+export type AppType = {
+  Bindings: Env
+  Variables: {
+    user: UserPayload
+  }
 }

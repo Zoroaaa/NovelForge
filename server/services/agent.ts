@@ -158,16 +158,9 @@ export async function generateChapter(
     let llmConfig
     try {
       llmConfig = await resolveConfig(db, 'chapter_gen', novelId)
-      llmConfig.apiKey = llmConfig.apiKey || (env as any)[llmConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
+      llmConfig.apiKey = llmConfig.apiKey || ''
     } catch (error) {
-      console.warn('No model config found, using fallback')
-      llmConfig = {
-        provider: 'volcengine',
-        modelId: 'doubao-seed-2-pro',
-        apiBase: 'https://ark.cn-beijing.volces.com/api/v3',
-        apiKey: (env as any).VOLCENGINE_API_KEY || '',
-        params: { temperature: 0.85, max_tokens: 4096 },
-      }
+      throw new Error(`❌ 未配置"章节生成"模型！请在小说工作台或全局配置中设置 chapter_gen 阶段的模型（提供商 + 模型ID + API Key）`)
     }
 
     // 4. 组装初始消息
@@ -700,17 +693,9 @@ export async function triggerAutoSummary(
     let summaryConfig
     try {
       summaryConfig = await resolveConfig(db, 'summary_gen', novelId)
-      summaryConfig.apiKey =
-        summaryConfig.apiKey || (env as any)[summaryConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
-    } catch {
-      // 使用默认配置
-      summaryConfig = {
-        provider: 'volcengine',
-        modelId: 'doubao-lite-32k',
-        apiBase: 'https://ark.cn-beijing.volces.com/api/v3',
-        apiKey: (env as any).VOLCENGINE_API_KEY || '',
-        params: { temperature: 0.3, max_tokens: 500 },
-      }
+      summaryConfig.apiKey = summaryConfig.apiKey || ''
+    } catch (error) {
+      throw new Error(`❌ 未配置"摘要生成"模型！请在小说工作台或全局配置中设置 summary_gen 阶段的模型（提供商 + 模型ID + API Key）`)
     }
 
     // 截取前2000字符用于摘要（避免超长输入）
@@ -1281,16 +1266,10 @@ ${chapter.content.slice(0, 10000)}
 
   let summaryConfig
   try {
-    summaryConfig = await resolveConfig(db, 'summary_gen', chapter.novelId)
-    summaryConfig.apiKey = summaryConfig.apiKey || (env as any)[summaryConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
-  } catch {
-    summaryConfig = {
-      provider: 'volcengine',
-      modelId: 'doubao-lite-32k',
-      apiBase: 'https://ark.cn-beijing.volces.com/api/v3',
-      apiKey: (env as any).VOLCENGINE_API_KEY || '',
-      params: { temperature: 0.3, max_tokens: 1000 },
-    }
+    summaryConfig = await resolveConfig(db, 'analysis', chapter.novelId)
+    summaryConfig.apiKey = summaryConfig.apiKey || ''
+  } catch (error) {
+    throw new Error(`❌ 未配置"智能分析"模型！请在全局配置中设置 analysis 阶段的模型（用于一致性检查、境界检测、伏笔提取等分析任务）`)
   }
 
   const base = summaryConfig.apiBase || 'https://ark.cn-beijing.volces.com/api/v3'
@@ -1378,19 +1357,13 @@ export async function generateOutlineBatch(
     let llmConfig
     try {
       llmConfig = await resolveConfig(db, 'outline_gen', novelId)
-      llmConfig.apiKey = llmConfig.apiKey || (env as any)[llmConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
+      llmConfig.apiKey = llmConfig.apiKey || ''
     } catch {
       try {
         llmConfig = await resolveConfig(db, 'chapter_gen', novelId)
-        llmConfig.apiKey = llmConfig.apiKey || (env as any)[llmConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
-      } catch {
-        llmConfig = {
-          provider: 'volcengine',
-          modelId: 'doubao-seed-2-pro',
-          apiBase: 'https://ark.cn-beijing.volces.com/api/v3',
-          apiKey: (env as any).VOLCENGINE_API_KEY || '',
-          params: { temperature: 0.85, max_tokens: 4096 },
-        }
+        llmConfig.apiKey = llmConfig.apiKey || ''
+      } catch (error) {
+        throw new Error(`❌ 未配置"大纲生成"或"章节生成"模型！请在小说工作台或全局配置中设置 outline_gen 或 chapter_gen 阶段的模型`)
       }
     }
 

@@ -81,7 +81,6 @@ router.get('/', async (c) => {
  * @param {string} provider - 模型提供商
  * @param {string} modelId - 模型ID
  * @param {string} [apiBase] - API基础URL
- * @param {string} apiKeyEnv - API密钥环境变量名
  * @param {string} [apiKey] - API密钥（可选）
  * @param {string} [params] - 模型参数JSON
  * @returns {Object} 创建的配置对象

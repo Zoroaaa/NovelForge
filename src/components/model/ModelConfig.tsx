@@ -123,7 +123,7 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
     if (!modelId) return
 
     const data = {
-      stage: stage as 'outline_gen' | 'chapter_gen' | 'summary_gen' | 'embedding' | 'vision',
+      stage: stage as 'outline_gen' | 'chapter_gen' | 'summary_gen' | 'embedding' | 'vision' | 'analysis' | 'workshop',
       provider,
       modelId,
       scope: (novelId ? 'novel' : 'global') as 'global' | 'novel',
@@ -187,6 +187,8 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
     'summary_gen': '摘要生成',
     'embedding': '文本嵌入',
     'vision': '视觉理解',
+    'analysis': '智能分析',
+    'workshop': '创作工坊',
   }
 
   if (isLoading) return <div className="animate-pulse space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-20 bg-muted rounded-lg" />)}</div>
@@ -351,6 +353,16 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
           <li>小说级配置优先于全局配置</li>
           <li>激活的配置会被用于对应的生成任务</li>
         </ul>
+        {!novelId && (
+          <>
+            <p className="font-medium mt-2 mb-1">📌 全局配置用途说明：</p>
+            <ul className="list-disc list-inside space-y-0.5">
+              <li><strong>智能分析(analysis)</strong>：一致性检查、境界检测、伏笔提取等分析任务</li>
+              <li><strong>创作工坊(workshop)</strong>：AI创作助手的对话生成</li>
+              <li><strong>其他用途</strong>：作为小说级配置的fallback默认值</li>
+            </ul>
+          </>
+        )}
       </div>
     </div>
   )

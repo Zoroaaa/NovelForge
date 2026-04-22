@@ -378,9 +378,15 @@ export async function processWorkshopMessage(
     // 6. 获取模型配置（使用 'workshop' stage 或 fallback 到 'chapter_gen'）
     let llmConfig
     try {
-      llmConfig = await resolveConfig(env.DB as any, session.novelId || '', 'workshop')
+      llmConfig = await resolveConfig(env.DB as any, 'workshop', session.novelId || '')
+      llmConfig.apiKey = llmConfig.apiKey || ''
     } catch {
-      llmConfig = await resolveConfig(env.DB as any, session.novelId || '', 'chapter_gen')
+      try {
+        llmConfig = await resolveConfig(env.DB as any, 'chapter_gen', session.novelId || '')
+        llmConfig.apiKey = llmConfig.apiKey || ''
+      } catch (error) {
+        throw new Error(`❌ 未配置"创作工坊"模型！请在全局配置中设置 workshop 阶段的模型（用于AI创作助手对话）`)
+      }
     }
 
     // 7. 调用 LLM 流式生成

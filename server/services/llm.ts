@@ -30,7 +30,6 @@ export interface LLMConfig {
     presence_penalty?: number
     systemPromptOverride?: string
   }
-  apiKeyEnv?: string
 }
 
 export interface Message {
@@ -127,7 +126,6 @@ export async function resolveConfig(
       apiBase: novelConfig.apiBase || getDefaultBase(novelConfig.provider),
       apiKey: novelConfig.apiKey || '',
       params: novelConfig.params ? JSON.parse(novelConfig.params) : undefined,
-      apiKeyEnv: novelConfig.apiKeyEnv ?? undefined,
     }
   }
 
@@ -153,7 +151,6 @@ export async function resolveConfig(
       apiBase: globalConfig.apiBase || getDefaultBase(globalConfig.provider),
       apiKey: globalConfig.apiKey || '',
       params: globalConfig.params ? JSON.parse(globalConfig.params) : undefined,
-      apiKeyEnv: globalConfig.apiKeyEnv ?? undefined,
     }
   }
 
@@ -514,20 +511,9 @@ export async function generateOutline(
   let llmConfig
   try {
     llmConfig = await resolveConfig(db, 'outline_gen', novelId)
-    llmConfig.apiKey = llmConfig.apiKey || (env as any)[llmConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
+    llmConfig.apiKey = llmConfig.apiKey || ''
   } catch {
-    try {
-      llmConfig = await resolveConfig(db, 'chapter_gen', novelId)
-      llmConfig.apiKey = llmConfig.apiKey || (env as any)[llmConfig.apiKeyEnv || 'VOLCENGINE_API_KEY'] || ''
-    } catch {
-      llmConfig = {
-        provider: 'volcengine',
-        modelId: 'doubao-seed-2-pro',
-        apiBase: 'https://ark.cn-beijing.volces.com/api/v3',
-        apiKey: (env as any).VOLCENGINE_API_KEY || '',
-        params: { temperature: 0.85, max_tokens: 4096 },
-      }
-    }
+    throw new Error(`❌ 未配置"大纲生成"模型！请在小说工作台或全局配置中设置 outline_gen 阶段的模型（提供商 + 模型ID + API Key）`)
   }
 
   const typeLabels: Record<string, string> = {
