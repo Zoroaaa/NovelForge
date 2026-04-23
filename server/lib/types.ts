@@ -11,6 +11,7 @@ export type Env = {
   AI: Ai
   VECTORIZE?: VectorizeIndex
   TASK_QUEUE: Queue
+  ASSETS: Fetcher
   VOLCENGINE_API_KEY: string
   ANTHROPIC_API_KEY: string
   OPENAI_API_KEY: string

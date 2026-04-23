@@ -288,6 +288,12 @@ app.route('/', mcpApi)
 import { handleQueueBatch } from './queue-handler'
 
 export default {
-  fetch: app.fetch,
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const response = await app.fetch(request, env, ctx)
+    if (response.status === 404 && !request.url.includes('/api/')) {
+      return env.ASSETS.fetch(request)
+    }
+    return response
+  },
   queue: handleQueueBatch,
 }

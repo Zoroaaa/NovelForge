@@ -287,7 +287,7 @@ async function runReActLoop(
   onToolCall: (event: ToolCallEvent) => void,
   maxIterations: number
 ): Promise<{ promptTokens: number; completionTokens: number; collectedContent: string }> {
-  const ITERATION_TIMEOUT = 60000
+  const ITERATION_TIMEOUT = 180000
   const MAX_TOOL_RETRIES = 2
   const MAX_TOTAL_TIME = 300000
   const startTime = Date.now()
