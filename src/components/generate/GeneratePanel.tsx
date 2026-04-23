@@ -374,28 +374,9 @@ export function GeneratePanel({
         />
       )}
 
-      {status === 'done' && output && (
+      {/* 三个检查按钮 - 有内容时始终可见 */}
+      {hasContent && (
         <div className="space-y-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full gap-2"
-            onClick={handleInsert}
-            disabled={isInserting}
-          >
-            {isInserting ? (
-              <>
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                写入中...
-              </>
-            ) : (
-              <>
-                <PenLine className="h-4 w-4" />
-                写入编辑器
-              </>
-            )}
-          </Button>
-
           {/* 最新检查日志显示 */}
           {latestCheckLog && (
             <div className="p-3 bg-muted/30 rounded-lg border space-y-2">
@@ -582,6 +563,30 @@ export function GeneratePanel({
               }}
             />
           )}
+        </div>
+      )}
+
+      {status === 'done' && output && (
+        <div className="space-y-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full gap-2"
+            onClick={handleInsert}
+            disabled={isInserting}
+          >
+            {isInserting ? (
+              <>
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                写入中...
+              </>
+            ) : (
+              <>
+                <PenLine className="h-4 w-4" />
+                写入编辑器
+              </>
+            )}
+          </Button>
 
           {contextInfo?.debug && (
             <div className="text-[10px] text-center text-muted-foreground p-2 bg-green-50 dark:bg-green-950 rounded border border-green-200 dark:border-green-800">
