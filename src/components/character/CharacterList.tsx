@@ -176,7 +176,7 @@ export function CharacterList({ novelId }: CharacterListProps) {
               添加角色
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingId ? '编辑角色' : '添加新角色'}</DialogTitle>
             </DialogHeader>

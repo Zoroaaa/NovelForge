@@ -8,8 +8,8 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../lib/types'
-import { 
-  generateChapter, 
+import {
+  generateChapter,
   type ToolCallEvent,
   triggerAutoSummary,
   logGeneration,
@@ -23,6 +23,7 @@ import {
   confirmBatchChapterCreation,
   generateNextChapter,
 } from '../services/agent'
+import { saveCheckLog, getLatestCheckLog, getCheckLogHistory } from '../services/agent/checkLogService'
 import { buildChapterContext } from '../services/contextBuilder'
 import { generateOutline } from '../services/llm'
 
@@ -236,14 +237,39 @@ router.get('/logs', zValidator('query', z.object({
 router.post('/check', zValidator('json', z.object({
   chapterId: z.string().min(1),
   characterIds: z.array(z.string()).optional().default([]),
+  novelId: z.string().min(1).optional(),
 })), async (c) => {
-  const { chapterId, characterIds } = c.req.valid('json')
+  const { chapterId, characterIds, novelId } = c.req.valid('json')
 
   try {
     const result = await checkCharacterConsistency(c.env, { chapterId, characterIds })
+
+    if (novelId) {
+      await saveCheckLog(c.env, {
+        novelId,
+        chapterId,
+        checkType: 'character_consistency',
+        score: result.conflicts?.length > 0 ? Math.max(0, 100 - result.conflicts.length * 20) : 100,
+        status: 'success',
+        characterResult: result,
+        issuesCount: (result.conflicts?.length || 0) + (result.warnings?.length || 0),
+      })
+    }
+
     return c.json(result)
   } catch (error) {
     console.error('Character check failed:', error)
+
+    if (novelId) {
+      await saveCheckLog(c.env, {
+        novelId,
+        chapterId,
+        checkType: 'character_consistency',
+        status: 'error',
+        errorMessage: (error as Error).message,
+      })
+    }
+
     return c.json(
       { error: 'Check failed', details: (error as Error).message },
       500
@@ -457,13 +483,159 @@ router.post('/coherence-check', zValidator('json', z.object({
 
   try {
     const result = await checkChapterCoherence(c.env, chapterId, novelId)
+
+    await saveCheckLog(c.env, {
+      novelId,
+      chapterId,
+      checkType: 'chapter_coherence',
+      score: result.score,
+      status: 'success',
+      coherenceResult: result,
+      issuesCount: result.issues?.length || 0,
+    })
+
     return c.json({
       score: result.score,
       issues: result.issues,
     })
   } catch (error) {
+    console.error('Coherence check failed:', error)
+
+    await saveCheckLog(c.env, {
+      novelId,
+      chapterId,
+      checkType: 'chapter_coherence',
+      status: 'error',
+      errorMessage: (error as Error).message,
+    })
+
     return c.json(
       { error: '一致性检查失败', details: (error as Error).message },
+      500
+    )
+  }
+})
+
+/**
+ * POST /combined-check - 组合检查（角色一致性 + 章节连贯性）
+ * @description 同时执行角色一致性检查和章节连贯性检查
+ * @param {string} chapterId - 章节ID
+ * @param {string} novelId - 小说ID
+ * @param {string[]} [characterIds] - 可选的角色ID列表
+ * @returns {Object} 组合检查结果，包含两个检查的结果和综合评分
+ * @throws {500} 检查失败
+ */
+router.post('/combined-check', zValidator('json', z.object({
+  chapterId: z.string().min(1),
+  novelId: z.string().min(1),
+  characterIds: z.array(z.string()).optional().default([]),
+})), async (c) => {
+  const { chapterId, novelId, characterIds } = c.req.valid('json')
+
+  try {
+    const [characterResult, coherenceResult] = await Promise.all([
+      checkCharacterConsistency(c.env, { chapterId, characterIds }),
+      checkChapterCoherence(c.env, chapterId, novelId),
+    ])
+
+    const characterScore = characterResult.conflicts?.length > 0
+      ? Math.max(0, 100 - characterResult.conflicts.length * 20)
+      : 100
+
+    const combinedScore = Math.round((characterScore + coherenceResult.score) / 2)
+
+    await saveCheckLog(c.env, {
+      novelId,
+      chapterId,
+      checkType: 'combined',
+      score: combinedScore,
+      status: 'success',
+      characterResult: characterResult,
+      coherenceResult: coherenceResult,
+      issuesCount: (characterResult.conflicts?.length || 0) +
+                   (characterResult.warnings?.length || 0) +
+                   (coherenceResult.issues?.length || 0),
+    })
+
+    return c.json({
+      score: combinedScore,
+      characterCheck: characterResult,
+      coherenceCheck: {
+        score: coherenceResult.score,
+        issues: coherenceResult.issues,
+      },
+      hasIssues: characterResult.conflicts?.length > 0 || coherenceResult.hasIssues,
+    })
+  } catch (error) {
+    console.error('Combined check failed:', error)
+
+    await saveCheckLog(c.env, {
+      novelId,
+      chapterId,
+      checkType: 'combined',
+      status: 'error',
+      errorMessage: (error as Error).message,
+    })
+
+    return c.json(
+      { error: '组合检查失败', details: (error as Error).message },
+      500
+    )
+  }
+})
+
+/**
+ * GET /check-logs/latest - 获取最新检查日志
+ * @description 获取指定章节的最新检查记录
+ * @param {string} chapterId - 章节ID
+ * @param {string} [checkType] - 可选的检查类型过滤
+ * @returns {Object} 最新检查日志
+ */
+router.get('/check-logs/latest', zValidator('query', z.object({
+  chapterId: z.string().min(1),
+  checkType: z.string().optional(),
+})), async (c) => {
+  const { chapterId, checkType } = c.req.valid('query')
+
+  try {
+    const log = await getLatestCheckLog(c.env, chapterId, checkType)
+
+    if (!log) {
+      return c.json({ log: null })
+    }
+
+    return c.json({ log })
+  } catch (error) {
+    console.error('Get latest check log failed:', error)
+    return c.json(
+      { error: '获取检查日志失败', details: (error as Error).message },
+      500
+    )
+  }
+})
+
+/**
+ * GET /check-logs/history - 获取检查日志历史
+ * @description 获取指定章节的检查历史记录
+ * @param {string} chapterId - 章节ID
+ * @param {string} [checkType] - 可选的检查类型过滤
+ * @param {number} [limit=20] - 返回条数限制
+ * @returns {Object} 检查日志列表
+ */
+router.get('/check-logs/history', zValidator('query', z.object({
+  chapterId: z.string().min(1),
+  checkType: z.string().optional(),
+  limit: z.coerce.number().optional().default(20),
+})), async (c) => {
+  const { chapterId, checkType, limit } = c.req.valid('query')
+
+  try {
+    const logs = await getCheckLogHistory(c.env, chapterId, checkType, limit)
+    return c.json({ logs })
+  } catch (error) {
+    console.error('Get check logs history failed:', error)
+    return c.json(
+      { error: '获取检查日志历史失败', details: (error as Error).message },
       500
     )
   }

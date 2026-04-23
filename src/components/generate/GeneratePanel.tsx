@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Square, PenLine, Brain, Shield, RefreshCw, Play, Loader2 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Square, PenLine, Brain, Shield, RefreshCw, Play, Loader2, Link } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,6 +22,8 @@ import {
   type ContextBundle,
 } from './ContextPreview'
 import { CharacterConsistencyCheck } from './CharacterConsistencyCheck'
+import { ChapterCoherenceCheck } from './ChapterCoherenceCheck'
+import { CombinedCheck } from './CombinedCheck'
 
 interface GeneratePanelProps {
   novelId: string
@@ -58,6 +62,8 @@ export function GeneratePanel({
 }: GeneratePanelProps) {
   const { output, status, generate, stop, contextInfo, toolCalls, usage, repairedContent, repairInfo, clearRepair } = useGenerate()
   const [showConsistencyCheck, setShowConsistencyCheck] = useState(false)
+  const [showCoherenceCheck, setShowCoherenceCheck] = useState(false)
+  const [showCombinedCheck, setShowCombinedCheck] = useState(false)
   const [isInserting, setIsInserting] = useState(false)
   const [mode, setMode] = useState<GenerationMode>('generate')
   const [selectedText] = useState<string>('')
@@ -68,7 +74,44 @@ export function GeneratePanel({
   const [coherenceResult, setCoherenceResult] = useState<CoherenceCheckResult | null>(null)
   const [coherenceCheckFailed, setCoherenceCheckFailed] = useState(false)
 
+  const [latestCheckLog, setLatestCheckLog] = useState<any>(null)
+  const [showCheckHistory, setShowCheckHistory] = useState(false)
+  const [checkHistory, setCheckHistory] = useState<any[]>([])
+
   const hasContent = existingContent.trim().length > 0
+
+  const loadLatestCheckLog = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/generate/check-logs/latest?chapterId=${chapterId}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.log) {
+          setLatestCheckLog(data.log)
+        }
+      }
+    } catch (error) {
+      console.error('加载最新检查日志失败:', error)
+    }
+  }, [chapterId])
+
+  useEffect(() => {
+    if (chapterId) {
+      loadLatestCheckLog()
+    }
+  }, [chapterId, loadLatestCheckLog])
+
+  const loadCheckHistory = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/generate/check-logs/history?chapterId=${chapterId}&limit=20`)
+      if (res.ok) {
+        const data = await res.json()
+        setCheckHistory(data.logs || [])
+        setShowCheckHistory(true)
+      }
+    } catch (error) {
+      console.error('加载检查历史失败:', error)
+    }
+  }, [chapterId])
 
   const handleAcceptRepair = (content: string) => {
     onInsertContent(content)
@@ -340,18 +383,191 @@ export function GeneratePanel({
             )}
           </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full gap-2"
-            onClick={() => setShowConsistencyCheck(!showConsistencyCheck)}
-          >
-            <Shield className="h-4 w-4" />
-            角色一致性检查
-          </Button>
+          {/* 最新检查日志显示 */}
+          {latestCheckLog && (
+            <div className="p-3 bg-muted/30 rounded-lg border space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">最近检查记录</span>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[10px] px-2"
+                    onClick={() => setShowCheckHistory(!showCheckHistory)}
+                  >
+                    {showCheckHistory ? '收起历史' : '查看历史'}
+                  </Button>
+                  {(latestCheckLog.checkType === 'chapter_coherence' || latestCheckLog.checkType === 'combined') &&
+                   latestCheckLog.coherenceResult?.issues?.length > 0 && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700"
+                      onClick={() => {
+                        if (latestCheckLog.coherenceResult) {
+                          setCoherenceResult({
+                            score: latestCheckLog.coherenceResult.score,
+                            issues: latestCheckLog.coherenceResult.issues,
+                          })
+                          setRewriteDialogOpen(true)
+                        }
+                      }}
+                    >
+                      基于此结果重写
+                    </Button>
+                  )}
+                </div>
+              </div>
 
+              <div className="flex items-center gap-2 text-xs">
+                <Badge variant="outline" className="text-[10px]">
+                  {latestCheckLog.checkType === 'character_consistency' && '角色一致性'}
+                  {latestCheckLog.checkType === 'chapter_coherence' && '章节连贯性'}
+                  {latestCheckLog.checkType === 'combined' && '综合质量'}
+                </Badge>
+                <span className={`font-bold ${
+                  latestCheckLog.score >= 80 ? 'text-green-600' :
+                  latestCheckLog.score >= 60 ? 'text-amber-600' :
+                  'text-red-600'
+                }`}>
+                  {latestCheckLog.score}分
+                </span>
+                <span className="text-muted-foreground">
+                  · {new Date(latestCheckLog.createdAt * 1000).toLocaleString('zh-CN', {
+                    month: 'numeric',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
+                <span className="ml-auto text-muted-foreground">
+                  {latestCheckLog.issuesCount > 0 ? `${latestCheckLog.issuesCount}个问题` : '无问题'}
+                </span>
+              </div>
+
+              {/* 检查历史列表 */}
+              {showCheckHistory && (
+                <ScrollArea className="max-h-48 mt-2">
+                  <div className="space-y-1">
+                    {checkHistory.map((log) => (
+                      <div
+                        key={log.id}
+                        className={`p-2 rounded border text-xs cursor-pointer hover:bg-muted/50 transition-colors ${
+                          log.id === latestCheckLog.id ? 'bg-primary/5 border-primary/20' : ''
+                        }`}
+                        onClick={() => {
+                          setLatestCheckLog(log)
+                          setShowCheckHistory(false)
+                        }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-[10px]">
+                              {log.checkType === 'character_consistency' && '角色一致性'}
+                              {log.checkType === 'chapter_coherence' && '章节连贯性'}
+                              {log.checkType === 'combined' && '综合质量'}
+                            </Badge>
+                            <span className={`font-medium ${
+                              log.score >= 80 ? 'text-green-600' :
+                              log.score >= 60 ? 'text-amber-600' :
+                              'text-red-600'
+                            }`}>
+                              {log.score}分
+                            </span>
+                          </div>
+                          <span className="text-muted-foreground">
+                            {new Date(log.createdAt * 1000).toLocaleString('zh-CN', {
+                              month: 'numeric',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
+          )}
+
+          {/* 三个检查按钮 */}
+          <div className="grid grid-cols-3 gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 h-8 text-xs"
+              onClick={() => {
+                setShowConsistencyCheck(!showConsistencyCheck)
+                setShowCoherenceCheck(false)
+                setShowCombinedCheck(false)
+              }}
+            >
+              <Shield className="h-3.5 w-3.5" />
+              角色一致性
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 h-8 text-xs"
+              onClick={() => {
+                setShowCoherenceCheck(!showCoherenceCheck)
+                setShowConsistencyCheck(false)
+                setShowCombinedCheck(false)
+              }}
+            >
+              <Link className="h-3.5 w-3.5" />
+              章节连贯性
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 h-8 text-xs"
+              onClick={() => {
+                setShowCombinedCheck(!showCombinedCheck)
+                setShowConsistencyCheck(false)
+                setShowCoherenceCheck(false)
+              }}
+            >
+              <Shield className="h-3.5 w-3.5" />
+              <Link className="h-3.5 w-3.5 -ml-1" />
+              综合检查
+            </Button>
+          </div>
+
+          {/* 检查面板 */}
           {showConsistencyCheck && (
             <CharacterConsistencyCheck chapterId={chapterId} novelId={novelId} />
+          )}
+
+          {showCoherenceCheck && (
+            <ChapterCoherenceCheck
+              chapterId={chapterId}
+              novelId={novelId}
+              onCheckComplete={(result) => {
+                setCoherenceResult(result)
+                loadLatestCheckLog()
+              }}
+            />
+          )}
+
+          {showCombinedCheck && (
+            <CombinedCheck
+              chapterId={chapterId}
+              novelId={novelId}
+              onCheckComplete={(result) => {
+                if (result.coherenceCheck.issues.length > 0) {
+                  setCoherenceResult({
+                    score: result.coherenceCheck.score,
+                    issues: result.coherenceCheck.issues,
+                  })
+                }
+                loadLatestCheckLog()
+              }}
+            />
           )}
 
           {contextInfo?.debug && (

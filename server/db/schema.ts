@@ -362,6 +362,27 @@ export const systemSettings = sqliteTable('system_settings', {
 })
 
 // ============================================================
+// 19. 章节检查日志表
+// ============================================================
+export const checkLogs = sqliteTable('check_logs', {
+  id: id(),
+  novelId: text('novel_id').notNull(),
+  chapterId: text('chapter_id').notNull(),
+  checkType: text('check_type').notNull(), // 'character_consistency' | 'chapter_coherence' | 'combined'
+  score: integer('score').notNull().default(100),
+  status: text('status').notNull().default('success'), // 'success' | 'failed' | 'error'
+  characterResult: text('character_result'), // JSON
+  coherenceResult: text('coherence_result'), // JSON
+  issuesCount: integer('issues_count').notNull().default(0),
+  errorMessage: text('error_message'),
+  createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
+}, (table) => [
+  index('idx_check_logs_chapter').on(table.chapterId, sql`${table.createdAt} DESC`),
+  index('idx_check_logs_novel').on(table.novelId, sql`${table.createdAt} DESC`),
+  index('idx_check_logs_type').on(table.chapterId, table.checkType, sql`${table.createdAt} DESC`),
+])
+
+// ============================================================
 // 18. 队列任务日志表
 // ============================================================
 export const queueTaskLogs = sqliteTable('queue_task_logs', {
