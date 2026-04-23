@@ -15,6 +15,11 @@
   - [邀请码管理 (Invite Codes)](#邀请码管理-invite-codes)
   - [系统设置 (System Settings)](#系统设置-system-settings)
   - [创意工坊 (Workshop)](#创意工坊-workshop)
+- **v1.6.0 新增**
+  - [AI 监控中心 (AI Monitor)](#ai-监控中心-ai-monitor)
+  - [向量索引增强 (Vectorize)](#向量化索引-vectorize)
+  - [上下文诊断 (Context)](#上下文诊断-context)
+  - [综合检查 (Check)](#综合检查-check)
 - [小说管理 (Novels)](#小说管理-novels)
 - [总纲管理 (Master Outline)](#总纲管理-master-outline)
 - [创作规则 (Writing Rules)](#创作规则-writing-rules)
@@ -562,6 +567,177 @@ data: {}
   "masterOutlineId": "mo_def456",
   "characterIds": ["char_789"],
   "volumeIds": ["vol_012"]
+}
+```
+
+---
+
+## v1.6.0 新增 API
+
+### AI 监控中心 (AI Monitor)
+
+> **需要认证**
+
+#### 获取向量统计
+
+**GET** `/api/vectorize/stats?novelId=:novelId`
+
+**响应示例**:
+```json
+{
+  "total": 156,
+  "byType": {
+    "setting": 45,
+    "character": 89,
+    "foreshadowing": 22
+  },
+  "lastIndexedAt": 1713763200,
+  "unindexedCounts": {
+    "settings": 3,
+    "characters": 0,
+    "foreshadowing": 1
+  }
+}
+```
+
+#### 获取向量状态
+
+**GET** `/api/vectorize/status`
+
+**响应示例**:
+```json
+{
+  "status": "ok",
+  "message": "Vectorize service is operational",
+  "embeddingModel": "@cf/baai/bge-base-zh-v1.5",
+  "dimensions": 768
+}
+```
+
+#### 全量重建索引
+
+**POST** `/api/vectorize/reindex-all`
+
+> 后台异步执行，通过队列处理
+
+**请求体**:
+```json
+{
+  "novelId": "novel456",
+  "clearExisting": true
+}
+```
+
+**响应示例**:
+```json
+{
+  "ok": true,
+  "message": "索引重建任务已提交到后台队列"
+}
+```
+
+#### 增量索引未索引项
+
+**POST** `/api/vectorize/index-missing`
+
+**请求体**:
+```json
+{
+  "novelId": "novel456"
+}
+```
+
+**响应示例**:
+```json
+{
+  "ok": true,
+  "message": "已提交 4 条内容到索引队列"
+}
+```
+
+---
+
+### 上下文诊断 (Context)
+
+> **需要认证**
+
+#### 预览章节上下文
+
+**GET** `/api/generate/preview-context?novelId=:novelId&chapterId=:chapterId`
+
+**响应示例**:
+```json
+{
+  "summary": {
+    "totalLayers": 12,
+    "coreLayerCount": 6,
+    "dynamicLayerCount": 6,
+    "ragResultCount": 8,
+    "buildTimeMs": 234,
+    "totalTokenEstimate": 45230
+  },
+  "slotBreakdown": {
+    "masterOutlineContent": 8500,
+    "volumeBlueprint": 1200,
+    "volumeEventLine": 800,
+    "prevChapterSummary": 450,
+    "protagonistCards": 2800,
+    "activeRules": 3200,
+    "summaryChain": 12500,
+    "characterCards": 6800,
+    "foreshadowing": 2100,
+    "settings": 4500,
+    "chapterTypeRules": 1500
+  },
+  "chapterTypeHint": "combat"
+}
+```
+
+---
+
+### 综合检查 (Check)
+
+> **需要认证**
+
+#### 组合质量检查
+
+**POST** `/api/generate/combined-check`
+
+**请求体**:
+```json
+{
+  "chapterId": "chap123",
+  "novelId": "novel456",
+  "characterIds": ["char1", "char2", "char3"]
+}
+```
+
+**响应示例**:
+```json
+{
+  "score": 78,
+  "characterCheck": {
+    "conflicts": [
+      {
+        "characterName": "林风",
+        "conflict": "前后性格表现不一致",
+        "excerpt": "林风性格坚毅，但在第15章突然变得胆小怕事"
+      }
+    ],
+    "warnings": []
+  },
+  "coherenceCheck": {
+    "score": 85,
+    "issues": [
+      {
+        "severity": "warning",
+        "category": "foreshadowing",
+        "message": "伏笔'天雷珠之谜'尚未收尾",
+        "suggestion": "建议在后续章节中揭示天雷珠的来历"
+      }
+    ]
+  },
+  "hasIssues": true
 }
 ```
 
@@ -1941,6 +2117,6 @@ novel = client.novels.create(
 
 <div align="center">
 
-**API Version: 1.4.0**
+**API Version: 1.6.0**
 
 </div>

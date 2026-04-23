@@ -7,31 +7,174 @@
 
 ---
 
-## [未发布]
+## [1.6.0] - 2026-04-23
 
-### 计划功能 (Phase 6)
+### 🎉 重大更新：Phase 6 · 智能增强与系统优化
 
-#### 新增
-- [ ] 多用户协作（实时编辑、评论）
-- [ ] 版本历史对比
-- [ ] 智能拼写检查与语法纠错
-- [ ] 写作统计仪表盘（字数趋势、写作时间、效率分析）
-- [ ] PDF 导出（Cloudflare Browser Rendering）
-- [ ] 语音朗读（Workers AI TTS）
-- [ ] 公开分享功能（签名 URL）
+#### 新增功能
+
+##### AI 监控中心 🖥️
+- **独立监控页面** (`/ai-monitor`)
+  - 向量索引统计总览（总向量数、设定/角色/伏笔分类统计）
+  - 向量索引类型分布可视化图表
+  - 语义搜索测试功能
+  - 生成日志查看
+  - 上下文诊断工具（预览章节生成的完整上下文）
+  - 服务状态检查（Vectorize可用性、模型信息）
+
+- **手动操作工具**
+  - 全量重建索引（后台队列异步执行）
+  - 增量索引未索引项
+  - 重建实体树
+
+##### 实体树面板 🌳
+- **树形结构展示** (`EntityTreePanel`)
+  - 支持5种实体类型：小说/卷/章节/角色/设定
+  - 展开/折叠操作
+  - 双击章节快速定位
+  - 元数据徽标展示（字数、状态、角色定位等）
+  - 全部展开/全部收起快捷操作
+  - 重建索引功能
+
+##### 回收站功能 🗑️
+- **回收站面板** (`TrashPanel`)
+  - 查看所有软删除数据
+  - 按表分类统计
+  - 单条永久删除
+  - 按表清空
+  - 全部清空（带确认）
+  - 删除时间显示
+
+##### 综合质量检查 🛡️
+- **组合检查组件** (`CombinedCheck`)
+  - 角色一致性检查（检测角色行为冲突）
+  - 章节连贯性检查（衔接自然性、伏笔应收尾检测）
+  - 综合评分展示（100分制）
+  - 问题详情展开查看
+  - 修复建议提示
+
+##### 章节连贯性检查 📝
+- **章节连贯性检查组件** (`ChapterCoherenceCheck`)
+  - 与前章摘要衔接检查
+  - 应收伏笔是否已收尾检测
+  - 主角境界突变检测
+  - 问题严重程度分级（error/warning）
+  - 修复建议输出
+
+##### 文本格式化工具 ✨
+- **formatContent.ts** - AI生成内容排版优化
+  - Markdown转HTML（保留标题、列表、引用、对话等格式）
+  - 对话行智能识别和样式化
+  - 场景分隔线处理
+  - 阅读器专用排版优化
+  - 智能分段功能
+
+#### 系统架构升级
+
+##### Agent系统模块化重构 🔧
+- **目录结构重组** (`/server/services/agent/`)
+  - `batch.ts` - 批量大纲生成
+  - `checkLogService.ts` - 检查日志服务
+  - `coherence.ts` - 章节连贯性检查
+  - `consistency.ts` - 角色一致性检查
+  - `constants.ts` - 常量定义
+  - `executor.ts` - 执行器
+  - `generation.ts` - 生成逻辑
+  - `index.ts` - 统一导出
+  - `logging.ts` - 日志记录
+  - `messages.ts` - 消息处理
+  - `reactLoop.ts` - ReAct循环
+  - `summarizer.ts` - 摘要生成
+  - `tools.ts` - 工具定义
+  - `types.ts` - 类型定义
+
+##### 上下文构建v4优化 🚀
+- **架构优化**：RAG返回ID → DB查完整卡片（替代原来的RAG直接返回碎片）
+- **预算大幅增加**：Total从14k提升至55k tokens
+  - Core层：≤18,000 tokens
+  - Dynamic层：≤37,000 tokens
+- **RAG查询优化**：从3次减少到2次（去除character content读取）
+- **向量类型精简**：从6种减少到3种（character/setting/foreshadowing）
+- **超时根治**：单次索引任务最大1个chunk（使用summary字段）
+- **摘要链扩展**：默认从5章扩展到20章
+
+##### 队列任务系统 ⚡
+- **新增队列处理器** (`queue-handler.ts`)
+  - `index_content` - 异步内容索引
+  - `reindex_all` - 全量重建索引
+  - `rebuild_entity_index` - 重建实体树
+  - `extract_foreshadowing` - 异步伏笔提取
+  - `post_process_chapter` - 章节后处理（摘要/伏笔/境界检测）
+- **任务日志追踪** - `queue_task_logs`表记录任务执行状态
+- **后台异步执行** - 索引重建等耗时任务不再阻塞主流程
+
+#### 数据库变更 (v4.0)
+
+- 🔧 新增 `queue_task_logs` 表（队列任务日志，7字段）
+- 🔧 `novel_settings` 表新增 `summary` 字段（设定摘要，用于RAG索引）
+- 🔧 `0010_schema.sql` - 整合所有迁移，移除ALTER语句
+- 🔧 使用触发器自动维护字数/章数统计（替代手动更新）
+- 🔧 索引优化 - 部分索引过滤已删除记录
+
+#### 向量化API增强
+
+- 新增 `POST /api/vectorize/reindex-all` - 全量重建索引（异步队列执行）
+- 新增 `POST /api/vectorize/index-missing` - 增量索引未索引项
+- 新增 `GET /api/vectorize/stats` - 向量统计（总数、分类统计、未索引数量）
+- 新增 `GET /api/vectorize/status` - 服务状态检查
+- 新增 `GET /api/generate/preview-context` - 上下文诊断
+
+#### 前端组件增强
+
+- 📝 **GeneratePanel** 大幅改进（1070行变更）
+  - 续写/重写模式支持
+  - 模式切换UI（生成/续写/重写）
+  - rewrite模式支持选中文本
+  - continue模式自动截取章节末尾500字
+  - 更完善的SSE流处理和错误处理
+
+- 📝 **ReaderPage** 功能增强
+  - 排版优化（首行缩进、段落间距）
+  - 对话内容样式化
+  - 场景分隔视觉提示
+
+- 📝 **ChapterList** 组件改进
+  - 批量操作支持
+  - 排序优化
+
+#### 部署配置更新
+
+- 📦 **wrangler.toml** 新增配置
+  - Queue生产者/消费者绑定
+  - 观测日志启用
+  - Vectorize元数据索引注释
+
+- 📦 **GitHub Actions** 升级
+  - Node版本升级到20
+  - 部署流程优化
+
+#### 文档新增
+
+- 📝 **context-v4-execution-guide.md** - v4上下文构建完整执行逻辑说明
+  - 架构总览与数据流
+  - 10个Slot详细执行逻辑
+  - 向量索引精确定义
+  - 超时根治机制
+  - v3→v4迁移对照表
 
 #### 改进
-- [ ] 大纲编辑器支持 Markdown 快捷输入
-- [ ] 批量导入章节（从 Word/Markdown）
-- [ ] 插件市场（自定义 Prompt 模板）
-- [ ] 国际化支持（i18n）
 
-#### 性能
-- [ ] 前端代码分割优化（React.lazy + Suspense）
-- [ ] 数据库查询缓存层
-- [ ] CDN 静态资源加速
-- [ ] SSE 连接池管理
-- [ ] WebSocket 实时推送（替代轮询）
+- 🔧 GeneratePanel模式切换逻辑优化
+- 🔧 向量索引错误处理增强
+- 🔧 数据库查询性能优化
+- 🔧 前端加载状态处理改进
+- 🔧 API错误响应格式统一
+
+#### Bug修复
+
+- 🐛 修复向量索引超时问题（通过summary字段和单chunk限制）
+- 🐛 修复多小说场景模型串台问题
+- 🐛 修复generation_logs model_id写入问题
 
 ---
 

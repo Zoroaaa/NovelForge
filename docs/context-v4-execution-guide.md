@@ -28,7 +28,7 @@ buildChapterContext(env, novelId, chapterId)
 ├── Step 1: Core 层（8 个 DB 查询，Promise.all 并发）
 │   ├── [DB] 总纲 content 全文（≤12k 字）或 summary
 │   ├── [DB] 当前卷 blueprint + eventLine
-│   ├── [DB] 上一章 summary
+│   ├── [DB] 上一章 context
 │   ├── [DB] 主角完整状态卡（name+desc+attr+powerLevel）
 │   ├── [DB] 全部活跃创作规则（isActive=1，不限 priority）
 │   └── [DB] 最近 20 章 summaries（摘要链）
@@ -63,7 +63,7 @@ buildChapterContext(env, novelId, chapterId)
 |------|------|-------------|---------|
 | 总纲 | L0 Core | ≤10000 | DB masterOutline.content |
 | 卷规划 | L0 Core | ≤1500 | DB volumes.{blueprint,eventLine} |
-| 上一章 | L0 Core | ≤500 | DB chapters.summary |
+| 上一章 | L0 Core | ≤500 | DB chapters.context |
 | 主角卡 | L0 Core | ≤3000 | DB characters(protagonist) |
 | 创作规则 | L0 Core | ≤5000 | DB writingRules(isActive=1) |
 | **Core 小计** | | **≤18000** | |
@@ -114,7 +114,7 @@ buildChapterContext(env, novelId, chapterId)
 
 **执行步骤**:
 1. 查 `chapters` 表：`sortOrder < currentSortOrder`，取最近 1 条
-2. 返回 `[上一章: {title}] {summary}`
+2. 返回 `[上一章: {title}] {context}`
 
 ---
 
@@ -323,7 +323,7 @@ buildChapterContext(env, novelId, chapterId)
 {eventLine}
 
 ## 上一章回顾
-[上一章: 第42章 林岩离山] {summary}
+[上一章: 第42章 林岩离山] {context}
 
 ## 主角状态
 【林岩（主角）】

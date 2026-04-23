@@ -37,16 +37,16 @@
 ### 系统要求
 
 ```bash
-# Node.js 版本
-node -v  # >= 18.x
+# Node.js 版本（v1.6.0+ 推荐 Node 20）
+node -v  # >= 20.x
 
 # 包管理器
-pnpm -v  # >= 8.x (推荐)
+pnpm -v  # >= 9.x (推荐)
 # 或
-npm -v   # >= 9.x
+npm -v   # >= 10.x
 
 # Cloudflare CLI
-wrangler -v  # >= 3.0
+wrangler -v  # >= 4.0
 ```
 
 ---
@@ -90,9 +90,20 @@ wrangler r2 bucket create novelforge-storage
 
 ```toml
 name = "novelforge"
-pages_build_output_dir = "dist"
-compatibility_date = "2025-04-01"
+main = "server/index.ts"
+compatibility_date = "2026-01-01"
 compatibility_flags = ["nodejs_compat"]
+
+[observability]
+[observability.logs]
+enabled = true
+invocation_logs = true
+
+[assets]
+directory = "dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = true
 
 [[d1_databases]]
 binding = "DB"
@@ -102,10 +113,23 @@ database_id = "你的-database-id-这里"  # ← 替换为实际 ID
 [[r2_buckets]]
 binding = "STORAGE"
 bucket_name = "novelforge-storage"
-preview_bucket_name = "novelforge-storage-dev"
 
 [ai]
 binding = "AI"
+
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "novelforge-index"
+
+[[queues.producers]]
+binding = "TASK_QUEUE"
+queue = "novelforge-tasks"
+
+[[queues.consumers]]
+queue = "novelforge-tasks"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
 ```
 
 ### Step 5: 设置本地环境变量
@@ -361,10 +385,11 @@ API_BASE_URL=/api  # 使用相对路径，无需配置
 
 ```
 server/db/migrations/
-├── 0001_init.sql       # 初始 schema
-├── 0002_add_characters.sql  # 添加角色表
-└── 0003_add_indexes.sql     # 添加索引
+├── 0010_schema.sql       # v4.0 整合迁移（合并所有历史迁移）
+└── 0011_check_logs.sql   # v4.0 检查日志表
 ```
+
+> **v4.0 变更说明**：从 v1.6.0 开始，数据库迁移已整合为 `0010_schema.sql`，使用触发器自动维护字数/章数统计。升级时请直接执行 `0010_schema.sql`。
 
 ### 创建新迁移
 
@@ -658,24 +683,44 @@ git pull origin main
 # 2. 更新依赖
 pnpm update
 
-# 3. 运行新迁移
+# 3. 运行新迁移（v1.6.0 使用整合迁移）
 wrangler d1 migrations apply novelforge --remote
 
-# 4. 创建 Vectorize 索引（如果尚未创建）
-wrangler vectorize create novelforge-index --dimensions=768 --metric=cosine
+# 4. 创建/更新 Vectorize 索引（v4.0 维度为 1024）
+# 如果索引已存在，跳过此步骤
+wrangler vectorize create novelforge-index --dimensions=1024 --metric=cosine
 
-# 5. 重新部署
+# 5. 创建 Queue（v1.6.0 新增）
+wrangler queues create novelforge-tasks
+
+# 6. 重新部署
 pnpm build
 wrangler pages deploy dist
 ```
+
+**v1.6.0 升级注意事项**：
+- Node.js 版本需要 >= 20
+- Wrangler 版本需要 >= 4.0
+- 数据库迁移已整合，直接执行 `0010_schema.sql`
+- 向量索引维度从 768 升级到 1024（如果重建索引）
 
 ### 版本兼容性
 
 | 版本 | Node.js | Wrangler | Drizzle |
 |------|---------|----------|---------|
+| v1.6+ | >= 20 | >= 4.0 | >= 0.45 |
+| v1.5+ | >= 18 | >= 3.0 | >= 0.45 |
 | v1.4+ | >= 18 | >= 3.0 | >= 0.45 |
 | v1.3+ | >= 18 | >= 3.0 | >= 0.40 |
 | v1.0+ | >= 18 | >= 3.0 | >= 0.30 |
+
+### 重要变更说明 (v1.6.0)
+
+- **上下文构建 v4.0**：RAG 架构优化，Token 预算从 14k 提升至 55k
+- **向量索引精简**：从 6 种类型减少到 3 种（character/setting/foreshadowing）
+- **新增 Queue 配置**：支持后台异步任务处理
+- **Agent 系统模块化**：拆分为 14 个子模块
+- **新增 Queue Handler**：异步处理索引重建等耗时任务
 
 ### 重要变更说明 (v1.4.0)
 
@@ -712,6 +757,16 @@ binding = "AI"
 [[vectorize]]
 binding = "VECTORIZE"
 index_name = "novelforge-index"
+
+[[queues.producers]]
+binding = "TASK_QUEUE"
+queue = "novelforge-tasks"
+
+[[queues.consumers]]
+queue = "novelforge-tasks"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
 
 # .env (前端)
 VITE_APP_NAME=NovelForge

@@ -3,8 +3,8 @@
 <div align="center">
 
 ![NovelForge Logo](https://img.shields.io/badge/NovelForge-AI%20Writing%20Studio-blue?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-1.5.0-success?style=for-the-badge)
-![Phase](https://img.shields.io/badge/Phase-5%20Complete-success?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-1.6.0-success?style=for-the-badge)
+![Phase](https://img.shields.io/badge/Phase-6%20Complete-success?style=for-the-badge)
 ![Cloudflare](https://img.shields.io/badge/Cloudflare-Pages%2BWorkers-orange?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
@@ -235,6 +235,11 @@ Total: 12,000 tokens
 | **📦 多格式导出** | Markdown / TXT / EPUB / ZIP · 卷范围选择 · 目录生成 |
 | **👁️ 视觉分析** | LLaVA 图片识别 · 角色外貌描述 · 性格标签提取 |
 | **🔗 MCP 集成** | Claude Desktop 直接访问 · 小说数据查询 · 语义搜索 |
+| **🖥️ AI 监控中心** | 向量索引统计 · 生成日志 · 上下文诊断 · 服务状态检查 (v1.6.0 新增) |
+| **🌳 实体树** | 树形结构展示 · 快速定位章节 · 元数据展示 (v1.6.0 新增) |
+| **🗑️ 回收站** | 软删除数据查看 · 单条/批量永久删除 (v1.6.0 新增) |
+| **🛡️ 质量检查** | 角色一致性检查 · 章节连贯性检查 · 综合评分 (v1.6.0 新增) |
+| **⚡ 队列任务** | 异步索引重建 · 后台任务处理 · 任务日志追踪 (v1.6.0 新增) |
 
 ---
 
@@ -291,6 +296,7 @@ wrangler pages dev --local -- pnpm dev
 | [部署指南](./docs/DEPLOYMENT.md) | 生产环境部署、CI/CD 配置、环境变量 |
 | [API 参考](./docs/API.md) | 完整的 REST API 文档 |
 | [MCP 配置](./docs/MCP-SETUP.md) | Claude Desktop 集成配置指南 |
+| [上下文构建v4](./docs/context-v4-execution-guide.md) | v4上下文构建完整执行逻辑 |
 | [CHANGELOG](./CHANGELOG.md) | 版本更新记录 |
 
 ---
@@ -397,78 +403,100 @@ novelforge/
 ├── src/                          # 前端代码
 │   ├── components/
 │   │   ├── ui/                   # shadcn 组件
-│   │   ├── layout/               # 布局组件 (v1.5 新增)
+│   │   ├── layout/               # 布局组件
 │   │   │   ├── AppLayout.tsx     # 三栏布局
 │   │   │   ├── MainLayout.tsx    # 主布局 (侧边栏+顶栏+内容)
 │   │   │   ├── Sidebar.tsx       # 工作区侧边栏
 │   │   │   └── WorkspaceHeader.tsx
-│   │   ├── model/                # 模型配置组件 (v1.5 新增)
-│   │   │   └── ModelConfig.tsx
+│   │   ├── model/                # 模型配置组件
 │   │   ├── novel/                # 小说相关组件
 │   │   ├── outline/              # 大纲组件
 │   │   ├── chapter/              # 章节编辑器
-│   │   ├── generate/             # AI 生成面板
+│   │   ├── generate/             # AI 生成面板 (v1.6.0 增强)
 │   │   ├── character/            # 角色管理
-│   │   └── export/               # 导出对话框
+│   │   ├── export/               # 导出对话框
+│   │   ├── entitytree/           # 实体树面板 (v1.6.0 新增)
+│   │   ├── trash/                # 回收站面板 (v1.6.0 新增)
+│   │   └── stats/                # 写作统计
 │   ├── pages/                    # 页面组件
-│   │   ├── LoginPage.tsx         # 登录页 (v1.5 新增)
-│   │   ├── RegisterPage.tsx      # 注册页 (v1.5 新增)
-│   │   ├── AccountPage.tsx       # 账号设置页 (v1.5 新增)
-│   │   ├── ModelConfigPage.tsx   # 模型配置页 (v1.5 新增)
-│   │   ├── SetupPage.tsx         # 系统初始化页 (v1.5 新增)
-│   │   ├── WorkshopPage.tsx      # 创意工坊页 (v1.5 新增)
+│   │   ├── LoginPage.tsx         # 登录页
+│   │   ├── RegisterPage.tsx       # 注册页
+│   │   ├── AccountPage.tsx       # 账号设置页
+│   │   ├── ModelConfigPage.tsx   # 模型配置页
+│   │   ├── SetupPage.tsx         # 系统初始化页
+│   │   ├── WorkshopPage.tsx      # 创意工坊页
+│   │   ├── AiMonitorPage.tsx     # AI监控中心页 (v1.6.0 新增)
 │   │   ├── NovelsPage.tsx        # 小说列表页
 │   │   ├── WorkspacePage.tsx     # 工作区页面
 │   │   └── ReaderPage.tsx        # 阅读器页面
 │   ├── store/
-│   │   └── authStore.ts          # 认证状态管理 (v1.5 新增)
+│   │   └── authStore.ts          # 认证状态管理
+│   ├── hooks/
+│   │   └── useGenerate.ts        # 生成Hook
 │   ├── lib/
 │   │   ├── api.ts                # API 封装
-│   │   ├── providers.ts          # AI 提供商配置 (v1.5 更新)
-│   │   └── types.ts              # 类型定义
+│   │   ├── providers.ts          # AI 提供商配置
+│   │   ├── types.ts              # 类型定义
+│   │   └── formatContent.ts      # 文本格式化工具 (v1.6.0 新增)
 │   ├── App.tsx                   # 应用根组件 (含路由和守卫)
 │   └── main.tsx
 │
 ├── server/                       # 后端代码
 │   ├── index.ts                  # Hono app 入口
+│   ├── queue-handler.ts           # 队列任务处理器 (v1.6.0 新增)
 │   ├── routes/
-│   │   ├── auth.ts               # 认证路由 (v1.5 新增)
-│   │   ├── invite-codes.ts       # 邀请码路由 (v1.5 新增)
-│   │   ├── setup.ts              # 系统初始化路由 (v1.5 新增)
-│   │   ├── system-settings.ts    # 系统设置路由 (v1.5 新增)
-│   │   ├── workshop.ts           # 创意工坊路由 (v1.5 新增)
+│   │   ├── auth.ts               # 认证路由
+│   │   ├── invite-codes.ts        # 邀请码路由
+│   │   ├── setup.ts              # 系统初始化路由
+│   │   ├── system-settings.ts     # 系统设置路由
+│   │   ├── workshop.ts           # 创意工坊路由
 │   │   ├── novels.ts             # 小说管理
 │   │   ├── chapters.ts           # 章节管理
 │   │   ├── characters.ts         # 角色管理
 │   │   ├── generate.ts           # AI 生成
 │   │   ├── settings.ts           # 模型配置
+│   │   ├── vectorize.ts          # 向量化索引 (v1.6.0 增强)
 │   │   └── ...                   # 其他路由
 │   ├── services/
 │   │   ├── llm.ts               # LLM 服务
-│   │   ├── agent.ts             # Agent 系统
-│   │   ├── contextBuilder.ts    # 上下文组装
+│   │   ├── agent/               # Agent 系统模块化 (v1.6.0 重构)
+│   │   │   ├── index.ts         # 统一导出
+│   │   │   ├── batch.ts         # 批量生成
+│   │   │   ├── coherence.ts     # 连贯性检查
+│   │   │   ├── consistency.ts   # 一致性检查
+│   │   │   ├── constants.ts     # 常量定义
+│   │   │   ├── executor.ts      # 执行器
+│   │   │   ├── generation.ts    # 生成逻辑
+│   │   │   ├── logging.ts       # 日志记录
+│   │   │   ├── messages.ts      # 消息处理
+│   │   │   ├── reactLoop.ts     # ReAct循环
+│   │   │   ├── summarizer.ts    # 摘要生成
+│   │   │   └── tools.ts         # 工具定义
+│   │   ├── contextBuilder.ts    # 上下文组装 (v4.0 优化)
 │   │   ├── embedding.ts         # 向量化
 │   │   ├── vision.ts            # 视觉分析
 │   │   ├── export.ts            # 导出服务
-│   │   ├── workshop.ts          # 创意工坊服务 (v1.5 新增)
 │   │   ├── foreshadowing.ts     # 伏笔追踪
-│   │   └── powerLevel.ts        # 境界追踪
+│   │   ├── powerLevel.ts        # 境界追踪
+│   │   └── entity-index.ts      # 实体索引
 │   ├── lib/
-│   │   ├── auth.ts              # 认证模块 (v1.5 新增)
+│   │   ├── auth.ts              # 认证模块
+│   │   ├── queue.ts             # 队列操作库 (v1.6.0 新增)
 │   │   └── types.ts             # 类型定义
 │   └── db/
 │       ├── schema.ts            # 数据库 Schema
 │       └── migrations/          # 数据库迁移
-│           ├── 0001_init.sql
-│           ├── 0002_add_workshop_sessions.sql
-│           ├── 0003_p0_fixes.sql
-│           └── 0004_auth_system.sql  # v1.5 新增
-│
-├── functions/                    # Pages Functions
-│   └── api/[[route]].ts         # 通配符路由
+│           ├── 0010_schema.sql  # v4.0 整合迁移
+│           └── 0011_check_logs.sql # 检查日志
 │
 ├── docs/                         # 文档
-├── wrangler.toml                 # Cloudflare 配置
+│   ├── context-v4-execution-guide.md # v4上下文构建说明 (v1.6.0 新增)
+│   ├── ARCHITECTURE.md
+│   ├── API.md
+│   ├── DEPLOYMENT.md
+│   ├── MCP-SETUP.md
+│   └── NovelForge-开发计划.md
+├── wrangler.toml                 # Cloudflare 配置 (v1.6.0 Queue配置)
 ├── package.json
 └── tsconfig.json
 ```
@@ -535,6 +563,6 @@ novelforge/
 
 <div align="center">
 
-**Made with ❤️ by the NovelForge Team · Version 1.5.0**
+**Made with ❤️ by the NovelForge Team · Version 1.6.0**
 
 </div>

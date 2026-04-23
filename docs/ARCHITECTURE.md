@@ -302,7 +302,7 @@ CREATE TABLE writing_rules (
 );
 ```
 
-#### `novel_settings` - 小说设定表（v2.0 新增）
+#### `novel_settings` - 小说设定表（v2.0/v4.0 增强）
 ```sql
 CREATE TABLE novel_settings (
   id TEXT PRIMARY KEY,
@@ -311,6 +311,7 @@ CREATE TABLE novel_settings (
   category TEXT,                 -- 子分类
   name TEXT NOT NULL,
   content TEXT NOT NULL,
+  summary TEXT,                  -- v4.0 新增：设定摘要，用于 RAG 索引
   attributes TEXT,               -- JSON
   parent_id TEXT,                -- 层级结构
   importance TEXT DEFAULT 'normal',
@@ -523,6 +524,25 @@ CREATE TABLE system_settings (
 );
 ```
 
+#### `queue_task_logs` - 队列任务日志表（v4.0 新增）
+```sql
+CREATE TABLE queue_task_logs (
+  id TEXT PRIMARY KEY,
+  novel_id TEXT,
+  task_type TEXT NOT NULL,       -- index_content/reindex_all/rebuild_entity_index/
+                                 -- extract_foreshadowing/post_process_chapter
+  status TEXT DEFAULT 'pending', -- pending/running/success/failed
+  payload TEXT,                   -- JSON 任务载荷
+  error_msg TEXT,
+  retry_count INTEGER DEFAULT 0,
+  created_at INTEGER,
+  finished_at INTEGER
+);
+
+CREATE INDEX idx_queue_logs_novel ON queue_task_logs(novel_id, created_at DESC);
+CREATE INDEX idx_queue_logs_status ON queue_task_logs(status, created_at DESC);
+```
+
 #### `workshop_sessions` - 创意工坊会话表（v1.5.0 增强）
 ```sql
 CREATE TABLE workshop_sessions (
@@ -580,13 +600,32 @@ await streamGenerate(config, messages, {
 
 ---
 
-### 2. Agent 系统 (`/server/services/agent.ts`)
+### 2. Agent 系统 (`/server/services/agent/`)
 
-**职责**: 基于 ReAct 模式的智能章节生成
+**职责**: 基于 ReAct 模式的智能章节生成（v1.6.0 模块化重构）
+
+**目录结构**:
+```
+agent/
+├── index.ts         # 统一导出
+├── types.ts         # 类型定义
+├── constants.ts     # 常量定义
+├── batch.ts         # 批量大纲生成
+├── checkLogService.ts # 检查日志服务
+├── coherence.ts     # 章节连贯性检查
+├── consistency.ts   # 角色一致性检查
+├── executor.ts      # 执行器
+├── generation.ts    # 生成逻辑
+├── logging.ts       # 日志记录
+├── messages.ts      # 消息处理
+├── reactLoop.ts     # ReAct 循环
+├── summarizer.ts    # 摘要生成
+└── tools.ts         # 工具定义
+```
 
 **ReAct 流程**:
 ```
-1. 接收章节 ID → 构建上下文 (ContextBuilder)
+1. 接收章节 ID → 构建上下文 (ContextBuilder v4)
 2. 组装 System Prompt（角色设定 + 写作风格）
 3. 调用 LLM 流式生成
 4. 支持多轮工具调用（queryOutline/queryCharacter/searchSemantic）
@@ -606,33 +645,44 @@ interface AgentConfig {
 
 ### 3. 上下文组装器 (`/server/services/contextBuilder.ts`)
 
-**职责**: 为 LLM 组装最优上下文组合
+**职责**: 为 LLM 组装最优上下文组合（v4.0 重大优化）
 
-**Token 预算分配**:
+**v4.0 核心改进**:
+- **架构优化**: RAG 返回 ID → DB 查完整卡片（替代原来的 RAG 直接返回碎片）
+- **Token 预算大幅增加**: Total 从 14k 提升至 55k tokens
+- **RAG 查询优化**: 从 3 次减少到 2 次
+- **向量类型精简**: 从 6 种减少到 3 种（character/setting/foreshadowing）
+- **超时根治**: 单次索引任务最大 1 个 chunk
+
+**Token 预算分配 (v4.0)**:
 ```
-Total: 12,000 tokens
-├─ System Prompt: 2,000
-├─ Mandatory: 6,000
-│  ├─ Chapter Outline
-│  ├─ Previous Chapter Summary
-│  ├─ Volume Summary
-│  └─ Protagonist Cards
-└─ RAG: 4,000
-   └─ Semantic Similarity Hits
+Total: 55,000 tokens
+├─ Core Layer: ≤18,000
+│  ├─ 总纲: ≤10,000
+│  ├─ 卷规划: ≤1,500
+│  ├─ 上一章: ≤500
+│  ├─ 主角卡: ≤3,000
+│  └─ 创作规则: ≤5,000
+└─ Dynamic Layer: ≤37,000
+   ├─ 摘要链: ≤10,000 (20章)
+   ├─ 出场角色: ≤8,000
+   ├─ 世界设定: ≤12,000
+   ├─ 待回收伏笔: ≤4,000
+   └─ 本章规则: ≤3,000
 ```
 
-**强制注入内容**:
-- 总纲内容（来自 `master_outline.content`）
-- 创作规则（来自 `writing_rules`，按优先级排序）
+**强制注入内容 (v4.0)**:
+- 总纲内容（来自 `master_outline.content`，使用全文）
+- 创作规则（来自 `writing_rules`，全部 isActive=1，不限 priority）
 - 本章大纲（来自 `novel_settings` 或卷大纲）
 - 上一章摘要（来自 `chapters.summary`）
 - 当前卷概要（来自 `volumes.summary`）
 - 主角卡片（来自 `characters`，包含描述、属性和境界信息）
 
-**RAG 检索**:
-- 使用本章大纲作为 query
-- 在 Vectorize 中检索 top-20 相似片段
-- 按 token 预算截断（超过 4000 tokens 的丢弃）
+**RAG 检索 (v4.0)**:
+- 仅检索 3 种类型: character, setting, foreshadowing
+- 使用 summary 字段（≤400字）作为索引内容
+- 高重要性设定追加 DB 全文
 
 ---
 
@@ -642,6 +692,11 @@ Total: 12,000 tokens
 - 维度：768
 - 语言：中文优化
 - 场景：语义相似度
+
+**v4.0 优化**:
+- 使用 `summary` 字段作为索引内容（≤400字），避免超长文本
+- 单次索引任务最大 1 个 chunk，从根本上杜绝超时
+- 仅索引 3 种类型：character、setting、foreshadowing
 
 **功能**:
 ```typescript
