@@ -3,7 +3,19 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Square, PenLine, Brain, Shield, RefreshCw, Play, Loader2, Link } from 'lucide-react'
+import {
+  Square,
+  PenLine,
+  Brain,
+  Shield,
+  ShieldAlert,
+  AlertTriangle,
+  CheckCircle,
+  RefreshCw,
+  Play,
+  Loader2,
+  Link,
+} from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -78,6 +90,13 @@ export function GeneratePanel({
   const [latestCheckLog, setLatestCheckLog] = useState<any>(null)
   const [showCheckHistory, setShowCheckHistory] = useState(false)
   const [checkHistory, setCheckHistory] = useState<any[]>([])
+
+  const [combinedReport, setCombinedReport] = useState<{
+    characterResult: any
+    coherenceResult: any
+    score: number
+  } | null>(null)
+  const [isChecking, setIsChecking] = useState(false)
 
   const hasContent = existingContent.trim().length > 0
 
@@ -165,33 +184,107 @@ export function GeneratePanel({
   }
 
   const handleRewriteClick = async () => {
-    setCoherenceChecking(true)
-    setCoherenceResult(null)
-    setCoherenceCheckFailed(false)
+    setRewriteDialogOpen(true)
+    setIsChecking(true)
+    setCombinedReport(null)
+
+    try {
+      const token = getToken()
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+
+      const res = await fetch(`/api/generate/check-logs/latest?chapterId=${chapterId}&checkType=combined`, { headers })
+
+      if (res.ok) {
+        const data = await res.json()
+        if (data.log && data.log.characterResult && data.log.coherenceResult) {
+          setCombinedReport({
+            characterResult: data.log.characterResult,
+            coherenceResult: data.log.coherenceResult,
+            score: data.log.score,
+          })
+          setIsChecking(false)
+          return
+        }
+      }
+
+      const checkRes = await fetch('/api/generate/combined-check', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chapterId, novelId }),
+      })
+      if (!checkRes.ok) throw new Error('综合检查请求失败')
+      const checkData = await checkRes.json()
+
+      setCombinedReport({
+        characterResult: checkData.characterCheck,
+        coherenceResult: checkData.coherenceCheck,
+        score: checkData.score,
+      })
+
+      loadLatestCheckLog()
+    } catch (error) {
+      console.error('综合检查失败:', error)
+      setCoherenceCheckFailed(true)
+    } finally {
+      setIsChecking(false)
+    }
+  }
+
+  const handleRecheck = async () => {
+    setIsChecking(true)
+    setCombinedReport(null)
 
     try {
       const token = getToken()
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (token) headers['Authorization'] = `Bearer ${token}`
 
-      const res = await fetch('/api/generate/coherence-check', {
+      const res = await fetch('/api/generate/combined-check', {
         method: 'POST',
         headers,
         body: JSON.stringify({ chapterId, novelId }),
       })
-      if (!res.ok) throw new Error('检查请求失败')
+      if (!res.ok) throw new Error('重新检查请求失败')
       const data = await res.json()
-      setCoherenceResult({ score: data.score ?? 0, issues: data.issues ?? [] })
-    } catch {
-      setCoherenceCheckFailed(true)
+
+      setCombinedReport({
+        characterResult: data.characterCheck,
+        coherenceResult: data.coherenceCheck,
+        score: data.score,
+      })
+
+      loadLatestCheckLog()
+    } catch (error) {
+      console.error('重新检查失败:', error)
     } finally {
-      setCoherenceChecking(false)
-      setRewriteDialogOpen(true)
+      setIsChecking(false)
     }
   }
 
   const handleRewriteConfirm = () => {
     setRewriteDialogOpen(false)
+
+    if (combinedReport) {
+      const characterIssues = (combinedReport.characterResult?.conflicts || []).map(
+        (c: any, i: number) => `[角色冲突${i + 1}] ${c.characterName}: ${c.conflict}`
+      )
+      const characterWarnings = (combinedReport.characterResult?.warnings || []).map(
+        (w: any) => `[角色警告] ${w}`
+      )
+      const coherenceIssues = (combinedReport.coherenceResult?.issues || []).map(
+        (issue: any) => `[${issue.severity === 'error' ? '连贯性错误' : '连贯性警告'}] ${issue.message}${issue.suggestion ? `。建议：${issue.suggestion}` : ''}`
+      )
+
+      const allIssues = [...characterIssues, ...characterWarnings, ...coherenceIssues]
+      if (allIssues.length > 0) {
+        const options: any = { mode: 'rewrite', issuesContext: allIssues }
+        if (hasContent) options.existingContent = existingContent
+        generate(chapterId, novelId, options)
+        return
+      }
+    }
+
     handleGenerate()
   }
 
@@ -618,74 +711,166 @@ export function GeneratePanel({
       )}
 
       <AlertDialog open={rewriteDialogOpen} onOpenChange={setRewriteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>重写前一致性报告</AlertDialogTitle>
+        <AlertDialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+          <AlertDialogHeader className="flex-shrink-0">
+            <AlertDialogTitle>重写前质量检查报告</AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-3 text-left">
-                {coherenceCheckFailed ? (
-                  <div className="space-y-2">
-                    <p className="text-sm text-amber-600 dark:text-amber-400">
-                      一致性检查失败，是否仍然继续重写？
-                    </p>
+              <div className="text-left">
+                {isChecking ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin mr-2 text-primary" />
+                    <span className="text-sm text-muted-foreground">正在执行综合质量检查...</span>
                   </div>
-                ) : coherenceResult && coherenceResult.issues.length > 0 ? (
-                  <>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-sm">当前评分:</span>
-                      <span className={`text-lg font-bold ${
-                        coherenceResult.score >= 80 ? 'text-green-600' :
-                        coherenceResult.score >= 60 ? 'text-amber-600' :
-                        'text-red-600'
-                      }`}>
-                        {coherenceResult.score}/100
-                      </span>
-                    </div>
-                    <div className="space-y-1.5">
-                      {coherenceResult.issues.map((issue, idx) => (
-                        <div
-                          key={idx}
-                          className={`text-xs p-2 rounded border ${
-                            issue.severity === 'error'
-                              ? 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800'
-                              : 'bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800'
-                          }`}
-                        >
-                          <span className="font-medium">
-                            {issue.severity === 'error' ? '✗' : '△'}{' '}
-                            {issue.severity === 'error' ? '错误' : '警告'}{idx + 1}:
-                          </span>{' '}
-                          {issue.message}
-                          {issue.suggestion && (
-                            <p className="mt-0.5 opacity-70">建议：{issue.suggestion}</p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      重写建议优先修复以上问题。
+                ) : coherenceCheckFailed ? (
+                  <div className="py-4 text-center">
+                    <p className="text-sm text-amber-600 dark:text-amber-400 mb-3">
+                      质量检查失败
                     </p>
-                  </>
+                    <Button variant="outline" size="sm" onClick={handleRecheck}>
+                      重新检查
+                    </Button>
+                  </div>
+                ) : combinedReport ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                      <div className="flex items-baseline gap-3">
+                        <span className="text-sm font-medium">综合评分:</span>
+                        <span className={`text-2xl font-bold ${
+                          combinedReport.score >= 80 ? 'text-green-600' :
+                          combinedReport.score >= 60 ? 'text-amber-600' :
+                          'text-red-600'
+                        }`}>
+                          {combinedReport.score}/100
+                        </span>
+                      </div>
+                      <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs" onClick={handleRecheck}>
+                        <RefreshCw className="h-3 w-3" />
+                        重新检查
+                      </Button>
+                    </div>
+
+                    <ScrollArea className="max-h-[50vh] pr-3">
+                      <div className="space-y-4">
+                        {/* 角色一致性部分 */}
+                        {(combinedReport.characterResult?.conflicts?.length > 0 || combinedReport.characterResult?.warnings?.length > 0) && (
+                          <div className="space-y-2">
+                            <h5 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                              <Shield className="h-3.5 w-3.5" />
+                              角色一致性检查
+                              <Badge variant={combinedReport.characterResult.conflicts.length > 0 ? 'destructive' : 'default'} className="text-[10px]">
+                                {combinedReport.characterResult.conflicts.length > 0 ? `${combinedReport.characterResult.conflicts.length}个冲突` : '通过'}
+                              </Badge>
+                            </h5>
+
+                            {combinedReport.characterResult.conflicts.map((conflict: any, i: number) => (
+                              <div key={`char-c-${i}`} className="p-2.5 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-xs space-y-1">
+                                <div className="font-medium text-red-700 dark:text-red-300 flex items-center gap-1.5">
+                                  <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
+                                  {conflict.characterName}
+                                </div>
+                                <p className="text-red-600 dark:text-red-400 pl-5">{conflict.conflict}</p>
+                                {conflict.excerpt && (
+                                  <p className="pl-5 italic text-muted-foreground border-l-2 border-red-300 ml-2">"{conflict.excerpt}"</p>
+                                )}
+                              </div>
+                            ))}
+
+                            {combinedReport.characterResult.warnings?.filter((w: string) => !w.includes('失败')).map((warning: string, i: number) => (
+                              <div key={`char-w-${i}`} className="p-2 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded text-xs flex items-start gap-2 text-amber-700 dark:text-amber-300">
+                                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                                {warning}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* 章节连贯性部分 */}
+                        {combinedReport.coherenceResult?.issues?.length > 0 && (
+                          <div className="space-y-2">
+                            <h5 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                              <Link className="h-3.5 w-3.5" />
+                              章节连贯性检查
+                              <Badge variant="outline" className="text-[10px]">
+                                {combinedReport.coherenceResult.score}分 · {combinedReport.coherenceResult.issues.length}个问题
+                              </Badge>
+                            </h5>
+
+                            {combinedReport.coherenceResult.issues.map((issue: any, i: number) => (
+                              <div key={`coh-${i}`} className={`p-2.5 rounded-lg border text-xs space-y-1 ${
+                                issue.severity === 'error'
+                                  ? 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800'
+                                  : 'bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800'
+                              }`}>
+                                <div className="font-medium flex items-center gap-1.5">
+                                  {issue.severity === 'error' ? (
+                                    <>
+                                      <ShieldAlert className="h-3.5 w-3.5 text-red-500" />
+                                      <span className="text-red-700 dark:text-red-300">错误{i + 1}</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                                      <span className="text-amber-700 dark:text-amber-300">警告{i + 1}</span>
+                                    </>
+                                  )}
+                                  <Badge variant="outline" className="text-[9px] ml-auto">{issue.category || '其他'}</Badge>
+                                </div>
+                                <p className={
+                                  issue.severity === 'error'
+                                    ? 'text-red-600 dark:text-red-400'
+                                    : 'text-amber-600 dark:text-amber-400'
+                                }>{issue.message}</p>
+                                {issue.suggestion && (
+                                  <p className="text-muted-foreground pl-4">→ 建议：{issue.suggestion}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {!combinedReport.characterResult?.conflicts?.length &&
+                         !combinedReport.characterResult?.warnings?.filter((w: string) => !w.includes('失败'))?.length &&
+                         !combinedReport.coherenceResult?.issues?.length && (
+                          <div className="flex items-center gap-2 p-4 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg text-sm text-green-700 dark:text-green-300">
+                            <CheckCircle className="h-5 w-5 shrink-0" />
+                            恭喜！角色一致性和章节连贯性均未发现问题，可以放心重写。
+                          </div>
+                        )}
+                      </div>
+                    </ScrollArea>
+
+                    {(combinedReport.characterResult?.conflicts?.length > 0 ||
+                     combinedReport.coherenceResult?.issues?.some((i: any) => i.severity === 'error')) && (
+                      <p className="text-[11px] text-muted-foreground text-center pt-2 border-t">
+                        重写时将自动带入以上问题进行针对性优化
+                      </p>
+                    )}
+                  </div>
                 ) : (
-                  <div className="space-y-2">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-sm">当前评分:</span>
-                      <span className="text-lg font-bold text-green-600">
-                        {coherenceResult?.score ?? 100}/100
-                      </span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      一致性检查未发现问题，可以放心重写。
-                    </p>
+                  <div className="py-8 text-center text-sm text-muted-foreground">
+                    暂无报告数据
                   </div>
                 )}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="flex-shrink-0">
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction onClick={handleRewriteConfirm}>
-              确认，开始重写
+            <AlertDialogAction
+              onClick={handleRewriteConfirm}
+              disabled={isChecking}
+              className="gap-2"
+            >
+              {isChecking ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  检查中...
+                </>
+              ) : (
+                <>
+                  确认，开始重写
+                </>
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
