@@ -185,7 +185,7 @@ export async function searchSimilarMulti(
   const perTypeK = Math.ceil(topK / Math.max(sourceTypes.length, 1))
   const results = await Promise.all(
     sourceTypes.map(st =>
-      searchSimilar(vectorize, queryVector, { topK: perTypeK, filter: { novelId, sourceType: st } })
+      searchSimilar(vectorize, queryVector, { topK: perTypeK, filter: { novelId, sourceType: st as VectorMetadata['sourceType'] } })
         .catch(() => [] as any[])
     )
   )
