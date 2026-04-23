@@ -22,6 +22,8 @@ export function useGenerate() {
   const [contextInfo, setContextInfo] = useState<ContextBundle | null>(null)
   const [toolCalls, setToolCalls] = useState<ToolCallEvent[]>([])
   const [usage, setUsage] = useState<{ prompt_tokens: number; completion_tokens: number } | null>(null)
+  const [repairedContent, setRepairedContent] = useState<string | null>(null)
+  const [repairInfo, setRepairInfo] = useState<{ originalScore: number; issues: Array<{ severity: 'error' | 'warning'; category?: string; message: string; suggestion?: string }> } | null>(null)
   const stopRef = useRef<(() => void) | null>(null)
 
   const generate = (chapterId: string, novelId: string, options?: {
@@ -79,7 +81,7 @@ export function useGenerate() {
 
             if (errorCount > 0) {
               toast.error(`连贯性检测发现 ${errorCount} 个问题（评分: ${score}/100）`, {
-                description: issues.slice(0, 3).map((i: { message: string }) => `• ${i.message}`).join('\n'),
+                description: score < 70 ? '正在自动修复...' : issues.slice(0, 3).map((i: { message: string }) => `• ${i.message}`).join('\n'),
                 duration: 8000,
               })
             } else if (warningCount > 0) {
@@ -88,6 +90,17 @@ export function useGenerate() {
                 duration: 6000,
               })
             }
+            return
+          }
+          // 自动修复结果
+          if (chunk.type === 'coherence_fix') {
+            const { repairedContent: fixed, originalScore, issues: fixIssues } = chunk as { repairedContent: string; originalScore: number; issues: Array<{ severity: 'error' | 'warning'; message: string }> }
+            setRepairedContent(fixed)
+            setRepairInfo({ originalScore, issues: (fixIssues || []).map(i => ({ severity: i.severity, message: i.message })) })
+            toast.success(`已自动修复（原评分 ${originalScore}/100）`, {
+              description: '修复版本已就绪，可在编辑器中选择接受或忽略',
+              duration: 8000,
+            })
             return
           }
           if (chunk.content) {
@@ -115,5 +128,7 @@ export function useGenerate() {
     setStatus('idle')
   }
 
-  return { output, status, generate, stop, contextInfo, setContextInfo, toolCalls, usage }
+  const clearRepair = () => { setRepairedContent(null); setRepairInfo(null) }
+
+  return { output, status, generate, stop, contextInfo, setContextInfo, toolCalls, usage, repairedContent, repairInfo, clearRepair }
 }

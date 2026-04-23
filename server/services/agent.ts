@@ -553,6 +553,16 @@ function buildMessages(
 ): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
   const { mode = 'generate', existingContent } = options
   const baseSystemPrompt = `你是一位专业的网络小说作家，擅长创作玄幻/仙侠类小说。
+
+【核心创作原则——必须严格遵守】
+用户消息中会提供本章的创作资料包，包含总纲、卷蓝图、角色卡、世界设定、伏笔列表等。
+这些资料是你创作的唯一权威依据，优先级高于你自身的任何推断或补全：
+1. 角色的境界、姓名、性格、能力必须与角色卡完全一致，不得自行发明或升级
+2. 世界设定（修炼体系、地理、势力）必须与设定资料完全一致
+3. 未收尾伏笔若本章未明确要求回收，不得擅自处理
+4. 前章摘要描述的结尾状态即为本章开头的起点，必须自然衔接
+5. 创作规则中的禁忌写法一律不得出现
+
 你的写作风格：
 - 文笔流畅，节奏紧凑
 - 善用对话推动情节
@@ -560,24 +570,16 @@ function buildMessages(
 - 每章结尾留有悬念
 - 人物性格鲜明，行为符合设定
 
-【重要：工具使用指南】
-在正式创作前，如果你需要了解背景信息，可以调用以下工具获取资料。
-可用的工具包括：
+【工具使用指南】
+在正式创作前，如果资料包中某项信息不足，可以调用工具补充：
 - queryOutline: 查询大纲（世界观、卷纲、章节大纲）
 - queryCharacter: 查询角色信息
 - searchSemantic: 语义搜索相关内容
 
-当需要使用工具时，请在回复开头用以下JSON格式声明：
-{"name": "工具名", "arguments": {"参数名": "参数值"}}
-
-示例：
-{"name": "queryCharacter", "arguments": {"novelId": "abc123"}]
-
 注意：
-1. 工具调用应该简洁明确，一次只调用一个工具
-2. 获取到工具结果后，基于这些信息进行创作
-3. 不要在正文中包含工具调用的JSON标记
-4. 如果已有足够的信息可以直接创作，则无需调用工具`
+1. 资料包中已有的信息无需再调用工具查询
+2. 工具调用应简洁明确，一次一个
+3. 不要在正文中包含工具调用的JSON标记`
 
   const presets: Record<string, string> = {
     fantasy: baseSystemPrompt,
@@ -669,15 +671,24 @@ ${existingContent}
   const userContent = `【创作任务】
 请创作《${chapterTitle}》的正文内容，3000-5000字。
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+以下是本章创作资料包，所有内容均为权威依据：
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ${contextText}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-请基于以上资料进行创作，确保：
-- 符合大纲要求
-- 与前文衔接自然
-- 角色行为符合设定（特别是境界等级的一致性）
-- 合理处理或推进未收尾的伏笔
-- 严格遵循创作规则中的文风、节奏要求
-- 文风流畅，节奏紧凑`
+【强制要求——违反任何一条即为创作失败】
+1. 所有出场角色的姓名、境界、能力必须与上方"本章出场角色"卡片完全一致
+2. 修炼体系、境界名称必须与"境界体系"设定完全一致，不得自造词汇
+3. 本章开头必须自然承接"上一章回顾"中描述的结尾状态
+4. 创作规则中标注的禁忌写法一律不得出现
+5. 如有"待回收伏笔"，本章可以推进但不得擅自终结（除非大纲明确指示）
+
+【写作要求】
+- 字数：3000-5000字
+- 视角：第三人称有限视角
+- 节奏：张弛有度，高潮前蓄势充分
+- 结尾：留有钩子或悬念`
 
   return [
     { role: 'system', content: systemPrompt },
@@ -1402,6 +1413,81 @@ export async function getGenerationLogs(
   }
 
   return query.all()
+}
+
+/**
+ * 根据一致性检查结果，让 AI 针对性修复章节内容
+ * 仅在 score < 70 时调用，避免小问题浪费 token
+ */
+export async function repairChapterByIssues(
+  env: Env,
+  chapterId: string,
+  novelId: string,
+  issues: CoherenceCheckResult['issues'],
+  score: number
+): Promise<{ ok: boolean; repairedContent?: string; error?: string }> {
+  const db = drizzle(env.DB)
+
+  try {
+    const chapter = await db
+      .select({ content: chapters.content, title: chapters.title })
+      .from(chapters)
+      .where(eq(chapters.id, chapterId))
+      .get()
+
+    if (!chapter?.content) return { ok: false, error: 'Chapter content not found' }
+
+    let llmConfig
+    try {
+      llmConfig = await resolveConfig(db, 'chapter_gen', novelId)
+      llmConfig.apiKey = llmConfig.apiKey || ''
+    } catch {
+      return { ok: false, error: 'Model config not found' }
+    }
+
+    const issueList = issues
+      .map((i, idx) => `${idx + 1}. [${i.severity === 'error' ? '错误' : '警告'}] ${i.message}${i.suggestion ? `\n   建议：${i.suggestion}` : ''}`)
+      .join('\n')
+
+    const messages = [
+      {
+        role: 'system' as const,
+        content: `你是一位专业的小说修改编辑。你的任务是根据指出的问题，对章节内容进行针对性修改。
+修改原则：
+- 只修改有问题的部分，保持其余内容不变
+- 不改变核心情节走向
+- 修改后字数与原文相近
+- 直接输出完整修改后的正文，不要任何解释或标注`,
+      },
+      {
+        role: 'user' as const,
+        content: `以下章节《${chapter.title}》经一致性检查发现问题（评分 ${score}/100），请根据问题列表进行修改。
+
+【发现的问题】
+${issueList}
+
+【原文内容】
+${chapter.content}
+
+请直接输出修改后的完整正文：`,
+      },
+    ]
+
+    let repairedContent = ''
+    await streamGenerate(llmConfig, messages as any, {
+      onChunk: (text) => { repairedContent += text },
+      onToolCall: () => {},
+      onDone: () => {},
+      onError: (err) => { throw err },
+    })
+
+    if (!repairedContent.trim()) return { ok: false, error: 'Repair produced empty content' }
+
+    return { ok: true, repairedContent }
+  } catch (error) {
+    console.error('[repairChapterByIssues] failed:', error)
+    return { ok: false, error: (error as Error).message }
+  }
 }
 
 export async function checkCharacterConsistency(

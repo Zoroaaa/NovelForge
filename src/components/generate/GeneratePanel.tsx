@@ -8,6 +8,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Square, PenLine, Brain, Shield, RefreshCw, Play } from 'lucide-react'
 import { useGenerate } from '@/hooks/useGenerate'
+import { RepairDiffPanel } from './RepairDiffPanel'
 import { StreamOutput } from './StreamOutput'
 import {
   ContextPreview,
@@ -49,9 +50,14 @@ export function GeneratePanel({
   onContextUpdate,
   existingContent = '',
 }: GeneratePanelProps) {
-  const { output, status, generate, stop, contextInfo, toolCalls, usage } = useGenerate()
+  const { output, status, generate, stop, contextInfo, toolCalls, usage, repairedContent, repairInfo, clearRepair } = useGenerate()
   const [showConsistencyCheck, setShowConsistencyCheck] = useState(false)
   const [isInserting, setIsInserting] = useState(false)
+
+  const handleAcceptRepair = (content: string) => {
+    onInsertContent(content)
+    clearRepair()
+  }
 
   // Phase 1.6: 生成模式状态
   const [mode, setMode] = useState<GenerationMode>('generate')
@@ -214,6 +220,18 @@ export function GeneratePanel({
       </div>
 
       <StreamOutput content={output} status={status} usage={usage} />
+
+      {/* 自动修复 Diff 面板 */}
+      {repairedContent && status === 'done' && (
+        <RepairDiffPanel
+          originalContent={output}
+          repairedContent={repairedContent}
+          originalScore={repairInfo?.originalScore ?? 0}
+          issues={repairInfo?.issues ?? []}
+          onAccept={handleAcceptRepair}
+          onDismiss={clearRepair}
+        />
+      )}
 
       {status === 'done' && output && (
         <div className="space-y-2">

@@ -17,6 +17,7 @@ import {
   checkCharacterConsistency,
   generateOutlineBatch,
   checkChapterCoherence,
+  repairChapterByIssues,
   generateMasterOutlineSummary,
   generateVolumeSummary,
   confirmBatchChapterCreation,
@@ -101,16 +102,33 @@ router.post('/chapter', async (c) => {
         status: 'success',
       })
 
-      // Phase 2.3: 异步发送连贯性检查结果（不阻塞主流程）
+      // Phase 2.3: 异步发送连贯性检查结果，score < 70 时触发自动修复
       const coherenceCheckPromise = checkChapterCoherence(c.env, chapterId, novelId)
-        .then(coherenceResult => {
-          if (coherenceResult.hasIssues) {
-            const coherenceData = `data: ${JSON.stringify({
-              type: 'coherence_check',
-              score: coherenceResult.score,
-              issues: coherenceResult.issues,
-            })}\n\n`
-            writer.write(encoder.encode(coherenceData))
+        .then(async coherenceResult => {
+          if (!coherenceResult.hasIssues) return
+
+          // 先推送检查结果
+          const coherenceData = `data: ${JSON.stringify({
+            type: 'coherence_check',
+            score: coherenceResult.score,
+            issues: coherenceResult.issues,
+          })}\n\n`
+          writer.write(encoder.encode(coherenceData))
+
+          // score < 70 才触发自动修复，避免小问题浪费 token
+          if (coherenceResult.score < 70) {
+            const repairResult = await repairChapterByIssues(
+              c.env, chapterId, novelId, coherenceResult.issues, coherenceResult.score
+            )
+            if (repairResult.ok && repairResult.repairedContent) {
+              const fixData = `data: ${JSON.stringify({
+                type: 'coherence_fix',
+                repairedContent: repairResult.repairedContent,
+                originalScore: coherenceResult.score,
+                issues: coherenceResult.issues,
+              })}\n\n`
+              writer.write(encoder.encode(fixData))
+            }
           }
         })
         .catch(err => console.warn('Failed to send coherence check:', err))
@@ -118,10 +136,10 @@ router.post('/chapter', async (c) => {
       const doneData = `data: ${JSON.stringify({ type: 'done', usage })}\n\ndata: [DONE]\n\n`
       writer.write(encoder.encode(doneData))
 
-      // 等待连贯性检查完成后再关闭流（最多等 5 秒）
+      // 等待连贯性检查+修复完成后再关闭流（最多等 60 秒）
       Promise.race([
         coherenceCheckPromise,
-        new Promise(resolve => setTimeout(resolve, 5000)),
+        new Promise(resolve => setTimeout(resolve, 60000)),
       ]).finally(() => {
         clearTimeout(timeoutId)
         writer.close()
