@@ -252,7 +252,10 @@ router.put('/:id', zValidator('json', UpdateSettingSchema), async (c) => {
       .returning()
       .get()
 
-    if (c.env.VECTORIZE && body.content !== undefined && updated.content) {
+    // B7修复: 扩展重新向量化触发条件，覆盖 importance/name 变更
+    // 原bug：仅 content 变更时触发重新向量化；importance 单独调整时向量元数据不更新
+    const needsReindex = body.content !== undefined || body.importance !== undefined || body.name !== undefined
+    if (c.env.VECTORIZE && needsReindex && updated.content) {
       await enqueue(c.env, {
         type: 'index_content',
         payload: {

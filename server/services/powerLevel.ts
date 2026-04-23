@@ -9,6 +9,7 @@ import { characters, chapters } from '../db/schema'
 import { eq, and } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { resolveConfig } from './llm'
+import { enqueue } from '../lib/queue'
 
 export interface PowerLevelData {
   system: string           // 境界体系名称（如"修仙境界"）
@@ -68,6 +69,7 @@ export async function detectPowerLevelBreakthrough(
         name: characters.name,
         role: characters.role,
         powerLevel: characters.powerLevel,
+        description: characters.description,
       })
       .from(characters)
       .where(
@@ -242,6 +244,21 @@ ${chapter.content.slice(0, 3000)}
             powerLevel: JSON.stringify(newPowerLevel),
           })
           .where(eq(characters.id, targetCharacter.id))
+
+        // B5修复: 境界突破后重新向量化角色，确保RAG能检索到最新的境界信息
+        if (env.TASK_QUEUE) {
+          const indexText = `${targetCharacter.name}${targetCharacter.role ? ` (${targetCharacter.role})` : ''}\n${(targetCharacter.description || '').slice(0, 300)}`
+          await enqueue(env, {
+            type: 'index_content',
+            payload: {
+              sourceType: 'character',
+              sourceId: targetCharacter.id,
+              novelId,
+              title: targetCharacter.name,
+              content: indexText,
+            },
+          })
+        }
 
         console.log(`✅ Power level updated for ${update.characterName}: ${update.previousLevel || '?'} → ${update.current}`)
 

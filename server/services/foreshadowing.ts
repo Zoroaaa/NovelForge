@@ -9,6 +9,7 @@ import { foreshadowing, chapters } from '../db/schema'
 import { eq, and, isNull } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { resolveConfig } from './llm'
+import { enqueue } from '../lib/queue'
 
 export interface ForeshadowingExtractResult {
   newForeshadowing: Array<{
@@ -158,14 +159,29 @@ ${existingForeshadowingText}
     // 将新伏笔写入数据库
     for (const newF of parsed.newForeshadowing) {
       try {
-        await db.insert(foreshadowing).values({
+        // B4修复: 插入后立即触发向量化，确保新伏笔能被后续RAG检索到
+        const inserted = await db.insert(foreshadowing).values({
           novelId,
           chapterId,
           title: newF.title,
           description: newF.description,
           status: 'open',
           importance: newF.importance,
-        })
+        }).returning().get()
+
+        if (inserted && env.TASK_QUEUE) {
+          await enqueue(env, {
+            type: 'index_content',
+            payload: {
+              sourceType: 'foreshadowing',
+              sourceId: inserted.id,
+              novelId,
+              title: inserted.title,
+              content: inserted.description || inserted.title,
+              extraMetadata: { importance: inserted.importance },
+            },
+          })
+        }
         console.log(`✅ New foreshadowing created: ${newF.title}`)
       } catch (insertError) {
         console.warn('Failed to insert foreshadowing:', insertError)

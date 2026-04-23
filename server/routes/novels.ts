@@ -208,7 +208,6 @@ router.get('/:id/trash', async (c) => {
 router.delete('/:id/trash', async (c) => {
   const novelId = c.req.param('id')
   const targetTable = c.req.query('table') || ''
-  const db = drizzle(c.env.DB)
 
   const allTables = ['chapters', 'characters', 'settings', 'outlines', 'volumes', 'foreshadowing', 'rules']
   const tablesToClean = targetTable ? [targetTable] : allTables
@@ -231,10 +230,9 @@ router.delete('/:id/trash', async (c) => {
     }
 
     try {
-      const result = await db.run(
-        `DELETE FROM ${tableName} WHERE novel_id = ? AND deleted_at IS NOT NULL`,
-        [novelId]
-      )
+      const result = await c.env.DB.prepare(
+        `DELETE FROM ${tableName} WHERE novel_id = ? AND deleted_at IS NOT NULL`
+      ).bind(novelId).run()
       totalDeleted += result.meta.changes ?? 0
     } catch (e) {
       console.warn(`[trash] Failed to clean ${tableName}:`, e)

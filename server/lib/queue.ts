@@ -21,14 +21,6 @@ export type QueueMessage =
       }
     }
   | {
-      type: 'generate_summary'
-      payload: {
-        chapterId: string
-        novelId: string
-        chapterTitle: string
-      }
-    }
-  | {
       type: 'rebuild_entity_index'
       payload: {
         novelId: string
@@ -39,6 +31,15 @@ export type QueueMessage =
       payload: {
         chapterId: string
         novelId: string
+      }
+    }
+  | {
+      type: 'post_process_chapter'
+      payload: {
+        chapterId: string
+        novelId: string
+        enableAutoSummary: boolean
+        usage?: { prompt_tokens: number; completion_tokens: number }
       }
     }
 

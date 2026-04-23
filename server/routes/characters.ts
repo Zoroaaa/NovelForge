@@ -106,21 +106,21 @@ router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
     .where(eq(t.id, id))
     .returning()
 
-  if (body.description !== undefined && row && c.env.VECTORIZE) {
-    const descriptionContent = body.description ?? ''
-    if (descriptionContent.trim()) {
-      const indexText = `${row.name}${row.role ? ` (${row.role})` : ''}\n${descriptionContent.slice(0, 300)}`
-      await enqueue(c.env, {
-        type: 'index_content',
-        payload: {
-          sourceType: 'character',
-          sourceId: row.id,
-          novelId: row.novelId,
-          title: row.name,
-          content: indexText,
-        },
-      })
-    }
+  // B6修复: 扩展重新向量化触发条件，覆盖 name/role 变更
+  // 原bug：仅 description 变更时触发重新向量化；name 或 role 单独变更时向量内容变为陈旧
+  const needsReindex = body.description !== undefined || body.name !== undefined || body.role !== undefined
+  if (needsReindex && row && c.env.VECTORIZE) {
+    const indexText = `${row.name}${row.role ? ` (${row.role})` : ''}\n${(row.description || '').slice(0, 300)}`
+    await enqueue(c.env, {
+      type: 'index_content',
+      payload: {
+        sourceType: 'character',
+        sourceId: row.id,
+        novelId: row.novelId,
+        title: row.name,
+        content: indexText,
+      },
+    })
   }
 
   return c.json(row)

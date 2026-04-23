@@ -35,7 +35,7 @@ import { eq, and, sql, desc, inArray } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { embedText, searchSimilar } from './embedding'
 
-type AppDb = DrizzleD1Database<typeof import('../db/schema')>
+export type AppDb = DrizzleD1Database<typeof import('../db/schema')>
 
 // ============================================================
 // 类型定义
@@ -747,7 +747,9 @@ async function fetchOpenForeshadowingIds(
     const openIds = new Set<string>()
     for (const row of rows) {
       const sort = sortMap.get(row.chapterId)
-      if (!sort || sort < currentSortOrder) openIds.add(row.id)
+      // B2修复: 使用 == null 判断"值不存在"，避免 sortOrder=0(第一章)被 !sort 误判为falsy
+      // 原bug：sort=0时 !sort=true，导致第一章埋下的伏笔在生成第一章时就被注入上下文
+      if (sort == null || sort < currentSortOrder) openIds.add(row.id)
     }
     return openIds
   } catch (error) {

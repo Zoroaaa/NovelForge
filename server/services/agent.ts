@@ -8,11 +8,13 @@ import { drizzle } from 'drizzle-orm/d1'
 import { chapters, modelConfigs, characters, novelSettings, masterOutline, volumes, generationLogs, foreshadowing, novels } from '../db/schema'
 import { eq, desc, sql, and } from 'drizzle-orm'
 import type { Env } from '../lib/types'
+import type { AppDb } from './contextBuilder'
 import { buildChapterContext, assemblePromptContext, type ContextBundle } from './contextBuilder'
 import { streamGenerate, resolveConfig, getDefaultBase } from './llm'
 import { searchSimilar, embedText, ACTIVE_SOURCE_TYPES } from './embedding'
 import { extractForeshadowingFromChapter } from './foreshadowing'
 import { detectPowerLevelBreakthrough } from './powerLevel'
+import { enqueue } from '../lib/queue'
 
 export interface AgentConfig {
   maxIterations?: number
@@ -177,32 +179,62 @@ export async function generateChapter(
       agentConfig.maxIterations
     )
 
-    // 6. 触发自动摘要
-    if (agentConfig.enableAutoSummary) {
-      await triggerAutoSummary(env, chapterId, novelId, {
-        prompt_tokens: usageResult.promptTokens,
-        completion_tokens: usageResult.completionTokens,
+    // 5.5 B1修复: 先将生成的内容写入DB，再触发后处理
+    // 原问题：后处理三步在onDone之前执行，此时DB中chapter.content仍是NULL，导致摘要/伏笔/境界检测全部静默退出
+    const fullContent = usageResult.collectedContent
+    if (fullContent && fullContent.trim().length > 0) {
+      await db.update(chapters)
+        .set({
+          content: fullContent,
+          wordCount: fullContent.length,
+          updatedAt: sql`(unixepoch())`,
+        })
+        .where(eq(chapters.id, chapterId))
+      console.log(`✅ B1 fix: Chapter content written to DB (${fullContent.length} chars) before post-processing`)
+    }
+
+    // 6-8. 架构优化: 后处理异步化 - 将摘要/伏笔/境界检测移入Queue
+    // 原问题：三步串行阻塞5-15秒，用户必须等待完成后才收到[DONE]
+    // 优化后：立即发送[DONE]，后处理在Queue中异步执行
+    if (env.TASK_QUEUE) {
+      await enqueue(env, {
+        type: 'post_process_chapter',
+        payload: {
+          chapterId,
+          novelId,
+          enableAutoSummary: agentConfig.enableAutoSummary,
+          usage: {
+            prompt_tokens: usageResult.promptTokens,
+            completion_tokens: usageResult.completionTokens,
+          },
+        },
       })
-    }
-
-    // 7. 自动提取伏笔信息
-    try {
-      const foreshadowingResult = await extractForeshadowingFromChapter(env, chapterId, novelId)
-      if (foreshadowingResult.newForeshadowing.length > 0 || foreshadowingResult.resolvedForeshadowingIds.length > 0) {
-        console.log(`📝 Foreshadowing: ${foreshadowingResult.newForeshadowing.length} new, ${foreshadowingResult.resolvedForeshadowingIds.length} resolved`)
+      console.log('✅ Post-processing tasks enqueued (async mode)')
+    } else {
+      // Fallback: Queue不可用时仍同步执行（保持向后兼容）
+      console.warn('TASK_QUEUE unavailable, falling back to synchronous post-processing')
+      if (agentConfig.enableAutoSummary) {
+        await triggerAutoSummary(env, chapterId, novelId, {
+          prompt_tokens: usageResult.promptTokens,
+          completion_tokens: usageResult.completionTokens,
+        })
       }
-    } catch (foreshadowError) {
-      console.warn('Foreshadowing extraction failed (non-critical):', foreshadowError)
-    }
-
-    // 8. 自动检测境界突破事件
-    try {
-      const powerLevelResult = await detectPowerLevelBreakthrough(env, chapterId, novelId)
-      if (powerLevelResult.hasBreakthrough) {
-        console.log(`⚡ Power level: ${powerLevelResult.updates.length} breakthroughs detected`)
+      try {
+        const foreshadowingResult = await extractForeshadowingFromChapter(env, chapterId, novelId)
+        if (foreshadowingResult.newForeshadowing.length > 0 || foreshadowingResult.resolvedForeshadowingIds.length > 0) {
+          console.log(`📝 Foreshadowing: ${foreshadowingResult.newForeshadowing.length} new, ${foreshadowingResult.resolvedForeshadowingIds.length} resolved`)
+        }
+      } catch (foreshadowError) {
+        console.warn('Foreshadowing extraction failed (non-critical):', foreshadowError)
       }
-    } catch (powerLevelError) {
-      console.warn('Power level detection failed (non-critical):', powerLevelError)
+      try {
+        const powerLevelResult = await detectPowerLevelBreakthrough(env, chapterId, novelId)
+        if (powerLevelResult.hasBreakthrough) {
+          console.log(`⚡ Power level: ${powerLevelResult.updates.length} breakthroughs detected`)
+        }
+      } catch (powerLevelError) {
+        console.warn('Power level detection failed (non-critical):', powerLevelError)
+      }
     }
 
     // 9. Phase 2.3: 异步连贯性质量检查（不阻塞主流程）
@@ -240,10 +272,11 @@ async function runReActLoop(
   onChunk: (text: string) => void,
   onToolCall: (event: ToolCallEvent) => void,
   maxIterations: number
-): Promise<{ promptTokens: number; completionTokens: number }> {
+): Promise<{ promptTokens: number; completionTokens: number; collectedContent: string }> {
   let iteration = 0
   let totalPromptTokens = 0
   let totalCompletionTokens = 0
+  let collectedContent = ''
 
   while (iteration < maxIterations) {
     iteration++
@@ -314,8 +347,12 @@ async function runReActLoop(
     // 如果没有工具调用，说明生成完成，退出循环
     if (collectedToolCalls.length === 0) {
       console.log(`✅ No tool calls in iteration ${iteration}, generation finished`)
+      collectedContent += iterationContent
       break
     }
+
+    // 累积本轮迭代的内容（即使有工具调用也要保留已生成的文本）
+    collectedContent += iterationContent
 
     // 执行所有收集到的工具调用
     for (const toolCall of collectedToolCalls) {
@@ -380,7 +417,7 @@ async function runReActLoop(
     console.warn(`⚠️ Reached maximum iterations (${maxIterations}), stopping loop`)
   }
 
-  return { promptTokens: totalPromptTokens, completionTokens: totalCompletionTokens }
+  return { promptTokens: totalPromptTokens, completionTokens: totalCompletionTokens, collectedContent }
 }
 
 /**
@@ -892,19 +929,6 @@ export async function generateVolumeSummary(
   }
 }
 
-function getDefaultBase(provider: string): string {
-  switch (provider) {
-    case 'volcengine':
-      return 'https://ark.cn-beijing.volces.com/api/v3'
-    case 'anthropic':
-      return 'https://api.anthropic.com/v1'
-    case 'openai':
-      return 'https://api.openai.com/v1'
-    default:
-      return 'https://ark.cn-beijing.volces.com/api/v3'
-  }
-}
-
 /**
  * 执行 Agent 工具调用
  */
@@ -1056,6 +1080,7 @@ export async function checkChapterCoherence(
     const currentChapter = await db
       .select({
         id: chapters.id,
+        novelId: chapters.novelId,
         title: chapters.title,
         content: chapters.content,
         sortOrder: chapters.sortOrder,
@@ -1099,20 +1124,21 @@ export async function checkChapterCoherence(
  */
 async function checkContinuityWithPrevChapter(
   db: any,
-  currentChapter: { id: string; title: string; content: string | null; sortOrder: number },
+  currentChapter: { id: string; novelId: string; title: string; content: string | null; sortOrder: number },
   issues: CoherenceCheckResult['issues']
 ): Promise<void> {
   try {
-    // 获取上一章
     const prevChapter = await db
       .select({
         summary: chapters.summary,
         title: chapters.title,
       })
       .from(chapters)
-      .where(
-        sql`${chapters.novelId} = ${currentChapter.id}`  // 需要novelId，这里简化处理
-      )
+      .where(and(
+        eq(chapters.novelId, currentChapter.novelId),
+        sql`${chapters.sortOrder} < ${currentChapter.sortOrder}`,
+        sql`${chapters.deletedAt} IS NULL`
+      ))
       .orderBy(desc(chapters.sortOrder))
       .limit(1)
       .get()
@@ -1849,7 +1875,7 @@ export async function generateSettingSummary(
 
   let llmConfig
   try {
-    llmConfig = await resolveConfig(db, 'summary_gen', row.novelId)
+    llmConfig = await resolveConfig(db as any, 'summary_gen', row.novelId)
   } catch (e) {
     return { ok: false, error: `未配置摘要生成模型: ${(e as Error).message}` }
   }

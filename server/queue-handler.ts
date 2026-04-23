@@ -3,6 +3,7 @@ import type { QueueMessage } from './lib/queue'
 import { indexContent, deindexContent, deleteVector } from './services/embedding'
 import { rebuildEntityIndex } from './services/entity-index'
 import { triggerAutoSummary } from './services/agent'
+import { detectPowerLevelBreakthrough } from './services/powerLevel'
 import { extractForeshadowingFromChapter } from './services/foreshadowing'
 import { drizzle } from 'drizzle-orm/d1'
 import { novelSettings, characters, foreshadowing, chapters, queueTaskLogs, vectorIndex } from './db/schema'
@@ -40,12 +41,6 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
       break
     }
 
-    case 'generate_summary': {
-      const { chapterId, novelId } = msg.payload
-      await triggerAutoSummary(env, chapterId, novelId, { prompt_tokens: 0, completion_tokens: 0 })
-      break
-    }
-
     case 'rebuild_entity_index': {
       await rebuildEntityIndex(env, msg.payload.novelId)
       break
@@ -57,6 +52,41 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
         msg.payload.chapterId,
         msg.payload.novelId
       )
+      break
+    }
+
+    case 'post_process_chapter': {
+      // 架构优化: 异步执行章节后处理（摘要/伏笔/境界检测），避免阻塞SSE流
+      const { chapterId, novelId, enableAutoSummary, usage } = msg.payload
+
+      if (enableAutoSummary) {
+        try {
+          await triggerAutoSummary(env, chapterId, novelId, usage || { prompt_tokens: 0, completion_tokens: 0 })
+          console.log(`✅ [Queue] Auto summary completed for chapter ${chapterId}`)
+        } catch (summaryError) {
+          console.warn('[Queue] Auto-summary failed (non-critical):', summaryError)
+        }
+      }
+
+      try {
+        const foreshadowingResult = await extractForeshadowingFromChapter(env, chapterId, novelId)
+        if (foreshadowingResult.newForeshadowing.length > 0 || foreshadowingResult.resolvedForeshadowingIds.length > 0) {
+          console.log(`📝 [Queue] Foreshadowing: ${foreshadowingResult.newForeshadowing.length} new, ${foreshadowingResult.resolvedForeshadowingIds.length} resolved`)
+        }
+      } catch (foreshadowError) {
+        console.warn('[Queue] Foreshadowing extraction failed (non-critical):', foreshadowError)
+      }
+
+      try {
+        const powerLevelResult = await detectPowerLevelBreakthrough(env, chapterId, novelId)
+        if (powerLevelResult.hasBreakthrough) {
+          console.log(`⚡ [Queue] Power level: ${powerLevelResult.updates.length} breakthroughs detected`)
+        }
+      } catch (powerLevelError) {
+        console.warn('[Queue] Power level detection failed (non-critical):', powerLevelError)
+      }
+
+      console.log(`✅ [Queue] Post-processing completed for chapter ${chapterId}`)
       break
     }
 
@@ -247,11 +277,11 @@ function getNovelId(msg: QueueMessage): string {
       return msg.payload.novelId
     case 'reindex_all':
       return msg.payload.novelId
-    case 'generate_summary':
-      return msg.payload.novelId
     case 'rebuild_entity_index':
       return msg.payload.novelId
     case 'extract_foreshadowing':
+      return msg.payload.novelId
+    case 'post_process_chapter':
       return msg.payload.novelId
   }
 }
