@@ -299,11 +299,13 @@ async function buildCharacterSlotFromDB(
   ragResults: Array<{ score: number; metadata: any }>,
   budgetTokens: number
 ): Promise<string[]> {
-  const SCORE_THRESHOLD = 0.40
+  const SCORE_THRESHOLD = 0.38
+  const MAX_CHARACTERS = 6
 
   const candidates = ragResults
     .filter(r => r.score >= SCORE_THRESHOLD)
     .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_CHARACTERS)
     .map(r => r.metadata.sourceId)
 
   if (candidates.length === 0) return []
@@ -385,11 +387,12 @@ async function buildForeshadowingHybrid(
   .all()
 
   // 路径B: 普通 importance → RAG score 过滤
+  const MAX_NORMAL_FORESHADOWING = 5
   const normalItems = ragResults.filter(r => {
     const isOpen = openIds.has(r.metadata.sourceId)
     const isHigh = r.metadata.importance === 'high'
-    return isOpen && !isHigh && r.score > 0.55
-  })
+    return isOpen && !isHigh && r.score > 0.42
+  }).slice(0, MAX_NORMAL_FORESHADOWING)
 
   const allItems = [
     ...highPriority.map(h => ({
@@ -447,8 +450,16 @@ async function buildSettingsSlotV2(
   }
 
   const SCORE_THRESHOLDS: Record<keyof SlottedSettings, number> = {
-    worldRules: 0.55, powerSystem: 0.55,
-    geography: 0.70, factions: 0.68, artifacts: 0.68, misc: 0.72,
+    worldRules: 0.42, powerSystem: 0.42,
+    geography: 0.45, factions: 0.45, artifacts: 0.45, misc: 0.48,
+  }
+  const SLOT_MAX_ITEMS: Record<keyof SlottedSettings, number> = {
+    worldRules: 5, powerSystem: 5,
+    geography: 4, factions: 4, artifacts: 4, misc: 3,
+  }
+  const slotCount: Record<keyof SlottedSettings, number> = {
+    worldRules: 0, powerSystem: 0, geography: 0,
+    factions: 0, artifacts: 0, misc: 0,
   }
 
   const slotUsed: Record<keyof SlottedSettings, number> = {
@@ -471,6 +482,7 @@ async function buildSettingsSlotV2(
 
     if (sbudget === 0) continue
     if (r.score < threshold) continue
+    if (slotCount[slotKey] >= SLOT_MAX_ITEMS[slotKey]) continue
 
     // 使用 summary 而非 content
     const content = r.metadata.content || ''
@@ -479,10 +491,11 @@ async function buildSettingsSlotV2(
     if (slotUsed[slotKey] + tokens > sbudget) continue
 
     slotUsed[slotKey] += tokens
+    slotCount[slotKey]++
     output[slotKey].push(content)
 
     // 记录 high importance 设定用于后续 DB 全文补充
-    if (r.metadata.importance === 'high' && r.score >= 0.45) {
+    if (r.metadata.importance === 'high' && r.score >= 0.38) {
       highImportanceIds.push(r.metadata.sourceId)
     }
   }

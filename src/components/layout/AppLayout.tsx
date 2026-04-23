@@ -95,7 +95,7 @@ export function AppLayout({ left, center, right }: AppLayoutProps) {
                     <PanelRightClose className="h-4 w-4 text-muted-foreground" />
                   </Button>
                 </div>
-                <div className="flex-1 overflow-hidden">
+                <div className="flex-1 overflow-y-auto min-h-0">
                   {right}
                 </div>
               </>

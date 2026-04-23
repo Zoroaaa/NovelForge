@@ -39,3 +39,9 @@ queue = "novelforge-tasks"
 max_batch_size = 10
 max_batch_timeout = 5
 max_retries = 3
+
+# vectorize建库
+# npx wrangler vectorize create novelforge-index --dimensions=1024 --metric=cosine
+# ---先建库再执行语句
+# npx wrangler vectorize create-metadata-index novelforge-index --property-name=novelId --type=string
+# npx wrangler vectorize create-metadata-index novelforge-index --property-name=sourceType --type=string

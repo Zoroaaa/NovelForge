@@ -179,7 +179,7 @@ export function Sidebar({ novelId, onChapterSelect }: SidebarProps) {
       <div className="mx-3 border-t border-border/40" />
 
       {/* 内容区域 - 占据剩余全部空间 */}
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         {renderContent()}
       </div>
     </div>
