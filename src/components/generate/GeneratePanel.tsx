@@ -24,6 +24,7 @@ import {
 import { CharacterConsistencyCheck } from './CharacterConsistencyCheck'
 import { ChapterCoherenceCheck } from './ChapterCoherenceCheck'
 import { CombinedCheck } from './CombinedCheck'
+import { getToken } from '@/lib/api'
 
 interface GeneratePanelProps {
   novelId: string
@@ -82,7 +83,11 @@ export function GeneratePanel({
 
   const loadLatestCheckLog = useCallback(async () => {
     try {
-      const res = await fetch(`/api/generate/check-logs/latest?chapterId=${chapterId}`)
+      const token = getToken()
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+
+      const res = await fetch(`/api/generate/check-logs/latest?chapterId=${chapterId}`, { headers })
       if (res.ok) {
         const data = await res.json()
         if (data.log) {
@@ -102,7 +107,11 @@ export function GeneratePanel({
 
   const loadCheckHistory = useCallback(async () => {
     try {
-      const res = await fetch(`/api/generate/check-logs/history?chapterId=${chapterId}&limit=20`)
+      const token = getToken()
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+
+      const res = await fetch(`/api/generate/check-logs/history?chapterId=${chapterId}&limit=20`, { headers })
       if (res.ok) {
         const data = await res.json()
         setCheckHistory(data.logs || [])
@@ -161,9 +170,13 @@ export function GeneratePanel({
     setCoherenceCheckFailed(false)
 
     try {
+      const token = getToken()
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+
       const res = await fetch('/api/generate/coherence-check', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ chapterId, novelId }),
       })
       if (!res.ok) throw new Error('检查请求失败')
