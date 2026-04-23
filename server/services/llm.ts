@@ -490,7 +490,7 @@ export async function generate(
 
 // ========== 内部工具函数 ==========
 
-function getDefaultBase(provider: string): string {
+export function getDefaultBase(provider: string): string {
   return PROVIDER_BASES[provider] || 'https://api.openai.com/v1'
 }
 

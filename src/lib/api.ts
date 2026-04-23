@@ -168,6 +168,10 @@ export const api = {
                                    req<Novel>(`/api/novels/${id}`, { method: 'PATCH', body: j(body) }),
     /** 删除小说 */
     delete: (id: string)          => req(`/api/novels/${id}`, { method: 'DELETE' }),
+    trash: {
+      get: (novelId: string)       => req<{ ok: boolean; tables: Array<{ key: string; label: string; icon: string; count: number; items: Record<string, unknown>[] }>; total: number }>(`/api/novels/${novelId}/trash`),
+      clean: (novelId: string, table?: string) => req<{ ok: boolean; deleted: number }>(`/api/novels/${novelId}/trash${table ? `?table=${table}` : ''}`, { method: 'DELETE' }),
+    },
   },
   
   /**
@@ -197,7 +201,8 @@ export const api = {
                                   req<NovelSetting>('/api/settings', { method: 'POST', body: j(body) }),
     update: (id: string, body: Partial<Pick<NovelSetting, 'type' | 'category' | 'name' | 'content' | 'summary' | 'importance' | 'sortOrder' | 'attributes'>>) =>
                                   req<NovelSetting>(`/api/settings/${id}`, { method: 'PUT', body: j(body) }),
-    delete: (id: string)          => req(`/api/settings/${id}`, { method: 'DELETE' }),
+    delete: (id: string) => req(`/api/settings/${id}`, { method: 'DELETE' }),
+    generateSummary: (id: string) => req<{ ok: boolean; summary?: string; error?: string }>(`/api/settings/${id}/generate-summary`, { method: 'POST' }),
     tree:   (novelId: string)     => req<{ tree: Record<string, unknown>[]; stats: Record<string, number>; total: number }>(`/api/settings/tree/${novelId}`),
   },
 

@@ -190,6 +190,25 @@ router.post('/', zValidator('json', CreateSettingSchema), async (c) => {
 })
 
 /**
+ * POST /:id/generate-summary - AI 生成设定摘要
+ * @description 调用 LLM 为设定生成语义摘要（用于 RAG 索引）
+ * @param {string} id - 设定ID
+ * @returns {Object} { ok: boolean, summary?: string, error?: string }
+ */
+router.post('/:id/generate-summary', async (c) => {
+  const id = c.req.param('id')
+
+  try {
+    const { generateSettingSummary } = await import('../services/agent')
+    const result = await generateSettingSummary(c.env, id)
+    return c.json(result)
+  } catch (error) {
+    console.error('Generate setting summary failed:', error)
+    return c.json({ error: '生成摘要失败', details: (error as Error).message }, 500)
+  }
+})
+
+/**
  * PUT /:id - 更新设定
  * @param {string} id - 设定ID
  * @param {Object} body - 更新内容

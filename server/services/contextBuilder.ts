@@ -137,7 +137,7 @@ export async function buildChapterContext(
       title: chapters.title,
     })
     .from(chapters)
-    .where(eq(chapters.id, chapterId))
+    .where(and(eq(chapters.id, chapterId), sql`${chapters.deletedAt} IS NULL`))
     .get()
 
   if (!currentChapter) throw new Error(`Chapter not found: ${chapterId}`)
@@ -499,7 +499,7 @@ async function buildSettingsSlotV2(
         importance: novelSettings.importance,
       })
       .from(novelSettings)
-      .where(inArray(novelSettings.id, highImportanceIds))
+      .where(and(inArray(novelSettings.id, highImportanceIds), sql`${novelSettings.deletedAt} IS NULL`))
       .all()
 
       for (const fr of fullRows) {
@@ -572,7 +572,11 @@ async function fetchPrevChapterSummary(
     const row = await db
       .select({ summary: chapters.summary, title: chapters.title, sortOrder: chapters.sortOrder })
       .from(chapters)
-      .where(and(eq(chapters.novelId, novelId), sql`${chapters.sortOrder} < ${currentSortOrder}`))
+      .where(and(
+        eq(chapters.novelId, novelId),
+        sql`${chapters.sortOrder} < ${currentSortOrder}`,
+        sql`${chapters.deletedAt} IS NULL`
+      ))
       .orderBy(desc(chapters.sortOrder)).limit(1).get()
     if (!row?.summary) return ''
     return `[上一章: ${row.title}] ${row.summary}`
@@ -593,7 +597,8 @@ async function fetchRecentSummaries(
       .where(and(
         eq(chapters.novelId, novelId),
         sql`${chapters.sortOrder} < ${currentSortOrder}`,
-        sql`${chapters.summary} IS NOT NULL AND ${chapters.summary} != ''`
+        sql`${chapters.summary} IS NOT NULL AND ${chapters.summary} != ''`,
+        sql`${chapters.deletedAt} IS NULL`
       ))
       .orderBy(desc(chapters.sortOrder)).limit(chainLength).all()
 
@@ -736,7 +741,7 @@ async function fetchOpenForeshadowingIds(
 
     const chapterRows = await db
       .select({ id: chapters.id, sortOrder: chapters.sortOrder }).from(chapters)
-      .where(inArray(chapters.id, chapterIds)).all()
+      .where(and(inArray(chapters.id, chapterIds), sql`${chapters.deletedAt} IS NULL`)).all()
 
     const sortMap = new Map(chapterRows.map((c: any) => [c.id, c.sortOrder]))
     const openIds = new Set<string>()

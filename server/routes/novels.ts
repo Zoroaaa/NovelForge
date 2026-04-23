@@ -8,7 +8,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { drizzle } from 'drizzle-orm/d1'
-import { novels as t } from '../db/schema'
+import { novels as t, chapters, characters, novelSettings, masterOutline, volumes, foreshadowing, writingRules } from '../db/schema'
 import { eq, isNull, desc, and, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 
@@ -151,6 +151,97 @@ router.post('/:id/cover', async (c) => {
   await db.update(t).set({ coverR2Key: key, updatedAt: sql`(unixepoch())` }).where(eq(t.id, id))
 
   return c.json({ ok: true, coverUrl: `/api/novels/${id}/cover` })
+})
+
+/**
+ * GET /:id/trash - 获取小说的回收站（所有软删除数据）
+ * @description 查询该小说下所有表的软删除记录，按表分组返回
+ * @param {string} id - 小说ID
+ * @returns {Object} { tables: Array<{ name, label, count, items }>, total }
+ */
+router.get('/:id/trash', async (c) => {
+  const novelId = c.req.param('id')
+  const db = drizzle(c.env.DB)
+
+  try {
+    const [deletedChapters, deletedCharacters, deletedSettings, deletedOutlines, deletedVolumes, deletedForeshadowing, deletedRules] = await Promise.all([
+      db.select({ id: chapters.id, title: chapters.title, sortOrder: chapters.sortOrder, deletedAt: chapters.deletedAt })
+        .from(chapters).where(and(eq(chapters.novelId, novelId), sql`${chapters.deletedAt} IS NOT NULL`)).orderBy(desc(chapters.deletedAt)).limit(50).all(),
+      db.select({ id: characters.id, name: characters.name, role: characters.role, deletedAt: characters.deletedAt })
+        .from(characters).where(and(eq(characters.novelId, novelId), sql`${characters.deletedAt} IS NOT NULL`)).orderBy(desc(characters.deletedAt)).limit(50).all(),
+      db.select({ id: novelSettings.id, name: novelSettings.name, type: novelSettings.type, deletedAt: novelSettings.deletedAt })
+        .from(novelSettings).where(and(eq(novelSettings.novelId, novelId), sql`${novelSettings.deletedAt} IS NOT NULL`)).orderBy(desc(novelSettings.deletedAt)).limit(50).all(),
+      db.select({ id: masterOutline.id, title: masterOutline.title, deletedAt: masterOutline.deletedAt })
+        .from(masterOutline).where(and(eq(masterOutline.novelId, novelId), sql`${masterOutline.deletedAt} IS NOT NULL`)).orderBy(desc(masterOutline.deletedAt)).limit(20).all(),
+      db.select({ id: volumes.id, title: volumes.title, sortOrder: volumes.sortOrder, deletedAt: volumes.deletedAt })
+        .from(volumes).where(and(eq(volumes.novelId, novelId), sql`${volumes.deletedAt} IS NOT NULL`)).orderBy(desc(volumes.deletedAt)).limit(20).all(),
+      db.select({ id: foreshadowing.id, title: foreshadowing.title, status: foreshadowing.status, deletedAt: foreshadowing.deletedAt })
+        .from(foreshadowing).where(and(eq(foreshadowing.novelId, novelId), sql`${foreshadowing.deletedAt} IS NOT NULL`)).orderBy(desc(foreshadowing.deletedAt)).limit(50).all(),
+      db.select({ id: writingRules.id, title: writingRules.title, category: writingRules.category, deletedAt: writingRules.deletedAt })
+        .from(writingRules).where(and(eq(writingRules.novelId, novelId), sql`${writingRules.deletedAt} IS NOT NULL`)).orderBy(desc(writingRules.deletedAt)).limit(30).all(),
+    ])
+
+    const tables = [
+      { key: 'chapters', label: '章节', icon: 'BookOpen', count: deletedChapters.length, items: deletedChapters },
+      { key: 'characters', label: '角色', icon: 'Users', count: deletedCharacters.length, items: deletedCharacters },
+      { key: 'settings', label: '设定', icon: 'Layers', count: deletedSettings.length, items: deletedSettings },
+      { key: 'outlines', label: '总纲', icon: 'AlignLeft', count: deletedOutlines.length, items: deletedOutlines },
+      { key: 'volumes', label: '卷', icon: 'Library', count: deletedVolumes.length, items: deletedVolumes },
+      { key: 'foreshadowing', label: '伏笔', icon: 'Bookmark', count: deletedForeshadowing.length, items: deletedForeshadowing },
+      { key: 'rules', label: '规则', icon: 'ScrollText', count: deletedRules.length, items: deletedRules },
+    ].filter(t => t.count > 0)
+
+    return c.json({ ok: true, tables, total: tables.reduce((s, t) => s + t.count, 0) })
+  } catch (error) {
+    console.error('Trash query failed:', error)
+    return c.json({ error: '查询回收站失败' }, 500)
+  }
+})
+
+/**
+ * DELETE /:id/trash - 清空回收站（永久删除软删除数据）
+ * @description 可按表类型过滤或全部清除
+ * @param {string} id - 小说ID
+ * @query {string} table - 可选，指定表名（chapters/characters/settings/outlines/volumes/foreshadowing/rules），不传则全部清除
+ * @returns {Object} { ok: boolean, deleted: number }
+ */
+router.delete('/:id/trash', async (c) => {
+  const novelId = c.req.param('id')
+  const targetTable = c.req.query('table') || ''
+  const db = drizzle(c.env.DB)
+
+  const allTables = ['chapters', 'characters', 'settings', 'outlines', 'volumes', 'foreshadowing', 'rules']
+  const tablesToClean = targetTable ? [targetTable] : allTables
+
+  let totalDeleted = 0
+
+  for (const tbl of tablesToClean) {
+    if (!allTables.includes(tbl)) continue
+
+    let tableName: string
+    switch (tbl) {
+      case 'chapters': tableName = 'chapters'; break
+      case 'characters': tableName = 'characters'; break
+      case 'settings': tableName = 'novel_settings'; break
+      case 'outlines': tableName = 'master_outline'; break
+      case 'volumes': tableName = 'volumes'; break
+      case 'foreshadowing': tableName = 'foreshadowing'; break
+      case 'rules': tableName = 'writing_rules'; break
+      default: continue
+    }
+
+    try {
+      const result = await db.run(
+        `DELETE FROM ${tableName} WHERE novel_id = ? AND deleted_at IS NOT NULL`,
+        [novelId]
+      )
+      totalDeleted += result.meta.changes ?? 0
+    } catch (e) {
+      console.warn(`[trash] Failed to clean ${tableName}:`, e)
+    }
+  }
+
+  return c.json({ ok: true, deleted: totalDeleted })
 })
 
 export { router as novels }

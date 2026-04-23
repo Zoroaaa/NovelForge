@@ -9,7 +9,7 @@ import { chapters, modelConfigs, characters, novelSettings, masterOutline, volum
 import { eq, desc, sql, and } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { buildChapterContext, assemblePromptContext, type ContextBundle } from './contextBuilder'
-import { streamGenerate, resolveConfig } from './llm'
+import { streamGenerate, resolveConfig, getDefaultBase } from './llm'
 import { searchSimilar, embedText, ACTIVE_SOURCE_TYPES } from './embedding'
 import { extractForeshadowingFromChapter } from './foreshadowing'
 import { detectPowerLevelBreakthrough } from './powerLevel'
@@ -655,7 +655,7 @@ export async function triggerAutoSummary(
     }
 
     // 截取前2000字符用于摘要（避免超长输入）
-    const contentForSummary = chapter.content.slice(0, 2000)
+    const contentForSummary = chapter.content
 
     const summaryMessages = [
       {
@@ -744,7 +744,7 @@ export async function generateMasterOutlineSummary(
       return { ok: false, error: '未配置摘要生成模型' }
     }
 
-    const contentForSummary = outline.content.slice(0, 3000)
+    const contentForSummary = outline.content
 
     const summaryMessages = [
       {
@@ -835,9 +835,9 @@ export async function generateVolumeSummary(
     }
 
     const contentForSummary = [
-      volume.blueprint ? `【卷蓝图】\n${volume.blueprint.slice(0, 2000)}` : '',
-      volume.eventLine ? `\n【事件线】\n${volume.eventLine.slice(0, 2000)}` : '',
-    ].join('\n').slice(0, 3000)
+      volume.blueprint ? `【卷蓝图】\n${volume.blueprint}` : '',
+      volume.eventLine ? `\n【事件线】\n${volume.eventLine}` : '',
+    ].join('\n')
 
     const summaryMessages = [
       {
@@ -1754,8 +1754,8 @@ export async function generateNextChapter(
 
 【卷信息】：
 - 标题：《${volume.title}》
-${volume.blueprint ? `- 卷蓝图：\n${volume.blueprint.slice(0, 1000)}` : ''}
-${volume.eventLine ? `- 事件线：\n${volume.eventLine.slice(0, 1000)}` : ''}
+${volume.blueprint ? `- 卷蓝图：\n${volume.blueprint}` : ''}
+${volume.eventLine ? `- 事件线：\n${volume.eventLine}` : ''}
 ${volume.summary ? `- 卷摘要：${volume.summary}` : ''}
 ${recentChaptersInfo}
 
@@ -1824,4 +1824,93 @@ ${recentChaptersInfo}
     console.error('Next chapter generation failed:', error)
     return { ok: false, error: '生成下一章异常' }
   }
+}
+
+export async function generateSettingSummary(
+  env: Env,
+  settingId: string,
+): Promise<{ ok: boolean; summary?: string; error?: string }> {
+  const db = drizzle(env.DB) as AppDb
+
+  const row = await db
+    .select({
+      id: novelSettings.id,
+      name: novelSettings.name,
+      type: novelSettings.type,
+      content: novelSettings.content,
+      novelId: novelSettings.novelId,
+    })
+    .from(novelSettings)
+    .where(eq(novelSettings.id, settingId))
+    .get()
+
+  if (!row) return { ok: false, error: '设定不存在' }
+  if (!row.content?.trim()) return { ok: false, error: '设定内容为空' }
+
+  let llmConfig
+  try {
+    llmConfig = await resolveConfig(db, 'summary_gen', row.novelId)
+  } catch (e) {
+    return { ok: false, error: `未配置摘要生成模型: ${(e as Error).message}` }
+  }
+
+  const contentForLLM = row.content
+
+  const systemPrompt = `你是一个专业的小说世界观设定助手，擅长将冗长的设定描述精炼为语义丰富的短摘要。
+你只输出摘要文本本身（纯文本），不要输出任何解释、标题或格式标记。`
+
+  const userPrompt = `请为以下小说设定生成一段简洁的摘要。
+
+【设定名称】：${row.name}
+【设定类型】：${row.type}
+
+【设定内容】：
+${contentForLLM}
+
+【要求】：
+1. 摘要长度控制在200-400字之间
+2. 保留核心概念、关键数值、重要关系和独特规则
+3. 省略细节描述和举例说明
+4. 使用与原文一致的术语体系
+5. 输出纯文本，不要任何格式标记`
+
+  const base = llmConfig.apiBase || getDefaultBase(llmConfig.provider)
+
+  const resp = await fetch(`${base}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${llmConfig.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: llmConfig.modelId,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      stream: false,
+      temperature: llmConfig.params?.temperature ?? 0.3,
+      max_tokens: 800,
+    }),
+  })
+
+  if (!resp.ok) {
+    const errorText = await resp.text()
+    console.error(`[generateSettingSummary] API error ${resp.status}:`, errorText)
+    return { ok: false, error: `API错误: ${resp.status}` }
+  }
+
+  const result = await resp.json() as any
+  const aiSummary = result.choices?.[0]?.message?.content?.trim()
+
+  if (!aiSummary) return { ok: false, error: '模型返回为空' }
+
+  await db
+    .update(novelSettings)
+    .set({ summary: aiSummary, updatedAt: sql`(unixepoch())` })
+    .where(eq(novelSettings.id, settingId))
+
+  console.log(`✅ Setting summary generated for ${row.name} (${aiSummary.length} chars)`)
+
+  return { ok: true, summary: aiSummary }
 }

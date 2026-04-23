@@ -167,16 +167,34 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
     })
   }
 
-  const handleAutoSummary = () => {
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
+
+  const handleAutoSummary = async () => {
     if (!formData.content.trim()) {
       toast.warning('请先填写详细描述')
       return
     }
-    const autoSummary = formData.content.length > 400
-      ? formData.content.slice(0, 400)
-      : formData.content
-    setFormData(prev => ({ ...prev, summary: autoSummary }))
-    toast.success(`已自动生成摘要 (${autoSummary.length} 字)`)
+    
+    if (!editingId) {
+      toast.info('请先保存设定后再生成摘要')
+      return
+    }
+
+    setIsGeneratingSummary(true)
+    try {
+      const result = await api.settings.generateSummary(editingId)
+      if (result.ok && result.summary) {
+        setFormData(prev => ({ ...prev, summary: result.summary! }))
+        queryClient.invalidateQueries({ queryKey: ['settings'] })
+        toast.success(`摘要已生成 (${result.summary.length} 字)`)
+      } else {
+        toast.error(result.error || '生成失败')
+      }
+    } catch (err) {
+      toast.error(`生成摘要异常: ${(err as Error).message}`)
+    } finally {
+      setIsGeneratingSummary(false)
+    }
   }
 
   const resetForm = () => {
@@ -276,11 +294,12 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-6 px-2 text-[11px] gap-1 text-muted-foreground hover:text-primary"
+                    className={`h-6 px-2 text-[11px] gap-1 text-muted-foreground hover:text-primary ${isGeneratingSummary ? 'animate-pulse' : ''}`}
                     onClick={handleAutoSummary}
+                    disabled={isGeneratingSummary}
                   >
-                    <Sparkles className="h-3 w-3" />
-                    从描述自动生成
+                    <Sparkles className={`h-3 w-3 ${isGeneratingSummary ? 'animate-spin' : ''}`} />
+                    {isGeneratingSummary ? '生成中...' : 'AI 生成摘要'}
                   </Button>
                 </Label>
                 <Textarea
