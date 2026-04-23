@@ -68,7 +68,11 @@ const TARGET_WORDS_DEFAULT = 2000
 
 function formatTimeAgo(timestamp: number): string {
   const now = Date.now()
-  const diff = now - timestamp
+  let ts = timestamp
+  if (ts < 10000000000) {
+    ts = ts * 1000
+  }
+  const diff = now - ts
   const seconds = Math.floor(diff / 1000)
   const minutes = Math.floor(seconds / 60)
   const hours = Math.floor(minutes / 60)
@@ -105,6 +109,8 @@ export function GeneratePanel({
   const [latestCheckLog, setLatestCheckLog] = useState<any>(null)
   const [showCheckHistory, setShowCheckHistory] = useState(false)
   const [checkHistory, setCheckHistory] = useState<any[]>([])
+  const [historyReportDialogOpen, setHistoryReportDialogOpen] = useState(false)
+  const [selectedHistoryLog, setSelectedHistoryLog] = useState<any>(null)
 
   const [combinedReport, setCombinedReport] = useState<{
     characterResult: any
@@ -137,6 +143,9 @@ export function GeneratePanel({
 
   useEffect(() => {
     if (chapterId) {
+      setLatestCheckLog(null)
+      setCheckHistory([])
+      setShowCheckHistory(false)
       loadLatestCheckLog()
     }
   }, [chapterId, loadLatestCheckLog])
@@ -631,8 +640,8 @@ export function GeneratePanel({
                           log.id === latestCheckLog?.id ? 'bg-primary/5 ring-1 ring-primary/20' : ''
                         }`}
                         onClick={() => {
-                          setLatestCheckLog(log)
-                          setShowCheckHistory(false)
+                          setSelectedHistoryLog(log)
+                          setHistoryReportDialogOpen(true)
                         }}
                       >
                         <div className="flex items-center gap-1.5 min-w-0">
@@ -919,6 +928,250 @@ export function GeneratePanel({
                 <>确认，开始重写</>
               )}
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={historyReportDialogOpen} onOpenChange={setHistoryReportDialogOpen}>
+        <AlertDialogContent className="w-[90vw] max-w-3xl max-h-[85vh] flex flex-col rounded-xl shadow-2xl">
+          <AlertDialogHeader className="flex-shrink-0 px-6 pt-6 pb-4 border-b space-y-0 gap-0">
+            <div className="flex items-center justify-between">
+              <AlertDialogTitle className="text-lg font-semibold text-left">
+                检查报告详情
+                <Badge variant="outline" className="ml-2 text-[10px]">
+                  {selectedHistoryLog?.checkType === 'character_consistency' && '角色一致性'}
+                  {selectedHistoryLog?.checkType === 'chapter_coherence' && '章节连贯性'}
+                  {selectedHistoryLog?.checkType === 'combined' && '综合检查'}
+                </Badge>
+              </AlertDialogTitle>
+              {selectedHistoryLog?.createdAt && (
+                <span className="text-xs text-muted-foreground">
+                  检查时间：{new Date(selectedHistoryLog.createdAt * 1000).toLocaleString('zh-CN')}
+                </span>
+              )}
+            </div>
+            <AlertDialogDescription asChild>
+              <div className="text-left mt-3">
+                {selectedHistoryLog ? (
+                  <div className="space-y-5">
+                    <div className="flex items-center justify-between p-4 bg-gradient-to-r from-muted/80 to-muted/40 rounded-xl border">
+                      <div className="flex items-baseline gap-4">
+                        <span className="text-sm font-medium text-muted-foreground">评分</span>
+                        <span className={`text-3xl font-bold tabular-nums ${
+                          selectedHistoryLog.score >= 80 ? 'text-green-600' :
+                          selectedHistoryLog.score >= 60 ? 'text-amber-600' : 'text-red-600'
+                        }`}>
+                          {selectedHistoryLog.score}
+                        </span>
+                        <span className="text-lg text-muted-foreground">/100</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {selectedHistoryLog.issuesCount > 0 ? `${selectedHistoryLog.issuesCount}个问题` : '✓ 通过'}
+                      </span>
+                    </div>
+
+                    <div className="overflow-y-auto max-h-[45vh] pr-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent rounded-lg">
+                      <div className="space-y-5 pb-2">
+                        {selectedHistoryLog.checkType === 'character_consistency' && selectedHistoryLog.characterResult && (
+                          <section className="space-y-3">
+                            <header className="flex items-center gap-2.5 pb-2 border-b border-red-200/50 dark:border-red-800/30">
+                              <Shield className="h-4 w-4 text-destructive" />
+                              <h3 className="text-sm font-semibold uppercase tracking-wide">角色一致性检查</h3>
+                            </header>
+                            <div className="space-y-2 pl-1">
+                              {selectedHistoryLog.characterResult.conflicts?.length > 0 ? (
+                                selectedHistoryLog.characterResult.conflicts.map((conflict: any, i: number) => (
+                                  <article key={`hist-char-c-${i}`} className="group p-3.5 bg-gradient-to-br from-red-50 to-white dark:from-red-950/60 dark:to-transparent border border-red-200/70 dark:border-red-800/40 rounded-lg hover:shadow-md transition-shadow">
+                                    <header className="flex items-center gap-2 mb-2">
+                                      <ShieldAlert className="h-4 w-4 text-red-500 shrink-0" />
+                                      <strong className="text-sm text-red-700 dark:text-red-300">{conflict.characterName}</strong>
+                                    </header>
+                                    <p className="text-[13px] leading-relaxed text-red-600/90 dark:text-red-400/90 ml-6">{conflict.conflict}</p>
+                                    {conflict.excerpt && (
+                                      <blockquote className="mt-2 ml-6 py-2.5 px-3 bg-red-100/50 dark:bg-red-900/20 rounded border-l-2 border-red-400 italic text-xs text-muted-foreground leading-relaxed">
+                                        "{conflict.excerpt}"
+                                      </blockquote>
+                                    )}
+                                  </article>
+                                ))
+                              ) : (
+                                <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded">
+                                  <CheckCircle className="h-4 w-4 text-green-600" />
+                                  <span className="text-xs text-green-700 dark:text-green-300">角色一致性检查通过</span>
+                                </div>
+                              )}
+                              {selectedHistoryLog.characterResult.warnings?.filter((w: string) => !w.includes('失败')).map((warning: string, i: number) => (
+                                <div key={`hist-char-w-${i}`} className="flex items-start gap-3 p-3 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/30 rounded-lg text-[13px] text-amber-800 dark:text-amber-200 leading-relaxed">
+                                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
+                                  <span>{warning}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </section>
+                        )}
+
+                        {selectedHistoryLog.checkType === 'chapter_coherence' && selectedHistoryLog.coherenceResult && (
+                          <section className="space-y-3">
+                            <header className="flex items-center gap-2.5 pb-2 border-b border-amber-200/50 dark:border-amber-800/30">
+                              <Link className="h-4 w-4 text-amber-600" />
+                              <h3 className="text-sm font-semibold uppercase tracking-wide">章节连贯性检查</h3>
+                              <Badge variant="outline" className="ml-auto text-[11px] h-5">
+                                {selectedHistoryLog.coherenceResult.score}分 · {selectedHistoryLog.coherenceResult.issues?.length || 0}个问题
+                              </Badge>
+                            </header>
+                            <div className="space-y-2 pl-1">
+                              {selectedHistoryLog.coherenceResult.issues?.length > 0 ? (
+                                selectedHistoryLog.coherenceResult.issues.map((issue: any, i: number) => (
+                                  <article key={`hist-coh-${i}`} className={`p-3.5 rounded-lg border ${
+                                    issue.severity === 'error'
+                                      ? 'bg-gradient-to-br from-red-50 to-white dark:from-red-950/60 dark:to-transparent border-red-200/70 dark:border-red-800/40'
+                                      : 'bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-transparent border-amber-200/60 dark:border-amber-800/30'
+                                  }`}>
+                                    <header className="flex items-center gap-2 mb-1.5">
+                                      {issue.severity === 'error' ? (
+                                        <>
+                                          <ShieldAlert className="h-4 w-4 text-red-500 shrink-0" />
+                                          <strong className="text-sm text-red-700 dark:text-red-300">错误 {i + 1}</strong>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <AlertTriangle className="h-4 w-4 text-amber-500" />
+                                          <strong className="text-sm text-amber-700 dark:text-amber-300">警告 {i + 1}</strong>
+                                        </>
+                                      )}
+                                      <Badge variant="secondary" className="text-[10px] ml-auto h-5">{issue.category || '其他'}</Badge>
+                                    </header>
+                                    <p className={`text-[13px] leading-relaxed ${
+                                      issue.severity === 'error'
+                                        ? 'text-red-600/90 dark:text-red-400/90'
+                                        : 'text-amber-700/90 dark:text-amber-300/90'
+                                    }`}>{issue.message}</p>
+                                    {issue.suggestion && (
+                                      <footer className="mt-2 ml-4 text-xs text-muted-foreground flex items-start gap-1.5">
+                                        <span>💡 建议：</span>
+                                        <span>{issue.suggestion}</span>
+                                      </footer>
+                                    )}
+                                  </article>
+                                ))
+                              ) : (
+                                <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded">
+                                  <CheckCircle className="h-4 w-4 text-green-600" />
+                                  <span className="text-xs text-green-700 dark:text-green-300">章节连贯性检查通过</span>
+                                </div>
+                              )}
+                            </div>
+                          </section>
+                        )}
+
+                        {selectedHistoryLog.checkType === 'combined' && selectedHistoryLog.characterResult && selectedHistoryLog.coherenceResult && (
+                          <>
+                            <section className="space-y-3">
+                              <header className="flex items-center gap-2.5 pb-2 border-b border-red-200/50 dark:border-red-800/30">
+                                <Shield className="h-4 w-4 text-destructive" />
+                                <h3 className="text-sm font-semibold uppercase tracking-wide">角色一致性检查</h3>
+                                <Badge variant="destructive" className="ml-auto text-[11px] h-5">
+                                  {selectedHistoryLog.characterResult.conflicts?.length > 0
+                                    ? `${selectedHistoryLog.characterResult.conflicts.length} 个冲突`
+                                    : '通过'}
+                                </Badge>
+                              </header>
+                              <div className="space-y-2 pl-1">
+                                {selectedHistoryLog.characterResult.conflicts?.map((conflict: any, i: number) => (
+                                  <article key={`hist-comb-char-${i}`} className="group p-3.5 bg-gradient-to-br from-red-50 to-white dark:from-red-950/60 dark:to-transparent border border-red-200/70 dark:border-red-800/40 rounded-lg hover:shadow-md transition-shadow">
+                                    <header className="flex items-center gap-2 mb-2">
+                                      <ShieldAlert className="h-4 w-4 text-red-500 shrink-0" />
+                                      <strong className="text-sm text-red-700 dark:text-red-300">{conflict.characterName}</strong>
+                                    </header>
+                                    <p className="text-[13px] leading-relaxed text-red-600/90 dark:text-red-400/90 ml-6">{conflict.conflict}</p>
+                                    {conflict.excerpt && (
+                                      <blockquote className="mt-2 ml-6 py-2.5 px-3 bg-red-100/50 dark:bg-red-900/20 rounded border-l-2 border-red-400 italic text-xs text-muted-foreground leading-relaxed">
+                                        "{conflict.excerpt}"
+                                      </blockquote>
+                                    )}
+                                  </article>
+                                ))}
+                                {selectedHistoryLog.characterResult.warnings?.filter((w: string) => !w.includes('失败')).map((warning: string, i: number) => (
+                                  <div key={`hist-comb-char-w-${i}`} className="flex items-start gap-3 p-3 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/30 rounded-lg text-[13px] text-amber-800 dark:text-amber-200 leading-relaxed">
+                                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
+                                    <span>{warning}</span>
+                                  </div>
+                                ))}
+                                {!selectedHistoryLog.characterResult.conflicts?.length &&
+                                 !selectedHistoryLog.characterResult.warnings?.filter((w: string) => !w.includes('失败')).length && (
+                                  <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded">
+                                    <CheckCircle className="h-4 w-4 text-green-600" />
+                                    <span className="text-xs text-green-700 dark:text-green-300">角色一致性检查通过</span>
+                                  </div>
+                                )}
+                              </div>
+                            </section>
+
+                            <section className="space-y-3">
+                              <header className="flex items-center gap-2.5 pb-2 border-b border-amber-200/50 dark:border-amber-800/30">
+                                <Link className="h-4 w-4 text-amber-600" />
+                                <h3 className="text-sm font-semibold uppercase tracking-wide">章节连贯性检查</h3>
+                                <Badge variant="outline" className="ml-auto text-[11px] h-5">
+                                  {selectedHistoryLog.coherenceResult.score}分 · {selectedHistoryLog.coherenceResult.issues?.length || 0}个问题
+                                </Badge>
+                              </header>
+                              <div className="space-y-2 pl-1">
+                                {selectedHistoryLog.coherenceResult.issues?.map((issue: any, i: number) => (
+                                  <article key={`hist-comb-coh-${i}`} className={`p-3.5 rounded-lg border ${
+                                    issue.severity === 'error'
+                                      ? 'bg-gradient-to-br from-red-50 to-white dark:from-red-950/60 dark:to-transparent border-red-200/70 dark:border-red-800/40'
+                                      : 'bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-transparent border-amber-200/60 dark:border-amber-800/30'
+                                  }`}>
+                                    <header className="flex items-center gap-2 mb-1.5">
+                                      {issue.severity === 'error' ? (
+                                        <>
+                                          <ShieldAlert className="h-4 w-4 text-red-500 shrink-0" />
+                                          <strong className="text-sm text-red-700 dark:text-red-300">错误 {i + 1}</strong>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <AlertTriangle className="h-4 w-4 text-amber-500" />
+                                          <strong className="text-sm text-amber-700 dark:text-amber-300">警告 {i + 1}</strong>
+                                        </>
+                                      )}
+                                      <Badge variant="secondary" className="text-[10px] ml-auto h-5">{issue.category || '其他'}</Badge>
+                                    </header>
+                                    <p className={`text-[13px] leading-relaxed ${
+                                      issue.severity === 'error'
+                                        ? 'text-red-600/90 dark:text-red-400/90'
+                                        : 'text-amber-700/90 dark:text-amber-300/90'
+                                    }`}>{issue.message}</p>
+                                    {issue.suggestion && (
+                                      <footer className="mt-2 ml-4 text-xs text-muted-foreground flex items-start gap-1.5">
+                                        <span>💡 建议：</span>
+                                        <span>{issue.suggestion}</span>
+                                      </footer>
+                                    )}
+                                  </article>
+                                ))}
+                                {!selectedHistoryLog.coherenceResult.issues?.length && (
+                                  <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded">
+                                    <CheckCircle className="h-4 w-4 text-green-600" />
+                                    <span className="text-xs text-green-700 dark:text-green-300">章节连贯性检查通过</span>
+                                  </div>
+                                )}
+                              </div>
+                            </section>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-16 text-center">
+                    <p className="text-sm text-muted-foreground">暂无报告数据</p>
+                  </div>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-shrink-0 px-6 py-4 border-t bg-muted/30 rounded-b-xl gap-3">
+            <AlertDialogCancel className="h-9">关闭</AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
