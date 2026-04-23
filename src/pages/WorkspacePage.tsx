@@ -6,7 +6,7 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { api } from '@/lib/api'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { WorkspaceHeader } from '@/components/layout/WorkspaceHeader'
@@ -50,6 +50,14 @@ export default function WorkspacePage() {
   const showModelWarning = modelConfigs && Array.isArray(modelConfigs) && modelConfigs.length === 0
 
   const activeChapter = chapters?.find(c => c.id === activeChapterId)
+
+  useEffect(() => {
+    if (activeChapter?.content) {
+      setEditorContent(activeChapter.content)
+    } else {
+      setEditorContent('')
+    }
+  }, [activeChapter?.id, activeChapter?.content])
 
   if (novelLoading || chaptersLoading) {
     return (

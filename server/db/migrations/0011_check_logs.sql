@@ -11,7 +11,7 @@ PRAGMA foreign_keys = ON;
 -- 说明：存储角色一致性检查、连贯性检查、组合检查的结果日志
 -- ============================================================
 CREATE TABLE IF NOT EXISTS check_logs (
-  id                  TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8))),
+  id                  TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
   novel_id            TEXT NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
   chapter_id          TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
   check_type          TEXT NOT NULL CHECK(check_type IN ('character_consistency', 'chapter_coherence', 'combined')),
