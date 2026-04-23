@@ -176,7 +176,19 @@ export function GeneratePanel({
       options.existingContent = existingContent
     }
 
-    if (mode === 'rewrite' && coherenceResult?.issues && coherenceResult.issues.length > 0) {
+    if (mode === 'rewrite' && combinedReport) {
+      const characterIssues = (combinedReport.characterResult?.conflicts || []).map(
+        (c: any, i: number) => `[角色冲突${i + 1}] ${c.characterName}: ${c.conflict}`
+      )
+      const characterWarnings = (combinedReport.characterResult?.warnings || []).map(
+        (w: any) => `[角色警告] ${w}`
+      )
+      const coherenceIssues = (combinedReport.coherenceResult?.issues || []).map(
+        (issue: any) => `[${issue.severity === 'error' ? '连贯性错误' : '连贯性警告'}] ${issue.message}${issue.suggestion ? `。建议：${issue.suggestion}` : ''}`
+      )
+      const allIssues = [...characterIssues, ...characterWarnings, ...coherenceIssues]
+      if (allIssues.length > 0) options.issuesContext = allIssues
+    } else if (mode === 'rewrite' && coherenceResult?.issues && coherenceResult.issues.length > 0) {
       options.issuesContext = coherenceResult.issues.map(
         (i: CoherenceIssue) => `[${i.severity === 'error' ? '错误' : '警告'}] ${i.message}${i.suggestion ? `。建议：${i.suggestion}` : ''}`
       )
@@ -320,7 +332,7 @@ export function GeneratePanel({
   }
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-1 space-y-5">
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-sm flex items-center gap-2">
@@ -496,7 +508,7 @@ export function GeneratePanel({
 
           {/* 质量检查区域 */}
           {hasContent && (
-            <div className="space-y-2 pt-2 border-t">
+            <div className="space-y-3 pt-3 border-t">
               {/* 最新检查结果摘要 */}
               {latestCheckLog && (
                 <div className="flex items-center justify-between p-2.5 bg-muted/40 rounded-lg text-xs group hover:bg-muted/60 transition-colors">
@@ -550,12 +562,12 @@ export function GeneratePanel({
                 </div>
               )}
 
-              {/* 三个检查按钮 - 紧凑横向布局 */}
-              <div className="grid grid-cols-3 gap-1.5">
+              {/* 三个检查按钮 - 纵向紧凑布局 */}
+              <div className="flex flex-col gap-1.5">
                 <Button
                   variant="outline"
                   size="sm"
-                  className={`gap-1 h-7 text-[11px] transition-all ${
+                  className={`gap-2 h-8 text-xs justify-start transition-all ${
                     showConsistencyCheck ? 'bg-primary/10 border-primary' : ''
                   }`}
                   onClick={() => {
@@ -564,14 +576,14 @@ export function GeneratePanel({
                     setShowCombinedCheck(false)
                   }}
                 >
-                  <Shield className="h-3 w-3" />
-                  角色一致性
+                  <Shield className="h-3.5 w-3.5 shrink-0" />
+                  角色一致性检查
                 </Button>
 
                 <Button
                   variant="outline"
                   size="sm"
-                  className={`gap-1 h-7 text-[11px] transition-all ${
+                  className={`gap-2 h-8 text-xs justify-start transition-all ${
                     showCoherenceCheck ? 'bg-primary/10 border-primary' : ''
                   }`}
                   onClick={() => {
@@ -580,14 +592,14 @@ export function GeneratePanel({
                     setShowCombinedCheck(false)
                   }}
                 >
-                  <Link className="h-3 w-3" />
-                  章节连贯性
+                  <Link className="h-3.5 w-3.5 shrink-0" />
+                  章节连贯性检查
                 </Button>
 
                 <Button
                   variant="outline"
                   size="sm"
-                  className={`gap-1 h-7 text-[11px] transition-all ${
+                  className={`gap-2 h-8 text-xs justify-start transition-all ${
                     showCombinedCheck ? 'bg-primary/10 border-primary' : ''
                   }`}
                   onClick={() => {
@@ -596,9 +608,9 @@ export function GeneratePanel({
                     setShowCoherenceCheck(false)
                   }}
                 >
-                  <Shield className="h-3 w-3" />
-                  <Link className="h-3 w-3 -ml-0.5" />
-                  综合检查
+                  <Shield className="h-3.5 w-3.5 shrink-0" />
+                  <Link className="h-3.5 w-3.5 -ml-1 shrink-0" />
+                  综合检查（推荐）
                 </Button>
               </div>
 
@@ -669,6 +681,12 @@ export function GeneratePanel({
                             issues: result.coherenceCheck.issues,
                           })
                         }
+                        // 同时更新 combinedReport，确保重写时两类问题都注入
+                        setCombinedReport({
+                          characterResult: result.characterCheck,
+                          coherenceResult: result.coherenceCheck,
+                          score: result.score,
+                        })
                         loadLatestCheckLog()
                       }}
                     />

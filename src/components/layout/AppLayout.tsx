@@ -2,7 +2,7 @@
  * @file AppLayout.tsx
  * @description 应用布局组件，提供三栏式响应式布局（左侧栏、中间内容、右侧面板）
  * @version 3.0.0
- * @modified 2026-04-23 - 严格实现2:4:1比例布局，优化响应式表现
+ * @modified 2026-04-23 - 实现1:2:1比例布局，优化响应式表现
  */
 import { useState, useEffect } from 'react'
 import { PanelRightClose, PanelRightOpen, PanelLeftOpen } from 'lucide-react'
@@ -62,7 +62,7 @@ export function AppLayout({ left, center, right }: AppLayoutProps) {
           <aside
             className={cn(
               'shrink-0 border-r border-border/60 bg-card/30 backdrop-blur-sm overflow-hidden flex flex-col transition-all duration-300 ease-in-out hidden lg:flex shadow-[1px_0_2px_rgba(0,0,0,0.02)]',
-              leftOpen ? 'flex-[2] basis-[28.571%] min-w-[300px] max-w-[420px]' : 'w-0 border-0 opacity-0'
+              leftOpen ? 'flex-[1] basis-[25%] min-w-[240px] max-w-[340px]' : 'w-0 border-0 opacity-0'
             )}
           >
             {leftOpen && left}
@@ -70,7 +70,7 @@ export function AppLayout({ left, center, right }: AppLayoutProps) {
         )}
 
         {/* 中间内容区 - 4份比例 */}
-        <main className="flex-[4] basis-[57.143%] min-w-0 overflow-y-auto bg-background relative">
+        <main className="flex-[2] basis-[50%] min-w-0 overflow-y-auto bg-background relative">
           {center}
         </main>
 
@@ -79,7 +79,7 @@ export function AppLayout({ left, center, right }: AppLayoutProps) {
           <aside
             className={cn(
               'shrink-0 border-l border-border/60 bg-muted/20 backdrop-blur-sm overflow-hidden flex flex-col transition-all duration-300 ease-in-out hidden lg:flex shadow-[-1px_0_2px_rgba(0,0,0,0.02)]',
-              rightOpen && right ? 'flex-[1] basis-[14.286%] min-w-[200px] max-w-[280px]' : 'w-0 border-0 opacity-0'
+              rightOpen && right ? 'flex-[1] basis-[25%] min-w-[260px] max-w-[380px]' : 'w-0 border-0 opacity-0'
             )}
           >
             {rightOpen && right && (

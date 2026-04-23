@@ -145,7 +145,7 @@ export default function WorkspacePage() {
                     </TabsTrigger>
                   </TabsList>
 
-                  <TabsContent value="generate" className="flex-1 overflow-y-auto mt-0 p-3">
+                  <TabsContent value="generate" className="flex-1 overflow-y-auto mt-0 p-4">
                     <GeneratePanel
                       novelId={id!}
                       chapterId={activeChapter.id}
