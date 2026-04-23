@@ -11,7 +11,6 @@ import { drizzle } from 'drizzle-orm/d1'
 import { masterOutline } from '../db/schema'
 import { eq, desc, and, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
-import { enqueue } from '../lib/queue'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -178,19 +177,6 @@ router.put('/:id', zValidator('json', UpdateMasterOutlineSchema), async (c) => {
       .where(eq(masterOutline.id, id))
       .returning()
       .get()
-
-    if (c.env.VECTORIZE && body.content !== undefined && updated.content) {
-      await enqueue(c.env, {
-        type: 'index_content',
-        payload: {
-          sourceType: 'outline',
-          sourceId: updated.id,
-          novelId: updated.novelId,
-          title: updated.title,
-          content: updated.content,
-        },
-      })
-    }
 
     return c.json({ ok: true, outline: updated })
   } catch (error) {

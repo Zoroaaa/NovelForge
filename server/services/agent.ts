@@ -10,7 +10,7 @@ import { eq, desc, sql, and } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { buildChapterContext, assemblePromptContext, type ContextBundle } from './contextBuilder'
 import { streamGenerate, resolveConfig } from './llm'
-import { indexContent, searchSimilar, embedText } from './embedding'
+import { searchSimilar, embedText, ACTIVE_SOURCE_TYPES } from './embedding'
 import { extractForeshadowingFromChapter } from './foreshadowing'
 import { detectPowerLevelBreakthrough } from './powerLevel'
 
@@ -707,23 +707,6 @@ export async function triggerAutoSummary(
         .where(eq(chapters.id, chapterId))
 
       console.log(`✅ Summary generated for chapter ${chapterId}:`, summaryText.slice(0, 100))
-      
-      // 异步触发摘要向量化
-      if (env.VECTORIZE) {
-        try {
-          await indexContent(
-            env,
-            'summary',
-            chapterId,
-            novelId,
-            `章节摘要: ${chapter.title}`,
-            summaryText
-          )
-          console.log(`✅ Summary indexed for chapter ${chapterId}`)
-        } catch (indexError) {
-          console.warn('Failed to index summary:', indexError)
-        }
-      }
     }
   } catch (error) {
     console.warn('Auto-summary failed (non-critical):', error)
@@ -1022,7 +1005,12 @@ async function executeAgentTool(
       }
       
       const queryVector = await embedText(env.AI, query)
-      const searchResults = await searchSimilar(env.VECTORIZE, queryVector, { topK: Math.min(topK, 10), filter: { novelId: targetNovelId } })
+      const { searchSimilarMulti } = await import('./embedding')
+      const searchResults = await searchSimilarMulti(env.VECTORIZE, queryVector, {
+        topK: Math.min(topK, 10),
+        novelId: targetNovelId,
+        sourceTypes: args.sourceTypes || [...ACTIVE_SOURCE_TYPES],
+      })
       return JSON.stringify(searchResults.map(r => ({
         title: r.metadata.title,
         content: r.metadata.content?.slice(0, 400),

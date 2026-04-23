@@ -72,7 +72,8 @@ router.post('/', zValidator('json', CreateSchema), async (c) => {
   const db = drizzle(c.env.DB)
   const [row] = await db.insert(t).values(c.req.valid('json')).returning()
 
-  if (row?.description && c.env.VECTORIZE) {
+  if (row && c.env.VECTORIZE) {
+    const indexText = `${row.name}${row.role ? ` (${row.role})` : ''}\n${(row.description || '').slice(0, 300)}`
     await enqueue(c.env, {
       type: 'index_content',
       payload: {
@@ -80,7 +81,7 @@ router.post('/', zValidator('json', CreateSchema), async (c) => {
         sourceId: row.id,
         novelId: row.novelId,
         title: row.name,
-        content: row.description,
+        content: indexText,
       },
     })
   }
@@ -108,6 +109,7 @@ router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
   if (body.description !== undefined && row && c.env.VECTORIZE) {
     const descriptionContent = body.description ?? ''
     if (descriptionContent.trim()) {
+      const indexText = `${row.name}${row.role ? ` (${row.role})` : ''}\n${descriptionContent.slice(0, 300)}`
       await enqueue(c.env, {
         type: 'index_content',
         payload: {
@@ -115,7 +117,7 @@ router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
           sourceId: row.id,
           novelId: row.novelId,
           title: row.name,
-          content: descriptionContent,
+          content: indexText,
         },
       })
     }

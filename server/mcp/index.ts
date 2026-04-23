@@ -8,7 +8,7 @@ import { drizzle } from 'drizzle-orm/d1'
 import { eq, and, isNull, desc, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { novels, masterOutline, novelSettings, chapters, characters, foreshadowing, writingRules, volumes } from '../db/schema'
-import { searchSimilar, embedText } from '../services/embedding'
+import { searchSimilar, embedText, searchSimilarMulti, ACTIVE_SOURCE_TYPES } from '../services/embedding'
 
 export interface MCPTool {
   name: string
@@ -379,16 +379,17 @@ export async function handleToolCall(
     }
 
     case 'searchSemantic': {
-      const { novelId, query, topK = 5 } = args
+      const { novelId, query, topK = 5, sourceTypes } = args
 
       if (!env.VECTORIZE) {
         throw new Error('Vectorize not configured')
       }
 
       const queryVector = await embedText(env.AI, query)
-      const results = await searchSimilar(env.VECTORIZE, queryVector, {
+      const results = await searchSimilarMulti(env.VECTORIZE, queryVector, {
         topK,
-        filter: { novelId },
+        novelId,
+        sourceTypes: sourceTypes || [...ACTIVE_SOURCE_TYPES],
       })
 
       return {
@@ -439,57 +440,48 @@ export async function handleToolCall(
     }
 
     case 'bulkIndexNovels': {
-      const { novelId, sourceTypes = ['outline', 'chapter', 'character'] } = args
+      const { novelId, sourceTypes = ['setting', 'character', 'foreshadowing'] } = args
       if (!novelId) throw new Error('novelId is required')
       if (!env.VECTORIZE) throw new Error('Vectorize not configured')
 
       const { indexContent } = await import('../services/embedding')
       let indexedCount = 0
 
-      if (sourceTypes.includes('outline')) {
-        // v2.0: 向量化总纲表（替代原 outlines）
-        const outlinesToIndex = await db
-          .select({ id: masterOutline.id, title: masterOutline.title, content: masterOutline.content })
-          .from(masterOutline)
-          .where(and(
-            eq(masterOutline.novelId, novelId),
-            isNull(masterOutline.content),
-            sql`${masterOutline.content} IS NOT NULL`
-          ))
+      if (sourceTypes.includes('setting')) {
+        const settingsToIndex = await db
+          .select({ id: novelSettings.id, name: novelSettings.name, content: novelSettings.content, summary: novelSettings.summary, type: novelSettings.type, importance: novelSettings.importance })
+          .from(novelSettings)
+          .where(and(eq(novelSettings.novelId, novelId), sql`${novelSettings.deletedAt} IS NULL`, sql`${novelSettings.content} IS NOT NULL`))
           .all()
-        for (const o of outlinesToIndex) {
-          if (o.content) {
-            await indexContent(env, 'outline', o.id, novelId, o.title, o.content)
-            indexedCount++
-          }
-        }
-      }
-
-      if (sourceTypes.includes('chapter')) {
-        const chaptersToIndex = await db
-          .select({ id: chapters.id, title: chapters.title, content: chapters.content })
-          .from(chapters)
-          .where(and(eq(chapters.novelId, novelId), isNull(chapters.deletedAt), sql`${chapters.content} IS NOT NULL`))
-          .all()
-        for (const c of chaptersToIndex) {
-          if (c.content) {
-            await indexContent(env, 'chapter', c.id, novelId, c.title, c.content)
-            indexedCount++
-          }
+        for (const s of settingsToIndex) {
+          const indexText = s.summary || (s.content.length > 500 ? s.content.slice(0, 500) : s.content)
+          await indexContent(env, 'setting', s.id, novelId, s.name, indexText, { settingType: s.type, importance: s.importance })
+          indexedCount++
         }
       }
 
       if (sourceTypes.includes('character')) {
         const charactersToIndex = await db
-          .select({ id: characters.id, name: characters.name, description: characters.description })
+          .select({ id: characters.id, name: characters.name, description: characters.description, role: characters.role })
           .from(characters)
-          .where(and(eq(characters.novelId, novelId), isNull(characters.deletedAt), sql`${characters.description} IS NOT NULL`))
+          .where(and(eq(characters.novelId, novelId), sql`${characters.deletedAt} IS NULL`, sql`${characters.description} IS NOT NULL`))
           .all()
         for (const ch of charactersToIndex) {
-          if (ch.description) {
-            await indexContent(env, 'character', ch.id, novelId, ch.name, ch.description)
-            indexedCount++
-          }
+          const indexText = `${ch.name}${ch.role ? ` (${ch.role})` : ''}\n${(ch.description || '').slice(0, 300)}`
+          await indexContent(env, 'character', ch.id, novelId, ch.name, indexText)
+          indexedCount++
+        }
+      }
+
+      if (sourceTypes.includes('foreshadowing')) {
+        const itemsToIndex = await db
+          .select({ id: foreshadowing.id, title: foreshadowing.title, description: foreshadowing.description, importance: foreshadowing.importance })
+          .from(foreshadowing)
+          .where(and(eq(foreshadowing.novelId, novelId), sql`${foreshadowing.deletedAt} IS NULL`, sql`${foreshadowing.description} IS NOT NULL`))
+          .all()
+        for (const f of itemsToIndex) {
+          await indexContent(env, 'foreshadowing', f.id, novelId, f.title, f.description, { importance: f.importance })
+          indexedCount++
         }
       }
 

@@ -14,6 +14,8 @@ import {
   indexContent,
   deindexContent,
   searchSimilar,
+  searchSimilarMulti,
+  ACTIVE_SOURCE_TYPES,
   embedText,
   fetchContentForIndexing,
 } from '../services/embedding'
@@ -45,6 +47,21 @@ router.post(
       if (sourceType === 'outline' || sourceType === 'chapter') {
         const fetched = await fetchContentForIndexing(c.env, sourceType, sourceId)
         content = fetched.content
+      }
+    }
+
+    if (content) {
+      const MAX_CONTENT_LENGTH: Record<string, number> = {
+        setting: 500,
+        outline: 2000,
+        character: 400,
+        foreshadowing: 0,
+        chapter: 0,
+        summary: 0,
+      }
+      const maxLen = MAX_CONTENT_LENGTH[sourceType]
+      if (maxLen && content.length > maxLen) {
+        content = content.slice(0, maxLen)
       }
     }
 
@@ -119,6 +136,7 @@ router.delete('/:type/:id', async (c) => {
 router.get('/search', async (c) => {
   const query = c.req.query('q')
   const novelId = c.req.query('novelId')
+  const sourceTypesParam = c.req.query('sourceTypes')
 
   if (!query) {
     return c.json({ error: 'Query parameter "q" is required' }, 400)
@@ -130,9 +148,14 @@ router.get('/search', async (c) => {
 
   try {
     const queryVector = await embedText(c.env.AI, query)
-    const results = await searchSimilar(c.env.VECTORIZE, queryVector, {
+    const sourceTypes = sourceTypesParam
+      ? sourceTypesParam.split(',').map(s => s.trim())
+      : [...ACTIVE_SOURCE_TYPES]
+
+    const results = await searchSimilarMulti(c.env.VECTORIZE, queryVector, {
       topK: 10,
-      filter: novelId ? { novelId } : undefined,
+      novelId: novelId || '',
+      sourceTypes,
     })
 
     return c.json({

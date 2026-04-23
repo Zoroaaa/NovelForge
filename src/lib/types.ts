@@ -276,6 +276,7 @@ export interface NovelSetting {
   category: string | null    // 子分类
   name: string               // 设定名称
   content: string            // 详细描述 (Markdown)
+  summary: string | null     // 摘要（用于 RAG 索引，≤400字）
   attributes: string | null  // JSON: 额外结构化数据
   parentId: string | null    // 支持层级
   importance: 'high' | 'normal' | 'low'

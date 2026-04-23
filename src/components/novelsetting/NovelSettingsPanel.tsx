@@ -1,8 +1,7 @@
 /**
  * @file NovelSettingsPanel.tsx
  * @description 小说设定面板组件，管理世界观、力量体系、势力等设定
- * @version 1.0.0
- * @modified 2026-04-21 - 添加规范化注释
+ * @version 1.1.0 - 增加摘要字段与手动摘要生成
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -10,7 +9,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { NovelSetting } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Plus, Trash2, Edit2, ChevronDown, ChevronRight, Globe, Sword, Users, Map, Package } from 'lucide-react'
+import { Plus, Trash2, Edit2, ChevronDown, ChevronRight, Globe, Sword, Users, Map, Package, Sparkles } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -58,6 +57,7 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
     type: 'worldview' | 'power_system' | 'faction' | 'geography' | 'item_skill' | 'misc'
     category: string
     name: string
+    summary: string
     content: string
     attributes: string
     importance: 'high' | 'normal' | 'low'
@@ -65,6 +65,7 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
     type: 'worldview',
     category: '',
     name: '',
+    summary: '',
     content: '',
     attributes: '',
     importance: 'normal',
@@ -84,6 +85,7 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
         ...rest,
         novelId,
         attributes: attributes.trim() || undefined,
+        summary: rest.summary.trim() || undefined,
       })
     },
     onSuccess: () => {
@@ -96,11 +98,12 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<NovelSetting> & { attributes?: string } }) => {
+    mutationFn: ({ id, data }: { id: string; data: Partial<NovelSetting> & { attributes?: string; summary?: string } }) => {
       const { attributes, ...rest } = data
       return api.settings.update(id, {
         ...rest,
         attributes: attributes?.trim() || undefined,
+        summary: rest.summary?.trim() || undefined,
       } as Record<string, unknown>)
     },
     onSuccess: () => {
@@ -141,6 +144,7 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
       type: setting.type as 'worldview' | 'power_system' | 'faction' | 'geography' | 'item_skill' | 'misc',
       category: setting.category || '',
       name: setting.name,
+      summary: setting.summary || '',
       content: setting.content || '',
       attributes: setting.attributes || '',
       importance: setting.importance,
@@ -163,8 +167,20 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
     })
   }
 
+  const handleAutoSummary = () => {
+    if (!formData.content.trim()) {
+      toast.warning('请先填写详细描述')
+      return
+    }
+    const autoSummary = formData.content.length > 400
+      ? formData.content.slice(0, 400)
+      : formData.content
+    setFormData(prev => ({ ...prev, summary: autoSummary }))
+    toast.success(`已自动生成摘要 (${autoSummary.length} 字)`)
+  }
+
   const resetForm = () => {
-    setFormData({ type: 'worldview', category: '', name: '', content: '', attributes: '', importance: 'normal' })
+    setFormData({ type: 'worldview', category: '', name: '', summary: '', content: '', attributes: '', importance: 'normal' })
     setEditingId(null)
   }
 
@@ -254,6 +270,33 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
               </div>
 
               <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  摘要（RAG 索引用，≤400字）
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[11px] gap-1 text-muted-foreground hover:text-primary"
+                    onClick={handleAutoSummary}
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    从描述自动生成
+                  </Button>
+                </Label>
+                <Textarea
+                  placeholder="用于语义检索的精炼摘要，留空则自动从描述截取前400字"
+                  rows={3}
+                  maxLength={400}
+                  value={formData.summary}
+                  onChange={(e) => setFormData(prev => ({ ...prev, summary: e.target.value }))}
+                />
+                <p className="text-[10px] text-muted-foreground flex justify-between">
+                  <span>{formData.summary.length}/400 字</span>
+                  <span>此摘要将用于向量索引检索，影响 AI 写作时是否能找到该设定</span>
+                </p>
+              </div>
+
+              <div className="space-y-2">
                 <Label>详细描述 *（支持 Markdown）</Label>
                 <Textarea
                   placeholder="详细描述这个设定..."
@@ -327,13 +370,24 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
                               <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-medium shrink-0 ${IMPORTANCE_OPTIONS.find(o => o.value === item.importance)?.color}`}>
                                 {IMPORTANCE_OPTIONS.find(o => o.value === item.importance)?.label}
                               </span>
+                              {item.summary && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-sm font-medium shrink-0 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                                  已索引
+                                </span>
+                              )}
                             </div>
                             {item.category && (
                               <span className="text-[11px] text-muted-foreground/60">#{item.category}</span>
                             )}
-                            <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                              {item.content?.slice(0, 100)}...
-                            </p>
+                            {item.summary ? (
+                              <p className="text-xs text-emerald-700/70 dark:text-emerald-400/70 line-clamp-2 leading-relaxed bg-emerald-50/50 dark:bg-emerald-950/30 rounded px-2 py-1">
+                                {item.summary}
+                              </p>
+                            ) : (
+                              <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                                {item.content?.slice(0, 100)}...
+                              </p>
+                            )}
                           </div>
                           
                           <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">

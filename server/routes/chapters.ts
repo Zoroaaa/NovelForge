@@ -12,7 +12,6 @@ import { chapters as t } from '../db/schema'
 import { eq, and, isNull, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { enqueue } from '../lib/queue'
-import { indexContent, deindexContent } from '../services/embedding'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -71,19 +70,6 @@ router.post('/', zValidator('json', CreateSchema), async (c) => {
   const body = c.req.valid('json')
   const [row] = await db.insert(t).values(body).returning()
 
-  if (c.env.VECTORIZE && row.content) {
-    await enqueue(c.env, {
-      type: 'index_content',
-      payload: {
-        sourceType: 'chapter',
-        sourceId: row.id,
-        novelId: row.novelId,
-        title: row.title,
-        content: row.content,
-      },
-    })
-  }
-
   return c.json(row, 201)
 })
 
@@ -119,33 +105,7 @@ router.patch(
       .returning()
 
     if (body.content !== undefined && row) {
-      if (c.env.VECTORIZE && body.content) {
-        await enqueue(c.env, {
-          type: 'index_content',
-          payload: {
-            sourceType: 'chapter',
-            sourceId: row.id,
-            novelId: row.novelId,
-            title: row.title,
-            content: body.content,
-          },
-        })
-      }
-
       saveSnapshot(c.env, row.novelId, row.id, body.content ?? '').then(() => {}).catch(e => console.warn('Snapshot save failed:', e))
-    }
-
-    if (body.summary !== undefined && row && c.env.VECTORIZE && body.summary) {
-      await enqueue(c.env, {
-        type: 'index_content',
-        payload: {
-          sourceType: 'summary',
-          sourceId: row.id,
-          novelId: row.novelId,
-          title: `${row.title} 摘要`,
-          content: body.summary,
-        },
-      })
     }
 
     return c.json(row)
@@ -161,14 +121,6 @@ router.patch(
 router.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB)
   const id = c.req.param('id')
-
-  // 删除向量索引（章节+摘要）
-  if (c.env.VECTORIZE) {
-    Promise.all([
-      deindexContent(c.env, 'chapter', id),
-      deindexContent(c.env, 'summary', id),
-    ]).then(() => {}).catch(e => console.warn('Deindex failed:', e))
-  }
 
   await db
     .update(t)

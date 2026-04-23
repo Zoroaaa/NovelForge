@@ -5,7 +5,7 @@ import { rebuildEntityIndex } from './services/entity-index'
 import { triggerAutoSummary } from './services/agent'
 import { extractForeshadowingFromChapter } from './services/foreshadowing'
 import { drizzle } from 'drizzle-orm/d1'
-import { novelSettings, characters, masterOutline, foreshadowing, chapters, queueTaskLogs, vectorIndex } from './db/schema'
+import { novelSettings, characters, foreshadowing, chapters, queueTaskLogs, vectorIndex } from './db/schema'
 import { eq, and, sql } from 'drizzle-orm'
 import { enqueueBatch } from './lib/queue'
 
@@ -100,6 +100,7 @@ async function handleReindexAll(
       novelId: novelSettings.novelId,
       name: novelSettings.name,
       content: novelSettings.content,
+      summary: novelSettings.summary,
       type: novelSettings.type,
       importance: novelSettings.importance,
     })
@@ -113,6 +114,7 @@ async function handleReindexAll(
 
     for (const s of settings) {
       if (!s.content) continue
+      const indexContent = s.summary || (s.content.length > 500 ? s.content.slice(0, 500) : s.content)
       messages.push({
         type: 'index_content',
         payload: {
@@ -120,7 +122,7 @@ async function handleReindexAll(
           sourceId: s.id,
           novelId: s.novelId,
           title: s.name,
-          content: s.content,
+          content: indexContent,
           extraMetadata: { settingType: s.type, importance: s.importance },
         },
       })
@@ -144,6 +146,7 @@ async function handleReindexAll(
 
     for (const ch of chars) {
       if (!ch.description) continue
+      const indexText = `${ch.name}\n${(ch.description || '').slice(0, 300)}`
       messages.push({
         type: 'index_content',
         payload: {
@@ -151,7 +154,7 @@ async function handleReindexAll(
           sourceId: ch.id,
           novelId: ch.novelId,
           title: ch.name,
-          content: ch.description,
+          content: indexText,
         },
       })
     }
@@ -184,36 +187,6 @@ async function handleReindexAll(
           title: f.title,
           content: f.description,
           extraMetadata: { importance: f.importance },
-        },
-      })
-    }
-  }
-
-  if (types.includes('outline')) {
-    const outlines = await db.select({
-      id: masterOutline.id,
-      novelId: masterOutline.novelId,
-      title: masterOutline.title,
-      content: masterOutline.content,
-    })
-    .from(masterOutline)
-    .where(and(
-      eq(masterOutline.novelId, novelId),
-      sql`${masterOutline.deletedAt} IS NULL`,
-      sql`${masterOutline.content} IS NOT NULL`
-    ))
-    .all()
-
-    for (const o of outlines) {
-      if (!o.content) continue
-      messages.push({
-        type: 'index_content',
-        payload: {
-          sourceType: 'outline',
-          sourceId: o.id,
-          novelId: o.novelId,
-          title: o.title,
-          content: o.content,
         },
       })
     }

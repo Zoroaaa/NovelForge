@@ -149,12 +149,17 @@ router.post('/', zValidator('json', CreateSettingSchema), async (c) => {
   const db = drizzle(c.env.DB)
 
   try {
+    const autoSummary = body.content.length > 400
+      ? body.content.slice(0, 400)
+      : body.content
+
     const newSetting = await db.insert(novelSettings).values({
       novelId: body.novelId,
       type: body.type,
       category: body.category,
       name: body.name,
       content: body.content,
+      summary: body.summary || autoSummary,
       attributes: body.attributes,
       parentId: body.parentId,
       importance: body.importance,
@@ -169,7 +174,7 @@ router.post('/', zValidator('json', CreateSettingSchema), async (c) => {
           sourceId: newSetting.id,
           novelId: newSetting.novelId,
           title: newSetting.name,
-          content: newSetting.content,
+          content: newSetting.summary || autoSummary,
           extraMetadata: { settingType: newSetting.type, importance: newSetting.importance },
         },
       })
@@ -209,7 +214,10 @@ router.put('/:id', zValidator('json', UpdateSettingSchema), async (c) => {
     if (body.type !== undefined) updateData.type = body.type
     if (body.category !== undefined) updateData.category = body.category
     if (body.name !== undefined) updateData.name = body.name
-    if (body.content !== undefined) updateData.content = body.content
+    if (body.content !== undefined) {
+      updateData.content = body.content
+      updateData.summary = body.summary || (body.content.length > 400 ? body.content.slice(0, 400) : body.content)
+    }
     if (body.attributes !== undefined) updateData.attributes = body.attributes
     if (body.parentId !== undefined) updateData.parentId = body.parentId
     if (body.importance !== undefined) updateData.importance = body.importance
@@ -231,7 +239,7 @@ router.put('/:id', zValidator('json', UpdateSettingSchema), async (c) => {
           sourceId: updated.id,
           novelId: updated.novelId,
           title: updated.name,
-          content: updated.content,
+          content: updated.summary || updated.content.slice(0, 400),
           extraMetadata: { settingType: updated.type, importance: updated.importance },
         },
       })

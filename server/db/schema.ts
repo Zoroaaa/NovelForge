@@ -85,6 +85,7 @@ export const novelSettings = sqliteTable('novel_settings', {
   category: text('category'),
   name: text('name').notNull(),
   content: text('content').notNull(),
+  summary: text('summary'),
   attributes: text('attributes'),
   parentId: text('parent_id'),
   importance: text('importance').notNull().default('normal'),
@@ -98,6 +99,7 @@ export const novelSettings = sqliteTable('novel_settings', {
   index('idx_novel_settings_novel').on(table.novelId, table.type).where(sql`${table.deletedAt} IS NULL`),
   index('idx_novel_settings_type').on(table.type, table.category),
   index('idx_novel_settings_parent').on(table.parentId),
+  index('idx_novel_settings_importance').on(table.novelId, table.importance).where(sql`${table.deletedAt} IS NULL`),
 ])
 
 // ============================================================

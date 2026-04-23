@@ -155,6 +155,53 @@ export async function searchSimilar(
   }))
 }
 
+export const ACTIVE_SOURCE_TYPES = ['character', 'setting', 'foreshadowing'] as const
+export type ActiveSourceType = typeof ACTIVE_SOURCE_TYPES[number]
+
+/**
+ * 多类型并行语义搜索（合并去重 + score 排序）
+ * 用于通用搜索场景，默认只搜活跃类型（character/setting/foreshadowing）
+ */
+export async function searchSimilarMulti(
+  vectorize: any,
+  queryVector: number[],
+  options: {
+    topK?: number
+    novelId: string
+    sourceTypes?: string[]
+  }
+): Promise<Array<{
+  id: string
+  score: number
+  metadata: VectorMetadata
+}>> {
+  const { topK = 10, novelId, sourceTypes = [...ACTIVE_SOURCE_TYPES] } = options
+
+  if (sourceTypes.length === 0 || sourceTypes[0] === 'all') {
+    return searchSimilar(vectorize, queryVector, { topK: topK * 3, filter: { novelId } })
+      .then(r => r.slice(0, topK))
+  }
+
+  const perTypeK = Math.ceil(topK / Math.max(sourceTypes.length, 1))
+  const results = await Promise.all(
+    sourceTypes.map(st =>
+      searchSimilar(vectorize, queryVector, { topK: perTypeK, filter: { novelId, sourceType: st } })
+        .catch(() => [] as any[])
+    )
+  )
+
+  const merged = results.flat()
+  const seen = new Set<string>()
+  return merged
+    .filter(r => {
+      if (seen.has(r.id)) return false
+      seen.add(r.id)
+      return true
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK)
+}
+
 /**
  * 文本分块策略（按段落/句子分割，控制token数量）
  */
@@ -163,9 +210,10 @@ export function chunkText(
   options: {
     maxChunkLength?: number
     overlap?: number
+    maxChunks?: number
   } = {}
 ): string[] {
-  const { maxChunkLength = 500, overlap = 50 } = options
+  const { maxChunkLength = 500, overlap = 50, maxChunks } = options
 
   if (!text || text.length <= maxChunkLength) {
     return text ? [text] : []
@@ -175,6 +223,8 @@ export function chunkText(
   let start = 0
 
   while (start < text.length) {
+    if (maxChunks && chunks.length >= maxChunks) break
+
     let end = Math.min(start + maxChunkLength, text.length)
 
     if (end < text.length) {
@@ -240,7 +290,17 @@ export async function indexContent(
 
   const db = drizzle(env.DB)
   const contentHash = hashContent(content)
-  const chunks = chunkText(content)
+  const rawChunks = chunkText(content)
+
+  const MAX_INDEX_CHUNKS = 8
+  const chunks = rawChunks.length > MAX_INDEX_CHUNKS
+    ? rawChunks.slice(0, MAX_INDEX_CHUNKS)
+    : rawChunks
+
+  if (rawChunks.length > MAX_INDEX_CHUNKS) {
+    console.warn(`[indexContent] ${sourceType}:${sourceId} truncated from ${rawChunks.length} to ${MAX_INDEX_CHUNKS} chunks (content length: ${content.length})`)
+  }
+
   const vectorIds: string[] = []
 
   const existingIndex = await db
