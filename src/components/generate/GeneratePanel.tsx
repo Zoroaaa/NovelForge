@@ -15,6 +15,7 @@ import {
   Play,
   Loader2,
   Link,
+  Zap,
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -25,6 +26,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogOverlay,
 } from '@/components/ui/alert-dialog'
 import { useGenerate } from '@/hooks/useGenerate'
 import { RepairDiffPanel } from './RepairDiffPanel'
@@ -711,165 +713,181 @@ export function GeneratePanel({
       )}
 
       <AlertDialog open={rewriteDialogOpen} onOpenChange={setRewriteDialogOpen}>
-        <AlertDialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <AlertDialogHeader className="flex-shrink-0">
-            <AlertDialogTitle>重写前质量检查报告</AlertDialogTitle>
+        <AlertDialogContent className="w-[90vw] max-w-3xl max-h-[85vh] flex flex-col rounded-xl shadow-2xl">
+          <AlertDialogHeader className="flex-shrink-0 px-6 pt-6 pb-4 border-b space-y-0 gap-0">
+            <AlertDialogTitle className="text-lg font-semibold text-left">重写前质量检查报告</AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="text-left">
+              <div className="text-left mt-3">
                 {isChecking ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin mr-2 text-primary" />
+                  <div className="flex flex-col items-center justify-center py-12 gap-3">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
                     <span className="text-sm text-muted-foreground">正在执行综合质量检查...</span>
                   </div>
                 ) : coherenceCheckFailed ? (
-                  <div className="py-4 text-center">
-                    <p className="text-sm text-amber-600 dark:text-amber-400 mb-3">
-                      质量检查失败
-                    </p>
-                    <Button variant="outline" size="sm" onClick={handleRecheck}>
-                      重新检查
+                  <div className="flex flex-col items-center py-8 gap-4">
+                    <AlertTriangle className="h-10 w-10 text-amber-500" />
+                    <div className="text-center space-y-2">
+                      <p className="text-base font-medium text-amber-600 dark:text-amber-400">质量检查失败</p>
+                      <p className="text-xs text-muted-foreground">请检查网络连接后重试</p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={handleRecheck} className="gap-2">
+                      <RefreshCw className="h-4 w-4" />重新检查
                     </Button>
                   </div>
                 ) : combinedReport ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                      <div className="flex items-baseline gap-3">
-                        <span className="text-sm font-medium">综合评分:</span>
-                        <span className={`text-2xl font-bold ${
+                  <div className="space-y-5">
+                    <div className="flex items-center justify-between p-4 bg-gradient-to-r from-muted/80 to-muted/40 rounded-xl border">
+                      <div className="flex items-baseline gap-4">
+                        <span className="text-sm font-medium text-muted-foreground">综合评分</span>
+                        <span className={`text-3xl font-bold tabular-nums ${
                           combinedReport.score >= 80 ? 'text-green-600' :
-                          combinedReport.score >= 60 ? 'text-amber-600' :
-                          'text-red-600'
+                          combinedReport.score >= 60 ? 'text-amber-600' : 'text-red-600'
                         }`}>
-                          {combinedReport.score}/100
+                          {combinedReport.score}
                         </span>
+                        <span className="text-lg text-muted-foreground">/100</span>
                       </div>
-                      <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs" onClick={handleRecheck}>
-                        <RefreshCw className="h-3 w-3" />
-                        重新检查
+                      <Button variant="secondary" size="sm" className="gap-2 h-9 shadow-sm hover:shadow-md transition-shadow" onClick={handleRecheck}>
+                        <RefreshCw className="h-4 w-4" />重新生成报告
                       </Button>
                     </div>
 
-                    <ScrollArea className="max-h-[50vh] pr-3">
-                      <div className="space-y-4">
+                    <div className="overflow-y-auto max-h-[45vh] pr-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent rounded-lg">
+                      <div className="space-y-5 pb-2">
                         {/* 角色一致性部分 */}
                         {(combinedReport.characterResult?.conflicts?.length > 0 || combinedReport.characterResult?.warnings?.length > 0) && (
-                          <div className="space-y-2">
-                            <h5 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                              <Shield className="h-3.5 w-3.5" />
-                              角色一致性检查
-                              <Badge variant={combinedReport.characterResult.conflicts.length > 0 ? 'destructive' : 'default'} className="text-[10px]">
-                                {combinedReport.characterResult.conflicts.length > 0 ? `${combinedReport.characterResult.conflicts.length}个冲突` : '通过'}
+                          <section className="space-y-3">
+                            <header className="flex items-center gap-2.5 pb-2 border-b border-red-200/50 dark:border-red-800/30">
+                              <Shield className="h-4 w-4 text-destructive" />
+                              <h3 className="text-sm font-semibold uppercase tracking-wide">角色一致性检查</h3>
+                              <Badge variant="destructive" className="ml-auto text-[11px] h-5">
+                                {combinedReport.characterResult.conflicts.length > 0 
+                                  ? `${combinedReport.characterResult.conflicts.length} 个冲突` 
+                                  : '通过'}
                               </Badge>
-                            </h5>
+                            </header>
 
-                            {combinedReport.characterResult.conflicts.map((conflict: any, i: number) => (
-                              <div key={`char-c-${i}`} className="p-2.5 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-xs space-y-1">
-                                <div className="font-medium text-red-700 dark:text-red-300 flex items-center gap-1.5">
-                                  <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
-                                  {conflict.characterName}
+                            <div className="space-y-2 pl-1">
+                              {combinedReport.characterResult.conflicts.map((conflict: any, i: number) => (
+                                <article key={`char-c-${i}`} className="group p-3.5 bg-gradient-to-br from-red-50 to-white dark:from-red-950/60 dark:to-transparent border border-red-200/70 dark:border-red-800/40 rounded-lg hover:shadow-md transition-shadow">
+                                  <header className="flex items-center gap-2 mb-2">
+                                    <ShieldAlert className="h-4 w-4 text-red-500 shrink-0" />
+                                    <strong className="text-sm text-red-700 dark:text-red-300">{conflict.characterName}</strong>
+                                  </header>
+                                  <p className="text-[13px] leading-relaxed text-red-600/90 dark:text-red-400/90 ml-6">{conflict.conflict}</p>
+                                  {conflict.excerpt && (
+                                    <blockquote className="mt-2 ml-6 py-2.5 px-3 bg-red-100/50 dark:bg-red-900/20 rounded border-l-2 border-red-400 italic text-xs text-muted-foreground leading-relaxed">
+                                      "{conflict.excerpt}"
+                                    </blockquote>
+                                  )}
+                                </article>
+                              ))}
+
+                              {combinedReport.characterResult.warnings?.filter((w: string) => !w.includes('失败')).map((warning: string, i: number) => (
+                                <div key={`char-w-${i}`} className="flex items-start gap-3 p-3 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/30 rounded-lg text-[13px] text-amber-800 dark:text-amber-200 leading-relaxed">
+                                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
+                                  <span>{warning}</span>
                                 </div>
-                                <p className="text-red-600 dark:text-red-400 pl-5">{conflict.conflict}</p>
-                                {conflict.excerpt && (
-                                  <p className="pl-5 italic text-muted-foreground border-l-2 border-red-300 ml-2">"{conflict.excerpt}"</p>
-                                )}
-                              </div>
-                            ))}
-
-                            {combinedReport.characterResult.warnings?.filter((w: string) => !w.includes('失败')).map((warning: string, i: number) => (
-                              <div key={`char-w-${i}`} className="p-2 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded text-xs flex items-start gap-2 text-amber-700 dark:text-amber-300">
-                                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                                {warning}
-                              </div>
-                            ))}
-                          </div>
+                              ))}
+                            </div>
+                          </section>
                         )}
 
                         {/* 章节连贯性部分 */}
                         {combinedReport.coherenceResult?.issues?.length > 0 && (
-                          <div className="space-y-2">
-                            <h5 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                              <Link className="h-3.5 w-3.5" />
-                              章节连贯性检查
-                              <Badge variant="outline" className="text-[10px]">
+                          <section className="space-y-3">
+                            <header className="flex items-center gap-2.5 pb-2 border-b border-amber-200/50 dark:border-amber-800/30">
+                              <Link className="h-4 w-4 text-amber-600" />
+                              <h3 className="text-sm font-semibold uppercase tracking-wide">章节连贯性检查</h3>
+                              <Badge variant="outline" className="ml-auto text-[11px] h-5">
                                 {combinedReport.coherenceResult.score}分 · {combinedReport.coherenceResult.issues.length}个问题
                               </Badge>
-                            </h5>
+                            </header>
 
-                            {combinedReport.coherenceResult.issues.map((issue: any, i: number) => (
-                              <div key={`coh-${i}`} className={`p-2.5 rounded-lg border text-xs space-y-1 ${
-                                issue.severity === 'error'
-                                  ? 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800'
-                                  : 'bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800'
-                              }`}>
-                                <div className="font-medium flex items-center gap-1.5">
-                                  {issue.severity === 'error' ? (
-                                    <>
-                                      <ShieldAlert className="h-3.5 w-3.5 text-red-500" />
-                                      <span className="text-red-700 dark:text-red-300">错误{i + 1}</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                                      <span className="text-amber-700 dark:text-amber-300">警告{i + 1}</span>
-                                    </>
-                                  )}
-                                  <Badge variant="outline" className="text-[9px] ml-auto">{issue.category || '其他'}</Badge>
-                                </div>
-                                <p className={
+                            <div className="space-y-2 pl-1">
+                              {combinedReport.coherenceResult.issues.map((issue: any, i: number) => (
+                                <article key={`coh-${i}`} className={`p-3.5 rounded-lg border hover:shadow-md transition-shadow ${
                                   issue.severity === 'error'
-                                    ? 'text-red-600 dark:text-red-400'
-                                    : 'text-amber-600 dark:text-amber-400'
-                                }>{issue.message}</p>
-                                {issue.suggestion && (
-                                  <p className="text-muted-foreground pl-4">→ 建议：{issue.suggestion}</p>
-                                )}
-                              </div>
-                            ))}
-                          </div>
+                                    ? 'bg-gradient-to-br from-red-50 to-white dark:from-red-950/60 dark:to-transparent border-red-200/70 dark:border-red-800/40'
+                                    : 'bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-transparent border-amber-200/60 dark:border-amber-800/30'
+                                }`}>
+                                  <header className="flex items-center gap-2 mb-1.5">
+                                    {issue.severity === 'error' ? (
+                                      <>
+                                        <ShieldAlert className="h-4 w-4 text-red-500 shrink-0" />
+                                        <strong className="text-sm text-red-700 dark:text-red-300">错误 {i + 1}</strong>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                                        <strong className="text-sm text-amber-700 dark:text-amber-300">警告 {i + 1}</strong>
+                                      </>
+                                    )}
+                                    <Badge variant="secondary" className="text-[10px] ml-auto h-5">{issue.category || '其他'}</Badge>
+                                  </header>
+                                  <p className={`text-[13px] leading-relaxed ${
+                                    issue.severity === 'error'
+                                      ? 'text-red-600/90 dark:text-red-400/90'
+                                      : 'text-amber-700/90 dark:text-amber-300/90'
+                                  }`}>{issue.message}</p>
+                                  {issue.suggestion && (
+                                    <footer className="mt-2 ml-4 text-xs text-muted-foreground flex items-start gap-1.5">
+                                      <span>💡 建议：</span>
+                                      <span>{issue.suggestion}</span>
+                                    </footer>
+                                  )}
+                                </article>
+                              ))}
+                            </div>
+                          </section>
                         )}
 
+                        {/* 无问题提示 */}
                         {!combinedReport.characterResult?.conflicts?.length &&
                          !combinedReport.characterResult?.warnings?.filter((w: string) => !w.includes('失败'))?.length &&
                          !combinedReport.coherenceResult?.issues?.length && (
-                          <div className="flex items-center gap-2 p-4 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg text-sm text-green-700 dark:text-green-300">
-                            <CheckCircle className="h-5 w-5 shrink-0" />
-                            恭喜！角色一致性和章节连贯性均未发现问题，可以放心重写。
+                          <div className="flex flex-col items-center gap-3 p-8 bg-gradient-to-br from-green-50 via-emerald-50/30 to-transparent dark:from-green-950/40 dark:via-emerald-950/10 dark:to-transparent border border-green-200/60 dark:border-green-800/30 rounded-xl">
+                            <CheckCircle className="h-12 w-12 text-green-500" />
+                            <div className="text-center space-y-1">
+                              <p className="text-base font-medium text-green-700 dark:text-green-300">质量检查全部通过 ✨</p>
+                              <p className="text-sm text-green-600/80 dark:text-green-400/80">角色一致性和章节连贯性均未发现问题，可以放心重写。</p>
+                            </div>
                           </div>
                         )}
                       </div>
-                    </ScrollArea>
+                    </div>
 
                     {(combinedReport.characterResult?.conflicts?.length > 0 ||
                      combinedReport.coherenceResult?.issues?.some((i: any) => i.severity === 'error')) && (
-                      <p className="text-[11px] text-muted-foreground text-center pt-2 border-t">
-                        重写时将自动带入以上问题进行针对性优化
-                      </p>
+                      <aside className="pt-3 border-t text-center">
+                        <p className="text-xs text-muted-foreground flex items-center justify-center gap-1.5">
+                          <Zap className="h-3.5 w-3.5 text-blue-500" />
+                          确认重写时将自动注入以上问题作为优化上下文
+                        </p>
+                      </aside>
                     )}
                   </div>
                 ) : (
-                  <div className="py-8 text-center text-sm text-muted-foreground">
-                    暂无报告数据
+                  <div className="py-16 text-center">
+                    <p className="text-sm text-muted-foreground">暂无报告数据</p>
                   </div>
                 )}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="flex-shrink-0">
-            <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogFooter className="flex-shrink-0 px-6 py-4 border-t bg-muted/30 rounded-b-xl gap-3">
+            <AlertDialogCancel className="h-9">取消</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleRewriteConfirm}
               disabled={isChecking}
-              className="gap-2"
+              className="h-9 gap-2 min-w-[120px]"
             >
               {isChecking ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  检查中...
+                  <Loader2 className="h-4 w-4 animate-spin" />检查中...
                 </>
               ) : (
-                <>
-                  确认，开始重写
-                </>
+                <>确认，开始重写</>
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
