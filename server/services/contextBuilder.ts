@@ -14,7 +14,7 @@
  *
  * Slot-0  总纲全文/长摘要                    DB直查    ~10000 tokens
  * Slot-1  当前卷 blueprint + eventLine        DB直查    ~1500 tokens
- * Slot-2  上一章摘要                          DB直查    ~500 tokens
+ * Slot-2  上一章正文                          DB直查    ~5000 tokens
  * Slot-3  主角完整状态卡                      DB直查    ~3000 tokens
  * Slot-4  全部活跃创作规则                     DB直查    ~5000 tokens
  * Slot-5  出场角色卡（RAG引导→DB补全）         RAG+DB   ~8000 tokens
@@ -55,7 +55,7 @@ export interface ContextBundle {
     masterOutlineContent: string
     volumeBlueprint: string
     volumeEventLine: string
-    prevChapterSummary: string
+    prevChapterContent: string
     protagonistStateCards: string[]
     allActiveRules: string[]
   }
@@ -146,7 +146,7 @@ export async function buildChapterContext(
   const [
     outlineContent,
     volumeInfo,
-    prevSummary,
+    prevContent,
     protagonistData,
     powerLevelInfo,
     allActiveRules,
@@ -154,7 +154,7 @@ export async function buildChapterContext(
   ] = await Promise.all([
     fetchMasterOutlineContent(db, novelId),
     fetchVolumeInfo(db, currentChapter.volumeId),
-    fetchPrevChapterSummary(db, currentChapter.novelId, currentChapter.sortOrder),
+    fetchPrevChapterContent(db, currentChapter.novelId, currentChapter.sortOrder),
     fetchProtagonistCards(db, novelId),
     fetchProtagonistPowerLevel(db, novelId),
     fetchAllActiveRules(db, novelId),
@@ -167,7 +167,7 @@ export async function buildChapterContext(
   // ── Step 2: 组装查询向量 ──
   const queryText = [
     volumeInfo.eventLine,
-    prevSummary,
+    prevContent,
     currentChapter.title,
   ].filter(Boolean).join('\n')
 
@@ -223,7 +223,7 @@ export async function buildChapterContext(
     outlineContent,
     volumeInfo.blueprint,
     volumeInfo.eventLine,
-    prevSummary,
+    prevContent,
     ...protagonistStateCards,
     ...allActiveRules,
   ]
@@ -245,7 +245,7 @@ export async function buildChapterContext(
     masterOutlineContent: estimateTokens(outlineContent),
     volumeBlueprint: estimateTokens(volumeInfo.blueprint),
     volumeEventLine: estimateTokens(volumeInfo.eventLine),
-    prevChapterSummary: estimateTokens(prevSummary),
+    prevChapterContent: estimateTokens(prevContent),
     protagonistCards: protagonistStateCards.reduce((s, t) => s + estimateTokens(t), 0),
     activeRules: mutableRules.reduce((s, t) => s + estimateTokens(t), 0),
     summaryChain: recentSummaries.reduce((s, t) => s + estimateTokens(t), 0),
@@ -265,7 +265,7 @@ export async function buildChapterContext(
       masterOutlineContent: outlineContent,
       volumeBlueprint: volumeInfo.blueprint,
       volumeEventLine: volumeInfo.eventLine,
-      prevChapterSummary: prevSummary,
+      prevChapterContent: prevContent,
       protagonistStateCards,
       allActiveRules: mutableRules,
     },
@@ -577,12 +577,12 @@ async function fetchVolumeInfo(db: AppDb, volumeId: string | null): Promise<{
   }
 }
 
-async function fetchPrevChapterSummary(
+async function fetchPrevChapterContent(
   db: AppDb, novelId: string, currentSortOrder: number
 ): Promise<string> {
   try {
     const row = await db
-      .select({ summary: chapters.summary, title: chapters.title, sortOrder: chapters.sortOrder })
+      .select({ content: chapters.content, title: chapters.title, sortOrder: chapters.sortOrder })
       .from(chapters)
       .where(and(
         eq(chapters.novelId, novelId),
@@ -590,10 +590,10 @@ async function fetchPrevChapterSummary(
         sql`${chapters.deletedAt} IS NULL`
       ))
       .orderBy(desc(chapters.sortOrder)).limit(1).get()
-    if (!row?.summary) return ''
-    return `[上一章: ${row.title}] ${row.summary}`
+    if (!row?.content) return ''
+    return `[上一章: ${row.title}]\n${row.content}`
   } catch (error) {
-    console.error('[contextBuilder] fetchPrevChapterSummary failed:', error)
+    console.error('[contextBuilder] fetchPrevChapterContent failed:', error)
     return ''
   }
 }
@@ -815,7 +815,7 @@ export function assemblePromptContext(bundle: ContextBundle): string {
     sections.push(`## 当前卷规划\n${parts.join('\n\n')}`)
   }
 
-  if (bundle.core.prevChapterSummary) sections.push(`## 上一章回顾\n${bundle.core.prevChapterSummary}`)
+  if (bundle.core.prevChapterContent) sections.push(`## 上一章正文\n${bundle.core.prevChapterContent}`)
 
   if (bundle.core.protagonistStateCards.length > 0) sections.push(`## 主角状态\n${bundle.core.protagonistStateCards.join('\n\n')}`)
 

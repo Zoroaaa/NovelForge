@@ -29,7 +29,6 @@ import {
   AlertDialogOverlay,
 } from '@/components/ui/alert-dialog'
 import { useGenerate } from '@/hooks/useGenerate'
-import { RepairDiffPanel } from './RepairDiffPanel'
 import { StreamOutput } from './StreamOutput'
 import {
   ContextPreview,
@@ -44,7 +43,7 @@ interface GeneratePanelProps {
   novelId: string
   chapterId: string
   chapterTitle: string
-  onInsertContent: (content: string) => void
+  onInsertContent: (content: string, insertMode?: 'replace' | 'append') => void
   onContextUpdate?: (context: ContextBundle | null) => void
   existingContent?: string
 }
@@ -67,6 +66,20 @@ const TARGET_WORDS_MIN = 500
 const TARGET_WORDS_MAX = 8000
 const TARGET_WORDS_DEFAULT = 2000
 
+function formatTimeAgo(timestamp: number): string {
+  const now = Date.now()
+  const diff = now - timestamp
+  const seconds = Math.floor(diff / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+
+  if (days > 0) return `${days}天前`
+  if (hours > 0) return `${hours}小时前`
+  if (minutes > 0) return `${minutes}分钟前`
+  return '刚刚'
+}
+
 export function GeneratePanel({
   novelId,
   chapterId,
@@ -75,7 +88,7 @@ export function GeneratePanel({
   onContextUpdate,
   existingContent = '',
 }: GeneratePanelProps) {
-  const { output, status, generate, stop, contextInfo, toolCalls, usage, repairedContent, repairInfo, clearRepair } = useGenerate()
+  const { output, status, generate, stop, contextInfo, toolCalls, usage } = useGenerate()
   const [showConsistencyCheck, setShowConsistencyCheck] = useState(false)
   const [showCoherenceCheck, setShowCoherenceCheck] = useState(false)
   const [showCombinedCheck, setShowCombinedCheck] = useState(false)
@@ -99,6 +112,8 @@ export function GeneratePanel({
     score: number
   } | null>(null)
   const [isChecking, setIsChecking] = useState(false)
+  const [isFromCache, setIsFromCache] = useState(false)
+  const [reportCachedAt, setReportCachedAt] = useState<number | null>(null)
 
   const hasContent = existingContent.trim().length > 0
 
@@ -143,15 +158,11 @@ export function GeneratePanel({
     }
   }, [chapterId])
 
-  const handleAcceptRepair = (content: string) => {
-    onInsertContent(content)
-    clearRepair()
-  }
-
   const handleInsert = () => {
     if (output && !isInserting) {
       setIsInserting(true)
-      onInsertContent(output)
+      const insertMode: 'replace' | 'append' = mode === 'continue' ? 'append' : 'replace'
+      onInsertContent(output, insertMode)
       setTimeout(() => {
         setIsInserting(false)
       }, 2000)
@@ -217,6 +228,8 @@ export function GeneratePanel({
             coherenceResult: data.log.coherenceResult,
             score: data.log.score,
           })
+          setIsFromCache(true)
+          setReportCachedAt(data.log.createdAt)
           setIsChecking(false)
           return
         }
@@ -235,6 +248,8 @@ export function GeneratePanel({
         coherenceResult: checkData.coherenceCheck,
         score: checkData.score,
       })
+      setIsFromCache(false)
+      setReportCachedAt(null)
 
       loadLatestCheckLog()
     } catch (error) {
@@ -267,6 +282,8 @@ export function GeneratePanel({
         coherenceResult: data.coherenceCheck,
         score: data.score,
       })
+      setIsFromCache(false)
+      setReportCachedAt(null)
 
       loadLatestCheckLog()
     } catch (error) {
@@ -469,17 +486,6 @@ export function GeneratePanel({
       </div>
 
       <StreamOutput content={output} status={status} usage={usage} />
-
-      {repairedContent && status === 'done' && (
-        <RepairDiffPanel
-          originalContent={output}
-          repairedContent={repairedContent}
-          originalScore={repairInfo?.originalScore ?? 0}
-          issues={repairInfo?.issues ?? []}
-          onAccept={handleAcceptRepair}
-          onDismiss={clearRepair}
-        />
-      )}
 
       {/* 生成完成 或 重写模式：显示结果和检查区域 */}
       {(status === 'done' && output) || (mode === 'rewrite' && hasContent) ? (
@@ -733,7 +739,12 @@ export function GeneratePanel({
       <AlertDialog open={rewriteDialogOpen} onOpenChange={setRewriteDialogOpen}>
         <AlertDialogContent className="w-[90vw] max-w-3xl max-h-[85vh] flex flex-col rounded-xl shadow-2xl">
           <AlertDialogHeader className="flex-shrink-0 px-6 pt-6 pb-4 border-b space-y-0 gap-0">
-            <AlertDialogTitle className="text-lg font-semibold text-left">重写前质量检查报告</AlertDialogTitle>
+            <div className="flex items-center justify-between">
+              <AlertDialogTitle className="text-lg font-semibold text-left">重写前质量检查报告</AlertDialogTitle>
+              {isFromCache && reportCachedAt && (
+                <span className="text-xs text-muted-foreground">上次检查：{formatTimeAgo(reportCachedAt)}</span>
+              )}
+            </div>
             <AlertDialogDescription asChild>
               <div className="text-left mt-3">
                 {isChecking ? (

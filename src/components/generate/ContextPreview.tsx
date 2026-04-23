@@ -64,7 +64,7 @@ export interface ContextBundle {
     masterOutlineSummary: string
     volumeBlueprint: string
     volumeEventLine: string
-    prevChapterSummary: string
+    prevChapterContent: string
     protagonistStateCards: string[]
     highPriorityRules: string[]
   }
@@ -242,7 +242,7 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
             )}
 
             {/* v3: Core层 - 固定注入 */}
-            {(core.masterOutlineSummary || core.volumeBlueprint || core.volumeEventLine || core.prevChapterSummary) && (
+            {(core.masterOutlineSummary || core.volumeBlueprint || core.volumeEventLine || core.prevChapterContent) && (
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                   <FileText className="h-3 w-3" />
@@ -252,7 +252,7 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
                       {(debug.slotBreakdown.masterOutlineSummary || 0) +
                        (debug.slotBreakdown.volumeBlueprint || 0) +
                        (debug.slotBreakdown.volumeEventLine || 0) +
-                       (debug.slotBreakdown.prevChapterSummary || 0)}t
+                       (debug.slotBreakdown.prevChapterContent || 0)}t
                     </Badge>
                   )}
                 </h4>
@@ -279,11 +279,11 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
                       type="event_line"
                     />
                   )}
-                  {core.prevChapterSummary && (
+                  {core.prevChapterContent && (
                     <ContextItem
-                      label="上一章摘要"
-                      content={core.prevChapterSummary}
-                      type="chapter_summary"
+                      label="上一章正文"
+                      content={core.prevChapterContent}
+                      type="chapter_content"
                     />
                   )}
                 </div>

@@ -23,6 +23,7 @@ import { toast } from 'sonner'
 interface ChapterEditorProps {
   chapter: Chapter
   injectedContent?: string
+  injectedInsertMode?: 'replace' | 'append'
   onContentInserted?: () => void
   onContentChange?: (content: string) => void
 }
@@ -34,7 +35,7 @@ interface ChapterEditorProps {
  * 核心设计：通过 EditorContent 的 onCreate 回调直接获取 editor 实例并存入 ref，
  * 避免依赖 useEditor() hook 的异步 re-render 时序，从根本上解决内容注入竞态问题。
  */
-export function ChapterEditor({ chapter, injectedContent, onContentInserted, onContentChange }: ChapterEditorProps) {
+export function ChapterEditor({ chapter, injectedContent, injectedInsertMode = 'replace', onContentInserted, onContentChange }: ChapterEditorProps) {
   const mutation = useMutation({
     mutationFn: (content: string) => api.chapters.update(chapter.id, { content }),
   })
@@ -47,6 +48,8 @@ export function ChapterEditor({ chapter, injectedContent, onContentInserted, onC
   const editorRef = useRef<any>(null)
   // 存储在 editor ready 之前到达的内容
   const pendingContentRef = useRef<string | null>(null)
+  // 存储待注入内容的插入模式
+  const pendingInsertModeRef = useRef<'replace' | 'append'>('replace')
 
   const [showInsertBanner, setShowInsertBanner] = useState(false)
   // 用于去重：记录最后一次成功处理的内容，避免同一内容重复注入
@@ -56,9 +59,24 @@ export function ChapterEditor({ chapter, injectedContent, onContentInserted, onC
   onContentInsertedRef.current = onContentInserted
 
   /**
-   * 核心注入函数：向编辑器写入内容并触发保存
+   * 监听章节切换：当 chapter.id 变化时，主动更新编辑器内容
    */
-  const doInsert = (editor: any, content: string) => {
+  useEffect(() => {
+    const editor = editorRef.current
+    if (!editor) return
+
+    if (chapter.content) {
+      editor.commands.setContent(chapter.content)
+    } else {
+      editor.commands.setContent('<p></p>')
+    }
+  }, [chapter.id, chapter.content])
+
+  /**
+   * 核心注入函数：向编辑器写入内容并触发保存
+   * @param mode 'replace' 覆盖模式（清空内容后写入）|'append' 追加模式（在末尾接入内容）
+   */
+  const doInsert = (editor: any, content: string, mode: 'replace' | 'append' = 'replace') => {
     try {
       const formattedContent = formatContentForEditor(content)
 
@@ -67,10 +85,14 @@ export function ChapterEditor({ chapter, injectedContent, onContentInserted, onC
         return
       }
 
-      if (editor.getText().trim()) {
-        editor.commands.insertContentAt(editor.state.doc.content.size, formattedContent)
-      } else {
+      if (mode === 'replace') {
         editor.commands.setContent(formattedContent)
+      } else {
+        if (editor.getText().trim()) {
+          editor.commands.insertContentAt(editor.state.doc.content.size, formattedContent)
+        } else {
+          editor.commands.setContent(formattedContent)
+        }
       }
       save(htmlToMarkdown(editor.getHTML()))
 
@@ -78,7 +100,7 @@ export function ChapterEditor({ chapter, injectedContent, onContentInserted, onC
       setShowInsertBanner(true)
       setTimeout(() => setShowInsertBanner(false), 3000)
       onContentInsertedRef.current?.()
-      toast.success('内容已成功写入（已自动排版）')
+      toast.success(mode === 'replace' ? '内容已覆盖写入编辑器' : '内容已追加到编辑器')
     } catch (error) {
       console.error('[ChapterEditor] Insert failed:', error)
       toast.error('内容写入失败，请重试')
@@ -95,13 +117,13 @@ export function ChapterEditor({ chapter, injectedContent, onContentInserted, onC
 
     const editor = editorRef.current
     if (editor) {
-      doInsert(editor, injectedContent)
+      doInsert(editor, injectedContent, injectedInsertMode)
     } else {
-      // editor 还没初始化，先缓存
       pendingContentRef.current = injectedContent
+      pendingInsertModeRef.current = injectedInsertMode
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [injectedContent])
+  }, [injectedContent, injectedInsertMode])
 
   /**
    * 手动点击"写入生成内容"按钮
@@ -113,12 +135,12 @@ export function ChapterEditor({ chapter, injectedContent, onContentInserted, onC
     }
     const editor = editorRef.current
     if (!editor) {
-      // editor 还没好，缓存起来等 onCreate
       pendingContentRef.current = injectedContent
+      pendingInsertModeRef.current = injectedInsertMode
       toast.info('编辑器准备中，内容将在就绪后自动写入')
       return
     }
-    doInsert(editor, injectedContent)
+    doInsert(editor, injectedContent, injectedInsertMode)
   }
 
   return (
@@ -153,13 +175,13 @@ export function ChapterEditor({ chapter, injectedContent, onContentInserted, onC
             extensions={[StarterKit]}
             initialContent={chapter.content || '<p></p>' as any}
             onCreate={({ editor: createdEditor }: { editor: any }) => {
-              // 编辑器实例就绪，存入 ref
               editorRef.current = createdEditor
-              // 如果此前有待注入的内容，立即处理
               if (pendingContentRef.current && pendingContentRef.current !== lastInsertedRef.current) {
                 const pending = pendingContentRef.current
+                const pendingMode = pendingInsertModeRef.current
                 pendingContentRef.current = null
-                doInsert(createdEditor, pending)
+                pendingInsertModeRef.current = 'replace'
+                doInsert(createdEditor, pending, pendingMode)
               }
             }}
             onUpdate={({ editor: updatedEditor }: any) => {

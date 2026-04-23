@@ -27,6 +27,7 @@ export default function WorkspacePage() {
   const { id } = useParams<{ id: string }>()
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null)
   const [injectedContent, setInjectedContent] = useState<string | null>(null)
+  const [injectedInsertMode, setInjectedInsertMode] = useState<'replace' | 'append'>('replace')
   const [editorContent, setEditorContent] = useState('')
 
   const { data: novel, isLoading: novelLoading } = useQuery({
@@ -106,6 +107,7 @@ export default function WorkspacePage() {
               <ChapterEditor
                 chapter={activeChapter}
                 injectedContent={injectedContent ?? undefined}
+                injectedInsertMode={injectedInsertMode}
                 onContentInserted={() => setInjectedContent(null)}
                 onContentChange={setEditorContent}
               />
@@ -151,8 +153,9 @@ export default function WorkspacePage() {
                       chapterId={activeChapter.id}
                       chapterTitle={activeChapter.title}
                       existingContent={editorContent}
-                      onInsertContent={(content) => {
+                      onInsertContent={(content, insertMode) => {
                         setInjectedContent(content)
+                        setInjectedInsertMode(insertMode ?? 'replace')
                       }}
                     />
                   </TabsContent>
