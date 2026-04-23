@@ -230,6 +230,14 @@ router.delete('/:id/trash', async (c) => {
     }
 
     try {
+      if (tbl === 'chapters') {
+        await c.env.DB.prepare(
+          `DELETE FROM foreshadowing WHERE chapter_id IN (SELECT id FROM chapters WHERE novel_id = ? AND deleted_at IS NOT NULL) OR resolved_chapter_id IN (SELECT id FROM chapters WHERE novel_id = ? AND deleted_at IS NOT NULL)`
+        ).bind(novelId, novelId).run()
+        await c.env.DB.prepare(
+          `DELETE FROM generation_logs WHERE chapter_id IN (SELECT id FROM chapters WHERE novel_id = ? AND deleted_at IS NOT NULL)`
+        ).bind(novelId).run()
+      }
       const result = await c.env.DB.prepare(
         `DELETE FROM ${tableName} WHERE novel_id = ? AND deleted_at IS NOT NULL`
       ).bind(novelId).run()

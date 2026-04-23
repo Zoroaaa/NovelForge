@@ -226,6 +226,13 @@ export async function generateChapter(
         }
       } catch (foreshadowError) {
         console.warn('Foreshadowing extraction failed (non-critical):', foreshadowError)
+        onToolCall({
+          type: 'tool_call',
+          name: 'postprocess_warning',
+          args: { task: 'foreshadowing', error: (foreshadowError as Error).message },
+          status: 'done',
+          result: `⚠️ 伏笔提取失败: ${(foreshadowError as Error).message}`,
+        })
       }
       try {
         const powerLevelResult = await detectPowerLevelBreakthrough(env, chapterId, novelId)
@@ -234,6 +241,13 @@ export async function generateChapter(
         }
       } catch (powerLevelError) {
         console.warn('Power level detection failed (non-critical):', powerLevelError)
+        onToolCall({
+          type: 'tool_call',
+          name: 'postprocess_warning',
+          args: { task: 'power_level', error: (powerLevelError as Error).message },
+          status: 'done',
+          result: `⚠️ 境界检测失败: ${(powerLevelError as Error).message}`,
+        })
       }
     }
 
@@ -273,12 +287,22 @@ async function runReActLoop(
   onToolCall: (event: ToolCallEvent) => void,
   maxIterations: number
 ): Promise<{ promptTokens: number; completionTokens: number; collectedContent: string }> {
+  const ITERATION_TIMEOUT = 60000
+  const MAX_TOOL_RETRIES = 2
+  const MAX_TOTAL_TIME = 300000
+  const startTime = Date.now()
+
   let iteration = 0
   let totalPromptTokens = 0
   let totalCompletionTokens = 0
   let collectedContent = ''
 
   while (iteration < maxIterations) {
+    if (Date.now() - startTime > MAX_TOTAL_TIME) {
+      console.warn(`⚠️ ReAct loop exceeded max total time (${MAX_TOTAL_TIME}ms), forcing stop`)
+      break
+    }
+
     iteration++
     console.log(`🔄 ReAct iteration ${iteration}/${maxIterations} (Function Calling Mode)`)
 
@@ -289,13 +313,14 @@ async function runReActLoop(
       args: Record<string, any>
     }> = []
 
-    // Phase 2.1: 使用真正的 function calling（不再依赖文本解析）
-    await streamGenerate(llmConfig, messages as any, {
-      onChunk: (text) => {
-        iterationContent += text
-        onChunk(text)
-      },
-      onToolCall: (toolCallDelta) => {
+    // Phase 2.1: 使用真正的 function calling（不再依赖文本解析）+ 超时控制
+    await Promise.race([
+      streamGenerate(llmConfig, messages as any, {
+        onChunk: (text) => {
+          iterationContent += text
+          onChunk(text)
+        },
+        onToolCall: (toolCallDelta) => {
         // 收集完整的工具调用
         if (toolCallDelta.status === 'complete') {
           // 避免重复添加
@@ -318,7 +343,11 @@ async function runReActLoop(
       onError: (err) => {
         throw err
       },
-    }, AGENT_TOOLS)
+    }, AGENT_TOOLS),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Iteration timeout (${ITERATION_TIMEOUT}ms)`)), ITERATION_TIMEOUT)
+      )
+    ])
 
     // 构造 assistant 消息（支持 function calling 格式）
     const assistantMessage: any = { role: 'assistant' }
@@ -414,7 +443,9 @@ async function runReActLoop(
   }
 
   if (iteration >= maxIterations) {
-    console.warn(`⚠️ Reached maximum iterations (${maxIterations}), stopping loop`)
+    console.warn(`⚠️ Reached maximum iterations (${maxIterations}), stopping loop. Total time: ${Date.now() - startTime}ms`)
+  } else if (Date.now() - startTime > MAX_TOTAL_TIME) {
+    console.warn(`⚠️ ReAct loop stopped due to total timeout (${MAX_TOTAL_TIME}ms). Iterations: ${iteration}`)
   }
 
   return { promptTokens: totalPromptTokens, completionTokens: totalCompletionTokens, collectedContent }
@@ -585,12 +616,11 @@ function buildMessages(
 使用方式：{"name": "工具名", "arguments": {...}}`,
   }
 
-  const systemPrompt = systemPromptOverride && Object.keys(presets).includes(systemPromptOverride)
+  const systemPrompt = systemPromptOverride && presets[systemPromptOverride]
     ? presets[systemPromptOverride]
     : (systemPromptOverride || baseSystemPrompt)
 
   if (mode === 'continue' && existingContent) {
-    const tailContent = existingContent.slice(-15000)
     return [
       { role: 'system', content: systemPrompt },
       {
@@ -598,8 +628,8 @@ function buildMessages(
         content: `【续写任务】
 请在以下已有内容的基础上继续创作，保持文风一致，情节自然衔接。
 
-【已有内容（最后部分）】：
-${tailContent}
+【已有内容】：
+${existingContent}
 
 要求：续写 2000-3000 字，与前文衔接自然，情节发展合理。`,
       },
@@ -960,7 +990,7 @@ async function executeAgentTool(
         if (masterOutlineResult) {
           return JSON.stringify([{
             title: `总纲 v${masterOutlineResult.version}`,
-            content: masterOutlineResult.content?.slice(0, 500),
+            content: masterOutlineResult.content,
             type: 'master_outline'
           }], null, 2)
         }
@@ -978,7 +1008,7 @@ async function executeAgentTool(
         
         return JSON.stringify(volumeOutlines.map(v => ({
           title: `卷纲：${v.title}`,
-          content: v.eventLine?.slice(0, 500) || v.summary?.slice(0, 500),
+          content: v.eventLine || v.summary,
           type: 'volume_outline'
         })), null, 2)
       }
@@ -1001,7 +1031,7 @@ async function executeAgentTool(
       
       return JSON.stringify(settingsResults.map(s => ({
         title: s.name,
-        content: s.content?.slice(0, 500),
+        content: s.content,
         type: s.type
       })), null, 2)
     }
@@ -1754,7 +1784,10 @@ export async function generateNextChapter(
         summary: chapters.summary,
       })
       .from(chapters)
-      .where(eq(chapters.volumeId, volumeId))
+      .where(and(
+        eq(chapters.volumeId, volumeId),
+        sql`${chapters.deletedAt} IS NULL`
+      ))
       .orderBy(desc(chapters.sortOrder))
       .limit(3)
       .all()

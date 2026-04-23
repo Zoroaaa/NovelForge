@@ -7,7 +7,7 @@
 import { drizzle } from 'drizzle-orm/d1'
 import { eq, and } from 'drizzle-orm'
 import type { Env } from '../lib/types'
-import { vectorIndex, masterOutline, chapters } from '../db/schema'
+import { vectorIndex, masterOutline, chapters, novelSettings, characters } from '../db/schema'
 
 export interface VectorMetadata {
   novelId: string
@@ -248,16 +248,15 @@ export function chunkText(
 
 /**
  * 计算内容hash（用于判断是否需要重新索引）
+ * 使用SHA-256算法避免碰撞
  */
-function hashContent(content: string): string {
-  // 简单的hash实现
-  let hash = 0
-  for (let i = 0; i < content.length; i++) {
-    const char = content.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
-    hash = hash & hash
-  }
-  return hash.toString(16)
+async function hashContent(content: string, salt: string = ''): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(salt + content)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
 }
 
 /**
@@ -289,7 +288,7 @@ export async function indexContent(
   }
 
   const db = drizzle(env.DB)
-  const contentHash = hashContent(content)
+  const contentHash = await hashContent(content, `${sourceType}:${sourceId}`)
   const rawChunks = chunkText(content)
 
   const MAX_INDEX_CHUNKS = 8
@@ -396,6 +395,26 @@ export async function indexContent(
     console.error('Failed to insert vector index records:', e)
   }
 
+  if (vectorIds.length > 0) {
+    const primaryVectorId = vectorIds[0]
+    try {
+      switch (sourceType) {
+        case 'setting':
+          await db.update(novelSettings)
+            .set({ vectorId: primaryVectorId, indexedAt: Math.floor(Date.now() / 1000) })
+            .where(eq(novelSettings.id, sourceId))
+          break
+        case 'character':
+          await db.update(characters)
+            .set({ vectorId: primaryVectorId })
+            .where(eq(characters.id, sourceId))
+          break
+      }
+    } catch (e) {
+      console.warn(`Failed to update vectorId on source table for ${sourceType}:${sourceId}:`, e)
+    }
+  }
+
   console.log(`Indexed ${vectorIds.length} vectors for ${sourceType}:${sourceId}`)
   return vectorIds
 }
@@ -426,6 +445,23 @@ export async function deindexContent(
   }
 
   await db.delete(vectorIndex).where(eq(vectorIndex.sourceId, sourceId))
+
+  try {
+    switch (sourceType) {
+      case 'setting':
+        await db.update(novelSettings)
+          .set({ vectorId: null, indexedAt: null })
+          .where(eq(novelSettings.id, sourceId))
+        break
+      case 'character':
+        await db.update(characters)
+          .set({ vectorId: null })
+          .where(eq(characters.id, sourceId))
+        break
+    }
+  } catch (e) {
+    console.warn(`Failed to clear vectorId on source table for ${sourceType}:${sourceId}:`, e)
+  }
 }
 
 export async function fetchContentForIndexing(

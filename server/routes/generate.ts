@@ -62,6 +62,18 @@ router.post('/chapter', async (c) => {
   const startTime = Date.now()
   let resolvedModelId = 'unknown'
 
+  const abortController = new AbortController()
+  const timeoutId = setTimeout(() => {
+    abortController.abort()
+    console.warn('[generate] SSE stream timeout (300s), aborting')
+  }, 300000)
+
+  c.req.raw.signal.addEventListener('abort', () => {
+    writer.close().catch(err => console.warn('[generate] Failed to close writer on client disconnect:', err))
+    clearTimeout(timeoutId)
+    abortController.abort()
+  })
+
   generateChapter(
     c.env,
     chapterId,
@@ -110,9 +122,13 @@ router.post('/chapter', async (c) => {
       Promise.race([
         coherenceCheckPromise,
         new Promise(resolve => setTimeout(resolve, 5000)),
-      ]).finally(() => writer.close())
+      ]).finally(() => {
+        clearTimeout(timeoutId)
+        writer.close()
+      })
     },
     async (error) => {
+      clearTimeout(timeoutId)
       const durationMs = Date.now() - startTime
       
       await logGeneration(c.env, {

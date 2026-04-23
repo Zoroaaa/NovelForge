@@ -91,7 +91,29 @@ const PROVIDER_BASES: Record<string, string> = {
 }
 
 /**
- * 解析模型配置
+ * 解析模型配置/**
+ * @description 清理错误消息中的敏感信息
+ * @param {string} errorText - 原始错误消息
+ * @returns {string} 清理后的安全错误消息
+ */
+function sanitizeErrorMessage(errorText: string): string {
+  const sensitivePatterns = [
+    /api[_-]?key\s*[:=]\s*['"][\w-]+['"]/gi,
+    /bearer\s+[\w.-]+/gi,
+    /x-api-key\s*:\s*[\w-]+/gi,
+    /sk-[a-zA-Z0-9]{20,}/g,
+    /password\s*[:=]\s*\S+/gi,
+    /token\s*[:=]\s*\S+/gi,
+  ]
+  
+  let sanitized = errorText
+  for (const pattern of sensitivePatterns) {
+    sanitized = sanitized.replace(pattern, '[REDACTED]')
+  }
+  return sanitized
+}
+
+/**
  * @description 按优先级获取模型配置：小说级配置 > 全局配置 > 硬编码fallback
  * @param {DrizzleD1Database} db - 数据库实例
  * @param {string} stage - 生成阶段（如chapter_gen, summary_gen, workshop）
@@ -211,12 +233,13 @@ export async function streamGenerate(
     const endpoint = config.provider === 'anthropic' ? '/messages' : '/chat/completions'
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.apiKey}`,
     }
 
     if (config.provider === 'anthropic') {
       headers['x-api-key'] = config.apiKey
       headers['anthropic-dangerous-direct-browser-access'] = 'true'
+    } else {
+      headers['Authorization'] = `Bearer ${config.apiKey}`
     }
 
     const response = await fetch(`${base}${endpoint}`, {
@@ -227,7 +250,24 @@ export async function streamGenerate(
 
     if (!response.ok) {
       const errorText = await response.text()
-      throw new Error(`LLM API error: ${response.status} ${errorText}`)
+      const sanitizedError = sanitizeErrorMessage(errorText)
+      let userMessage = `LLM API 请求失败 (HTTP ${response.status})`
+
+      if (response.status === 429) {
+        userMessage = '请求频率超限，请稍后重试'
+        console.error(`[llm] Rate limited (429): ${sanitizedError}`)
+      } else if (response.status === 401 || response.status === 403) {
+        userMessage = 'API认证失败，请检查API Key配置'
+        console.error(`[llm] Auth failed (${response.status}): ${sanitizedError}`)
+      } else if (response.status >= 400 && response.status < 500) {
+        userMessage = `请求参数错误 (HTTP ${response.status})`
+        console.error(`[llm] Client error (${response.status}): ${sanitizedError}`)
+      } else if (response.status >= 500) {
+        userMessage = 'LLM服务暂时不可用，请稍后重试'
+        console.error(`[llm] Server error (${response.status}): ${sanitizedError}`)
+      }
+
+      throw new Error(userMessage)
     }
 
     const reader = response.body?.getReader()
@@ -469,7 +509,10 @@ export async function generate(
   let completionTokens = 0
 
   if (config.provider === 'anthropic') {
-    text = result.content?.[0]?.text || ''
+    const textBlocks = (result.content || []).filter(
+      (block: any) => block.type === 'text'
+    )
+    text = textBlocks.map((block: any) => block.text).join('\n')
     promptTokens = result.usage?.input_tokens || 0
     completionTokens = result.usage?.output_tokens || 0
   } else {

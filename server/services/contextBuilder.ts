@@ -100,13 +100,13 @@ export interface BudgetTier {
 // ============================================================
 
 export const DEFAULT_BUDGET: BudgetTier = {
-  core: 18000,
-  summaryChain: 10000,
-  characters: 8000,
-  foreshadowing: 4000,
-  settings: 12000,
-  rules: 3000,
-  total: 55000,
+  core: 40000,
+  summaryChain: 25000,
+  characters: 20000,
+  foreshadowing: 10000,
+  settings: 25000,
+  rules: 8000,
+  total: 128000,
 }
 
 // ============================================================
@@ -169,7 +169,7 @@ export async function buildChapterContext(
     volumeInfo.eventLine,
     prevSummary,
     currentChapter.title,
-  ].filter(Boolean).join('\n').slice(0, 1000)
+  ].filter(Boolean).join('\n')
 
   // ── Step 3: Dynamic 层分槽检索 ──
   let characterCards: string[] = []
@@ -235,6 +235,11 @@ export async function buildChapterContext(
     coreTokensUsed -= estimateTokens(removed)
   }
 
+  const BUDGET_WARNING_THRESHOLD = 0.90
+  if (coreTokensUsed / budget.core > BUDGET_WARNING_THRESHOLD) {
+    console.warn(`[contextBuilder] Core layer usage at ${(coreTokensUsed / budget.core * 100).toFixed(1)}% (${coreTokensUsed}/${budget.core} tokens)`)
+  }
+
   // ── Step 5: 诊断信息 ──
   const slotBreakdown = {
     masterOutlineContent: estimateTokens(outlineContent),
@@ -294,13 +299,11 @@ async function buildCharacterSlotFromDB(
   ragResults: Array<{ score: number; metadata: any }>,
   budgetTokens: number
 ): Promise<string[]> {
-  const SCORE_THRESHOLD = 0.50
-  const MAX_CHARACTERS = 8
+  const SCORE_THRESHOLD = 0.40
 
   const candidates = ragResults
     .filter(r => r.score >= SCORE_THRESHOLD)
     .sort((a, b) => b.score - a.score)
-    .slice(0, 15)
     .map(r => r.metadata.sourceId)
 
   if (candidates.length === 0) return []
@@ -324,12 +327,8 @@ async function buildCharacterSlotFromDB(
   )
 
   const cards: string[] = []
-  let used = 0
-  for (const row of sorted.slice(0, MAX_CHARACTERS)) {
+  for (const row of sorted) {
     const card = formatCharacterCard(row)
-    const tokens = estimateTokens(card)
-    if (used + tokens > budgetTokens) break
-    used += tokens
     cards.push(card)
   }
   return cards
