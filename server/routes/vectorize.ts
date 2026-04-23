@@ -350,12 +350,17 @@ router.get('/stats/:novelId', async (c) => {
     const unindexedForeshadowing = await db
       .select({ count: count() })
       .from(foreshadowing)
+      .leftJoin(vectorIndex, and(
+        eq(vectorIndex.sourceId, foreshadowing.id),
+        eq(vectorIndex.sourceType, 'foreshadowing')
+      ))
       .where(
         and(
           eq(foreshadowing.novelId, novelId),
           isNull(foreshadowing.deletedAt),
           sql`${foreshadowing.description} IS NOT NULL`,
-          sql`${foreshadowing.description} != ''`
+          sql`${foreshadowing.description} != ''`,
+          sql`${vectorIndex.id} IS NULL`
         )
       )
       .get()
