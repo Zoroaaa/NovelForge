@@ -33,6 +33,8 @@ const GenerateSchema = z.object({
   novelId: z.string().min(1),
   mode: z.enum(['generate', 'continue', 'rewrite']).optional().default('generate'),
   existingContent: z.string().optional(),
+  targetWords: z.number().min(500).max(8000).optional(),
+  issuesContext: z.array(z.string()).optional(),
   options: z
     .object({
       enableRAG: z.boolean().optional(),
@@ -55,7 +57,7 @@ const GenerateSchema = z.object({
  */
 router.post('/chapter', async (c) => {
   const body = GenerateSchema.parse(await c.req.json())
-  const { chapterId, novelId, mode, existingContent, options } = body
+  const { chapterId, novelId, mode, existingContent, targetWords, issuesContext, options } = body
 
   const { readable, writable } = new TransformStream()
   const writer = writable.getWriter()
@@ -164,7 +166,7 @@ router.post('/chapter', async (c) => {
       writer.close()
     },
     options || {},
-    { mode, existingContent }
+    { mode, existingContent, targetWords, issuesContext }
   )
 
   return new Response(readable, {
@@ -443,6 +445,26 @@ router.post('/preview-context', zValidator('json', z.object({
         ...(isTimeout && { suggestion: 'Try simplifying the chapter or reducing context layers' }),
       },
       isTimeout ? 504 : 500
+    )
+  }
+})
+
+router.post('/coherence-check', zValidator('json', z.object({
+  chapterId: z.string().min(1),
+  novelId: z.string().min(1),
+})), async (c) => {
+  const { chapterId, novelId } = c.req.valid('json')
+
+  try {
+    const result = await checkChapterCoherence(c.env, chapterId, novelId)
+    return c.json({
+      score: result.score,
+      issues: result.issues,
+    })
+  } catch (error) {
+    return c.json(
+      { error: '一致性检查失败', details: (error as Error).message },
+      500
     )
   }
 })

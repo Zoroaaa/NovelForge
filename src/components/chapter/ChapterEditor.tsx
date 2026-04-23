@@ -21,12 +21,10 @@ import { toast } from 'sonner'
  * 章节编辑器组件属性
  */
 interface ChapterEditorProps {
-  /** 章节数据对象 */
   chapter: Chapter
-  /** 可选的注入内容（从AI生成面板插入） */
   injectedContent?: string
-  /** 内容插入完成后的回调 */
   onContentInserted?: () => void
+  onContentChange?: (content: string) => void
 }
 
 /**
@@ -36,7 +34,7 @@ interface ChapterEditorProps {
  * 核心设计：通过 EditorContent 的 onCreate 回调直接获取 editor 实例并存入 ref，
  * 避免依赖 useEditor() hook 的异步 re-render 时序，从根本上解决内容注入竞态问题。
  */
-export function ChapterEditor({ chapter, injectedContent, onContentInserted }: ChapterEditorProps) {
+export function ChapterEditor({ chapter, injectedContent, onContentInserted, onContentChange }: ChapterEditorProps) {
   const mutation = useMutation({
     mutationFn: (content: string) => api.chapters.update(chapter.id, { content }),
   })
@@ -166,7 +164,9 @@ export function ChapterEditor({ chapter, injectedContent, onContentInserted }: C
             }}
             onUpdate={({ editor: updatedEditor }: any) => {
               const html = updatedEditor.getHTML()
-              if (html !== '<p></p>') save(htmlToMarkdown(html))
+              const md = htmlToMarkdown(html)
+              if (html !== '<p></p>') save(md)
+              onContentChange?.(md)
             }}
             onDestroy={() => {
               editorRef.current = null

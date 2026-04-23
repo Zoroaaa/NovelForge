@@ -157,8 +157,10 @@ export interface PaginatedResponse<T> {
 export interface GenerateOptions {
   chapterId: string
   novelId: string
-  mode?: 'generate' | 'continue' | 'rewrite'  // Phase 1.6: 生成模式
-  existingContent?: string                     // Phase 1.6: 已有内容（续写/重写用）
+  mode?: 'generate' | 'continue' | 'rewrite'
+  existingContent?: string
+  targetWords?: number
+  issuesContext?: string[]
   options?: {
     enableRAG?: boolean
     enableAutoSummary?: boolean

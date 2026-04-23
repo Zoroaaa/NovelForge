@@ -25,6 +25,8 @@ export interface AgentConfig {
 export interface GenerationOptions {
   mode?: 'generate' | 'continue' | 'rewrite'
   existingContent?: string
+  targetWords?: number
+  issuesContext?: string[]
 }
 
 export interface GenerationResult {
@@ -551,7 +553,7 @@ function buildMessages(
   options: GenerationOptions = {},
   systemPromptOverride?: string
 ): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
-  const { mode = 'generate', existingContent } = options
+  const { mode = 'generate', existingContent, targetWords, issuesContext } = options
   const baseSystemPrompt = `你是一位专业的网络小说作家，擅长创作玄幻/仙侠类小说。
 
 【核心创作原则——必须严格遵守】
@@ -623,6 +625,8 @@ function buildMessages(
     : (systemPromptOverride || baseSystemPrompt)
 
   if (mode === 'continue' && existingContent) {
+    const wordsTarget = targetWords || 2000
+    const wordsUpper = Math.min(wordsTarget + 1000, 8000)
     return [
       { role: 'system', content: systemPrompt },
       {
@@ -633,12 +637,15 @@ function buildMessages(
 【已有内容】：
 ${existingContent}
 
-要求：续写 2000-3000 字，与前文衔接自然，情节发展合理。`,
+要求：续写 ${wordsTarget}-${wordsUpper} 字，与前文衔接自然，情节发展合理。`,
       },
     ]
   }
 
   if (mode === 'rewrite' && existingContent) {
+    const issuesSection = issuesContext && issuesContext.length > 0
+      ? `\n\n【本次重写需要修复的问题】\n${issuesContext.map((issue, i) => `${i + 1}. ${issue}`).join('\n')}\n\n请在改写时优先解决以上问题，同时保持核心情节不变。`
+      : ''
     return [
       { role: 'system', content: systemPrompt },
       {
@@ -648,7 +655,7 @@ ${existingContent}
 
 【待改写内容】：
 ${existingContent}
-
+${issuesSection}
 要求：改写后 2000-3000 字，文笔更流畅，描写更丰富，节奏更紧凑。`,
       },
     ]

@@ -29,6 +29,8 @@ export function useGenerate() {
   const generate = (chapterId: string, novelId: string, options?: {
     mode?: 'generate' | 'continue' | 'rewrite'
     existingContent?: string
+    targetWords?: number
+    issuesContext?: string[]
   }) => {
     setOutput('')
     setStatus('generating')
@@ -42,6 +44,8 @@ export function useGenerate() {
         novelId,
         mode: options?.mode || 'generate',
         existingContent: options?.existingContent,
+        targetWords: options?.targetWords,
+        issuesContext: options?.issuesContext,
       },
       // onChunk
       (data: unknown) => {

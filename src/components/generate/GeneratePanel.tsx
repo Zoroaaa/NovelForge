@@ -1,12 +1,17 @@
-/**
- * @file GeneratePanel.tsx
- * @description AI生成面板组件，提供章节生成、续写、重写等功能，支持上下文预览和角色一致性检查
- * @version 1.0.0
- * @modified 2026-04-21 - 添加规范化注释
- */
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Square, PenLine, Brain, Shield, RefreshCw, Play } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Square, PenLine, Brain, Shield, RefreshCw, Play, Loader2 } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useGenerate } from '@/hooks/useGenerate'
 import { RepairDiffPanel } from './RepairDiffPanel'
 import { StreamOutput } from './StreamOutput'
@@ -16,32 +21,33 @@ import {
 } from './ContextPreview'
 import { CharacterConsistencyCheck } from './CharacterConsistencyCheck'
 
-/**
- * AI生成面板组件属性
- */
 interface GeneratePanelProps {
-  /** 小说ID */
   novelId: string
-  /** 章节ID */
   chapterId: string
-  /** 章节标题 */
   chapterTitle: string
-  /** 内容插入回调 */
   onInsertContent: (content: string) => void
-  /** 上下文更新回调 */
   onContextUpdate?: (context: ContextBundle | null) => void
-  /** 当前编辑器中的已有内容（用于续写/重写模式） */
   existingContent?: string
 }
 
 type GenerationMode = 'generate' | 'continue' | 'rewrite'
 
-/**
- * AI生成面板组件
- * @description 提供章节生成、续写、重写功能，支持上下文预览和角色一致性检查
- * @param {GeneratePanelProps} props - 组件属性
- * @returns {JSX.Element} 生成面板组件
- */
+interface CoherenceIssue {
+  severity: 'error' | 'warning'
+  category?: string
+  message: string
+  suggestion?: string
+}
+
+interface CoherenceCheckResult {
+  score: number
+  issues: CoherenceIssue[]
+}
+
+const TARGET_WORDS_MIN = 500
+const TARGET_WORDS_MAX = 8000
+const TARGET_WORDS_DEFAULT = 2000
+
 export function GeneratePanel({
   novelId,
   chapterId,
@@ -53,15 +59,21 @@ export function GeneratePanel({
   const { output, status, generate, stop, contextInfo, toolCalls, usage, repairedContent, repairInfo, clearRepair } = useGenerate()
   const [showConsistencyCheck, setShowConsistencyCheck] = useState(false)
   const [isInserting, setIsInserting] = useState(false)
+  const [mode, setMode] = useState<GenerationMode>('generate')
+  const [selectedText] = useState<string>('')
+  const [targetWords, setTargetWords] = useState(TARGET_WORDS_DEFAULT)
+
+  const [rewriteDialogOpen, setRewriteDialogOpen] = useState(false)
+  const [coherenceChecking, setCoherenceChecking] = useState(false)
+  const [coherenceResult, setCoherenceResult] = useState<CoherenceCheckResult | null>(null)
+  const [coherenceCheckFailed, setCoherenceCheckFailed] = useState(false)
+
+  const hasContent = existingContent.trim().length > 0
 
   const handleAcceptRepair = (content: string) => {
     onInsertContent(content)
     clearRepair()
   }
-
-  // Phase 1.6: 生成模式状态
-  const [mode, setMode] = useState<GenerationMode>('generate')
-  const [selectedText] = useState<string>('')  // 重写模式的选中文本
 
   const handleInsert = () => {
     if (output && !isInserting) {
@@ -73,29 +85,60 @@ export function GeneratePanel({
     }
   }
 
-  // 当上下文信息更新时通知父组件
   if (onContextUpdate && contextInfo) {
     onContextUpdate(contextInfo)
   }
 
-  // Phase 1.6: 处理生成请求
   const handleGenerate = () => {
     const options: any = { mode }
-    
-    if (mode === 'continue' && existingContent) {
+
+    if (mode === 'continue' && hasContent) {
       options.existingContent = existingContent
+      options.targetWords = targetWords
     }
-    
+
     if (mode === 'rewrite' && selectedText) {
       options.existingContent = selectedText
-    } else if (mode === 'rewrite' && existingContent) {
+    } else if (mode === 'rewrite' && hasContent) {
       options.existingContent = existingContent
+    }
+
+    if (mode === 'rewrite' && coherenceResult?.issues && coherenceResult.issues.length > 0) {
+      options.issuesContext = coherenceResult.issues.map(
+        (i: CoherenceIssue) => `[${i.severity === 'error' ? '错误' : '警告'}] ${i.message}${i.suggestion ? `。建议：${i.suggestion}` : ''}`
+      )
     }
 
     generate(chapterId, novelId, options)
   }
 
-  // Phase 1.6: 获取当前模式的描述文本
+  const handleRewriteClick = async () => {
+    setCoherenceChecking(true)
+    setCoherenceResult(null)
+    setCoherenceCheckFailed(false)
+
+    try {
+      const res = await fetch('/api/generate/coherence-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chapterId, novelId }),
+      })
+      if (!res.ok) throw new Error('检查请求失败')
+      const data = await res.json()
+      setCoherenceResult({ score: data.score ?? 0, issues: data.issues ?? [] })
+    } catch {
+      setCoherenceCheckFailed(true)
+    } finally {
+      setCoherenceChecking(false)
+      setRewriteDialogOpen(true)
+    }
+  }
+
+  const handleRewriteConfirm = () => {
+    setRewriteDialogOpen(false)
+    handleGenerate()
+  }
+
   const getModeDescription = (): string => {
     switch (mode) {
       case 'continue':
@@ -107,7 +150,6 @@ export function GeneratePanel({
     }
   }
 
-  // Phase 1.6: 获取当前模式的按钮文本
   const getButtonText = (): string => {
     switch (mode) {
       case 'continue':
@@ -117,6 +159,13 @@ export function GeneratePanel({
       default:
         return '智能生成内容'
     }
+  }
+
+  const isGenerateButtonDisabled = () => {
+    if (mode === 'continue' || mode === 'rewrite') {
+      return !hasContent && !selectedText
+    }
+    return false
   }
 
   return (
@@ -136,7 +185,6 @@ export function GeneratePanel({
         <p className="text-xs text-muted-foreground">当前章节：{chapterTitle}</p>
       </div>
 
-      {/* Phase 1.6: 模式切换 Tab */}
       <div className="flex gap-1 bg-muted rounded-lg p-1">
         <button
           onClick={() => setMode('generate')}
@@ -151,40 +199,73 @@ export function GeneratePanel({
         </button>
         <button
           onClick={() => setMode('continue')}
-          disabled={!existingContent}
+          disabled={!hasContent}
           className={`flex-1 px-3 py-1.5 text-xs rounded-md transition-colors ${
             mode === 'continue'
               ? 'bg-background shadow-sm font-medium'
-              : !existingContent
+              : !hasContent
               ? 'opacity-50 cursor-not-allowed'
               : 'hover:bg-background/50'
           }`}
+          title={!hasContent ? '请先在编辑器中写入或生成内容' : ''}
         >
           <Play className="h-3 w-3 inline mr-1" />
           续写
         </button>
         <button
           onClick={() => setMode('rewrite')}
-          disabled={!existingContent && !selectedText}
+          disabled={!hasContent && !selectedText}
           className={`flex-1 px-3 py-1.5 text-xs rounded-md transition-colors ${
             mode === 'rewrite'
               ? 'bg-background shadow-sm font-medium'
-              : !existingContent && !selectedText
+              : !hasContent && !selectedText
               ? 'opacity-50 cursor-not-allowed'
               : 'hover:bg-background/50'
           }`}
+          title={!hasContent && !selectedText ? '请先在编辑器中写入或生成内容' : ''}
         >
           <RefreshCw className="h-3 w-3 inline mr-1" />
           重写
         </button>
       </div>
 
-      {/* Phase 1.6: 模式描述 */}
+      {!hasContent && mode !== 'generate' && (
+        <p className="text-[11px] text-amber-600 dark:text-amber-400">
+          请先在编辑器中写入或生成内容
+        </p>
+      )}
+
       <p className="text-[11px] text-muted-foreground italic">
         {getModeDescription()}
       </p>
 
-      {/* Phase 2 Context Preview */}
+      {mode === 'continue' && hasContent && (
+        <div className="space-y-1.5 p-3 bg-muted/50 rounded-lg border">
+          <label className="text-xs font-medium text-muted-foreground">
+            本次续写目标字数
+          </label>
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              min={TARGET_WORDS_MIN}
+              max={TARGET_WORDS_MAX}
+              value={targetWords}
+              onChange={(e) => {
+                const v = parseInt(e.target.value)
+                if (!isNaN(v)) {
+                  setTargetWords(Math.min(TARGET_WORDS_MAX, Math.max(TARGET_WORDS_MIN, v)))
+                }
+              }}
+              className="h-7 w-24 text-xs"
+            />
+            <span className="text-xs text-muted-foreground">字</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            范围 {TARGET_WORDS_MIN} ~ {TARGET_WORDS_MAX}
+          </p>
+        </div>
+      )}
+
       <ContextPreview
         contextBundle={contextInfo}
         isGenerating={status === 'generating'}
@@ -206,22 +287,26 @@ export function GeneratePanel({
           <Button
             size="sm"
             className="gap-2 flex-1"
-            onClick={handleGenerate}
-            disabled={
-              (mode === 'continue' || mode === 'rewrite') && 
-              !existingContent && 
-              !selectedText
-            }
+            onClick={mode === 'rewrite' ? handleRewriteClick : handleGenerate}
+            disabled={isGenerateButtonDisabled() || coherenceChecking}
           >
-            <PenLine className="h-4 w-4" />
-            {getButtonText()}
+            {coherenceChecking ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                正在检查一致性...
+              </>
+            ) : (
+              <>
+                <PenLine className="h-4 w-4" />
+                {getButtonText()}
+              </>
+            )}
           </Button>
         )}
       </div>
 
       <StreamOutput content={output} status={status} usage={usage} />
 
-      {/* 自动修复 Diff 面板 */}
       {repairedContent && status === 'done' && (
         <RepairDiffPanel
           originalContent={output}
@@ -255,7 +340,6 @@ export function GeneratePanel({
             )}
           </Button>
 
-          {/* 一致性检查按钮 */}
           <Button
             variant="outline"
             size="sm"
@@ -270,7 +354,6 @@ export function GeneratePanel({
             <CharacterConsistencyCheck chapterId={chapterId} novelId={novelId} />
           )}
 
-          {/* 生成完成提示 */}
           {contextInfo?.debug && (
             <div className="text-[10px] text-center text-muted-foreground p-2 bg-green-50 dark:bg-green-950 rounded border border-green-200 dark:border-green-800">
               ✓ 自动摘要已生成 · 使用了 {contextInfo.debug.ragHitsCount} 条 RAG 资料
@@ -283,7 +366,6 @@ export function GeneratePanel({
         </div>
       )}
 
-      {/* Phase 1.6: 工具调用过程展示 */}
       {toolCalls && toolCalls.length > 0 && status === 'generating' && (
         <div className="space-y-1 mt-2">
           <p className="text-[11px] font-medium text-muted-foreground mb-1">工具执行过程：</p>
@@ -309,6 +391,80 @@ export function GeneratePanel({
           ))}
         </div>
       )}
+
+      <AlertDialog open={rewriteDialogOpen} onOpenChange={setRewriteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>重写前一致性报告</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-left">
+                {coherenceCheckFailed ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-amber-600 dark:text-amber-400">
+                      一致性检查失败，是否仍然继续重写？
+                    </p>
+                  </div>
+                ) : coherenceResult && coherenceResult.issues.length > 0 ? (
+                  <>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-sm">当前评分:</span>
+                      <span className={`text-lg font-bold ${
+                        coherenceResult.score >= 80 ? 'text-green-600' :
+                        coherenceResult.score >= 60 ? 'text-amber-600' :
+                        'text-red-600'
+                      }`}>
+                        {coherenceResult.score}/100
+                      </span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {coherenceResult.issues.map((issue, idx) => (
+                        <div
+                          key={idx}
+                          className={`text-xs p-2 rounded border ${
+                            issue.severity === 'error'
+                              ? 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800'
+                              : 'bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800'
+                          }`}
+                        >
+                          <span className="font-medium">
+                            {issue.severity === 'error' ? '✗' : '△'}{' '}
+                            {issue.severity === 'error' ? '错误' : '警告'}{idx + 1}:
+                          </span>{' '}
+                          {issue.message}
+                          {issue.suggestion && (
+                            <p className="mt-0.5 opacity-70">建议：{issue.suggestion}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      重写建议优先修复以上问题。
+                    </p>
+                  </>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-sm">当前评分:</span>
+                      <span className="text-lg font-bold text-green-600">
+                        {coherenceResult?.score ?? 100}/100
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      一致性检查未发现问题，可以放心重写。
+                    </p>
+                  </div>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={handleRewriteConfirm}>
+              确认，开始重写
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

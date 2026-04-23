@@ -27,6 +27,7 @@ export default function WorkspacePage() {
   const { id } = useParams<{ id: string }>()
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null)
   const [injectedContent, setInjectedContent] = useState<string | null>(null)
+  const [editorContent, setEditorContent] = useState('')
 
   const { data: novel, isLoading: novelLoading } = useQuery({
     queryKey: ['novel', id],
@@ -98,6 +99,7 @@ export default function WorkspacePage() {
                 chapter={activeChapter}
                 injectedContent={injectedContent ?? undefined}
                 onContentInserted={() => setInjectedContent(null)}
+                onContentChange={setEditorContent}
               />
             ) : (
               <div className="h-full flex items-center justify-center">
@@ -140,6 +142,7 @@ export default function WorkspacePage() {
                       novelId={id!}
                       chapterId={activeChapter.id}
                       chapterTitle={activeChapter.title}
+                      existingContent={editorContent}
                       onInsertContent={(content) => {
                         setInjectedContent(content)
                       }}
