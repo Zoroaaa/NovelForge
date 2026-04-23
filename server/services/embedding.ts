@@ -128,6 +128,16 @@ export async function deleteVector(
  * @param {Partial<VectorMetadata>} [options.filter] - 元数据过滤条件
  * @returns {Promise<Array<{id: string, score: number, metadata: VectorMetadata}>>} 搜索结果
  */
+function toVectorizeFilter(filter: Record<string, any>): Record<string, any> {
+  const result: Record<string, any> = {}
+  for (const [key, value] of Object.entries(filter)) {
+    if (value !== undefined && value !== null) {
+      result[key] = { $eq: value }
+    }
+  }
+  return result
+}
+
 export async function searchSimilar(
   vectorize: any,
   queryVector: number[],
@@ -145,7 +155,7 @@ export async function searchSimilar(
   const results = await vectorize.query(queryVector, {
     topK,
     returnMetadata: true,
-    ...(filter ? { filter } : {})
+    ...(filter ? { filter: toVectorizeFilter(filter as Record<string, any>) } : {})
   })
 
   return (results.matches || []).map((match: any) => ({

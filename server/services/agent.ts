@@ -1805,11 +1805,18 @@ export async function generateNextChapter(
       }
     }
 
-    const recentChaptersInfo = existingChapters.length > 0
-      ? `\n\n【最近章节】\n${existingChapters.map((ch, i) => `${i + 1}. 《${ch.title}》\n   摘要：${ch.summary || '无'}`).join('\n\n')}`
-      : ''
+    const isFirstChapter = existingChapters.length === 0
 
-    const prompt = `请为小说的某一卷生成下一章的标题和摘要。
+    const recentChaptersInfo = isFirstChapter
+      ? '\n\n【当前状态】该卷目前没有任何章节，这是本卷的第一章。'
+      : `\n\n【最近章节】\n${existingChapters.map((ch, i) => `${i + 1}. 《${ch.title}》\n   摘要：${ch.summary || '无'}`).join('\n\n')}`
+
+    const continuationRequirement = isFirstChapter
+      ? `- 这是本卷的第一章，请从卷蓝图/事件线的起始处开始，做好开篇铺垫
+- 开篇要引人入胜，建立故事基调和主要人物`
+      : `- 章节要与已有章节连贯，承接上一章的结尾`
+
+    const prompt = `请为小说的某一卷生成${isFirstChapter ? '第一' : '下一'}章的标题和摘要。
 
 【卷信息】：
 - 标题：《${volume.title}》
@@ -1819,9 +1826,9 @@ ${volume.summary ? `- 卷摘要：${volume.summary}` : ''}
 ${recentChaptersInfo}
 
 【生成要求】：
-- 生成下一章的章节标题（要有吸引力，符合小说风格）
+- 生成${isFirstChapter ? '第一' : '下一'}章的章节标题（要有吸引力，符合小说风格）
 - 生成章节摘要（150-200字，概括本章核心情节）
-- 章节要与已有章节连贯，承接上一章的结尾
+${continuationRequirement}
 - 注意节奏：开头铺垫、中间发展、高潮迭起、结尾悬念
 
 请以JSON格式输出（不要输出其他内容）：
