@@ -374,231 +374,222 @@ export function GeneratePanel({
         />
       )}
 
-      {/* 三个检查按钮 - 有内容时始终可见 */}
-      {hasContent && (
+      {/* 生成完成 或 重写模式：显示结果和检查区域 */}
+      {(status === 'done' && output) || (mode === 'rewrite' && hasContent) ? (
         <div className="space-y-2">
-          {/* 最新检查日志显示 */}
-          {latestCheckLog && (
-            <div className="p-3 bg-muted/30 rounded-lg border space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">最近检查记录</span>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 text-[10px] px-2"
-                    onClick={() => setShowCheckHistory(!showCheckHistory)}
-                  >
-                    {showCheckHistory ? '收起历史' : '查看历史'}
-                  </Button>
-                  {(latestCheckLog.checkType === 'chapter_coherence' || latestCheckLog.checkType === 'combined') &&
-                   latestCheckLog.coherenceResult?.issues?.length > 0 && (
-                    <Button
-                      variant="default"
-                      size="sm"
-                      className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700"
-                      onClick={() => {
-                        if (latestCheckLog.coherenceResult) {
-                          setCoherenceResult({
-                            score: latestCheckLog.coherenceResult.score,
-                            issues: latestCheckLog.coherenceResult.issues,
-                          })
-                          setRewriteDialogOpen(true)
-                        }
-                      }}
-                    >
-                      基于此结果重写
-                    </Button>
-                  )}
-                </div>
-              </div>
+          {status === 'done' && output && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full gap-2"
+              onClick={handleInsert}
+              disabled={isInserting}
+            >
+              {isInserting ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  写入中...
+                </>
+              ) : (
+                <>
+                  <PenLine className="h-4 w-4" />
+                  写入编辑器
+                </>
+              )}
+            </Button>
+          )}
 
-              <div className="flex items-center gap-2 text-xs">
-                <Badge variant="outline" className="text-[10px]">
-                  {latestCheckLog.checkType === 'character_consistency' && '角色一致性'}
-                  {latestCheckLog.checkType === 'chapter_coherence' && '章节连贯性'}
-                  {latestCheckLog.checkType === 'combined' && '综合质量'}
-                </Badge>
-                <span className={`font-bold ${
-                  latestCheckLog.score >= 80 ? 'text-green-600' :
-                  latestCheckLog.score >= 60 ? 'text-amber-600' :
-                  'text-red-600'
-                }`}>
-                  {latestCheckLog.score}分
-                </span>
-                <span className="text-muted-foreground">
-                  · {new Date(latestCheckLog.createdAt * 1000).toLocaleString('zh-CN', {
-                    month: 'numeric',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </span>
-                <span className="ml-auto text-muted-foreground">
-                  {latestCheckLog.issuesCount > 0 ? `${latestCheckLog.issuesCount}个问题` : '无问题'}
-                </span>
+          {/* 质量检查区域 */}
+          {hasContent && (
+            <div className="space-y-2 pt-2 border-t">
+              {/* 最新检查结果摘要 */}
+              {latestCheckLog && (
+                <div className="flex items-center justify-between p-2.5 bg-muted/40 rounded-lg text-xs group hover:bg-muted/60 transition-colors">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <Badge variant="outline" className="text-[10px] shrink-0">
+                      {latestCheckLog.checkType === 'character_consistency' && '角色'}
+                      {latestCheckLog.checkType === 'chapter_coherence' && '连贯性'}
+                      {latestCheckLog.checkType === 'combined' && '综合'}
+                    </Badge>
+                    <span className={`font-semibold ${
+                      latestCheckLog.score >= 80 ? 'text-green-600' :
+                      latestCheckLog.score >= 60 ? 'text-amber-600' :
+                      'text-red-600'
+                    }`}>
+                      {latestCheckLog.score}分
+                    </span>
+                    <span className="text-muted-foreground truncate ml-1">
+                      {latestCheckLog.issuesCount > 0 ? `${latestCheckLog.issuesCount}个问题` : '✓ 通过'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-[10px] px-1.5"
+                      onClick={() => loadCheckHistory()}
+                    >
+                      历史
+                    </Button>
+                    {(latestCheckLog.checkType === 'chapter_coherence' || latestCheckLog.checkType === 'combined') &&
+                     latestCheckLog.coherenceResult?.issues?.length > 0 && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700"
+                        onClick={() => {
+                          if (latestCheckLog.coherenceResult) {
+                            setCoherenceResult({
+                              score: latestCheckLog.coherenceResult.score,
+                              issues: latestCheckLog.coherenceResult.issues,
+                            })
+                            setRewriteDialogOpen(true)
+                          }
+                        }}
+                      >
+                        重写
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 三个检查按钮 - 紧凑横向布局 */}
+              <div className="grid grid-cols-3 gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`gap-1 h-7 text-[11px] transition-all ${
+                    showConsistencyCheck ? 'bg-primary/10 border-primary' : ''
+                  }`}
+                  onClick={() => {
+                    setShowConsistencyCheck(!showConsistencyCheck)
+                    setShowCoherenceCheck(false)
+                    setShowCombinedCheck(false)
+                  }}
+                >
+                  <Shield className="h-3 w-3" />
+                  角色一致性
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`gap-1 h-7 text-[11px] transition-all ${
+                    showCoherenceCheck ? 'bg-primary/10 border-primary' : ''
+                  }`}
+                  onClick={() => {
+                    setShowCoherenceCheck(!showCoherenceCheck)
+                    setShowConsistencyCheck(false)
+                    setShowCombinedCheck(false)
+                  }}
+                >
+                  <Link className="h-3 w-3" />
+                  章节连贯性
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`gap-1 h-7 text-[11px] transition-all ${
+                    showCombinedCheck ? 'bg-primary/10 border-primary' : ''
+                  }`}
+                  onClick={() => {
+                    setShowCombinedCheck(!showCombinedCheck)
+                    setShowConsistencyCheck(false)
+                    setShowCoherenceCheck(false)
+                  }}
+                >
+                  <Shield className="h-3 w-3" />
+                  <Link className="h-3 w-3 -ml-0.5" />
+                  综合检查
+                </Button>
               </div>
 
               {/* 检查历史列表 */}
               {showCheckHistory && (
-                <ScrollArea className="max-h-48 mt-2">
-                  <div className="space-y-1">
+                <ScrollArea className="max-h-40 rounded-lg border bg-muted/20">
+                  <div className="p-2 space-y-1">
                     {checkHistory.map((log) => (
-                      <div
+                      <button
                         key={log.id}
-                        className={`p-2 rounded border text-xs cursor-pointer hover:bg-muted/50 transition-colors ${
-                          log.id === latestCheckLog.id ? 'bg-primary/5 border-primary/20' : ''
+                        className={`w-full flex items-center justify-between p-2 rounded text-xs text-left transition-colors hover:bg-background ${
+                          log.id === latestCheckLog?.id ? 'bg-primary/5 ring-1 ring-primary/20' : ''
                         }`}
                         onClick={() => {
                           setLatestCheckLog(log)
                           setShowCheckHistory(false)
                         }}
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-[10px]">
-                              {log.checkType === 'character_consistency' && '角色一致性'}
-                              {log.checkType === 'chapter_coherence' && '章节连贯性'}
-                              {log.checkType === 'combined' && '综合质量'}
-                            </Badge>
-                            <span className={`font-medium ${
-                              log.score >= 80 ? 'text-green-600' :
-                              log.score >= 60 ? 'text-amber-600' :
-                              'text-red-600'
-                            }`}>
-                              {log.score}分
-                            </span>
-                          </div>
-                          <span className="text-muted-foreground">
-                            {new Date(log.createdAt * 1000).toLocaleString('zh-CN', {
-                              month: 'numeric',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Badge variant="outline" className="text-[9px] shrink-0">
+                            {log.checkType === 'character_consistency' && '角色'}
+                            {log.checkType === 'chapter_coherence' && '连贯'}
+                            {log.checkType === 'combined' && '综合'}
+                          </Badge>
+                          <span className={`font-medium ${
+                            log.score >= 80 ? 'text-green-600' :
+                            log.score >= 60 ? 'text-amber-600' : 'text-red-600'
+                          }`}>
+                            {log.score}分
                           </span>
                         </div>
-                      </div>
+                        <span className="text-muted-foreground text-[10px] shrink-0 ml-2">
+                          {new Date(log.createdAt * 1000).toLocaleTimeString('zh-CN', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </button>
                     ))}
                   </div>
                 </ScrollArea>
               )}
-            </div>
-          )}
 
-          {/* 三个检查按钮 */}
-          <div className="grid grid-cols-3 gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 h-8 text-xs"
-              onClick={() => {
-                setShowConsistencyCheck(!showConsistencyCheck)
-                setShowCoherenceCheck(false)
-                setShowCombinedCheck(false)
-              }}
-            >
-              <Shield className="h-3.5 w-3.5" />
-              角色一致性
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 h-8 text-xs"
-              onClick={() => {
-                setShowCoherenceCheck(!showCoherenceCheck)
-                setShowConsistencyCheck(false)
-                setShowCombinedCheck(false)
-              }}
-            >
-              <Link className="h-3.5 w-3.5" />
-              章节连贯性
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 h-8 text-xs"
-              onClick={() => {
-                setShowCombinedCheck(!showCombinedCheck)
-                setShowConsistencyCheck(false)
-                setShowCoherenceCheck(false)
-              }}
-            >
-              <Shield className="h-3.5 w-3.5" />
-              <Link className="h-3.5 w-3.5 -ml-1" />
-              综合检查
-            </Button>
-          </div>
-
-          {/* 检查面板 */}
-          {showConsistencyCheck && (
-            <CharacterConsistencyCheck chapterId={chapterId} novelId={novelId} />
-          )}
-
-          {showCoherenceCheck && (
-            <ChapterCoherenceCheck
-              chapterId={chapterId}
-              novelId={novelId}
-              onCheckComplete={(result) => {
-                setCoherenceResult(result)
-                loadLatestCheckLog()
-              }}
-            />
-          )}
-
-          {showCombinedCheck && (
-            <CombinedCheck
-              chapterId={chapterId}
-              novelId={novelId}
-              onCheckComplete={(result) => {
-                if (result.coherenceCheck.issues.length > 0) {
-                  setCoherenceResult({
-                    score: result.coherenceCheck.score,
-                    issues: result.coherenceCheck.issues,
-                  })
-                }
-                loadLatestCheckLog()
-              }}
-            />
-          )}
-        </div>
-      )}
-
-      {status === 'done' && output && (
-        <div className="space-y-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full gap-2"
-            onClick={handleInsert}
-            disabled={isInserting}
-          >
-            {isInserting ? (
-              <>
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                写入中...
-              </>
-            ) : (
-              <>
-                <PenLine className="h-4 w-4" />
-                写入编辑器
-              </>
-            )}
-          </Button>
-
-          {contextInfo?.debug && (
-            <div className="text-[10px] text-center text-muted-foreground p-2 bg-green-50 dark:bg-green-950 rounded border border-green-200 dark:border-green-800">
-              ✓ 自动摘要已生成 · 使用了 {contextInfo.debug.ragHitsCount} 条 RAG 资料
-              {contextInfo.debug.summaryChainLength !== undefined && (
-                <> · 摘要链长度: {contextInfo.debug.summaryChainLength}</>
+              {/* 展开的检查面板 */}
+              {(showConsistencyCheck || showCoherenceCheck || showCombinedCheck) && (
+                <div className="border rounded-lg overflow-hidden bg-muted/20">
+                  {showConsistencyCheck && (
+                    <CharacterConsistencyCheck chapterId={chapterId} novelId={novelId} />
+                  )}
+                  {showCoherenceCheck && (
+                    <ChapterCoherenceCheck
+                      chapterId={chapterId}
+                      novelId={novelId}
+                      onCheckComplete={(result) => {
+                        setCoherenceResult(result)
+                        loadLatestCheckLog()
+                      }}
+                    />
+                  )}
+                  {showCombinedCheck && (
+                    <CombinedCheck
+                      chapterId={chapterId}
+                      novelId={novelId}
+                      onCheckComplete={(result) => {
+                        if (result.coherenceCheck.issues.length > 0) {
+                          setCoherenceResult({
+                            score: result.coherenceCheck.score,
+                            issues: result.coherenceCheck.issues,
+                          })
+                        }
+                        loadLatestCheckLog()
+                      }}
+                    />
+                  )}
+                </div>
               )}
-              ({contextInfo.debug.buildTimeMs}ms)
+
+              {contextInfo?.debug && (
+                <div className="text-[10px] text-center text-muted-foreground py-1.5 px-2 bg-green-50 dark:bg-green-950 rounded border border-green-200 dark:border-green-800">
+                  ✓ 自动摘要已生成 · RAG: {contextInfo.debug.ragHitsCount}条 · ({contextInfo.debug.buildTimeMs}ms)
+                </div>
+              )}
             </div>
           )}
         </div>
-      )}
+      ) : null}
 
       {toolCalls && toolCalls.length > 0 && status === 'generating' && (
         <div className="space-y-1 mt-2">
