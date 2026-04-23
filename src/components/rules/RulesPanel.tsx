@@ -163,7 +163,7 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b flex items-center justify-between gap-3">
+      <div className="px-3 py-2.5 border-b flex items-center justify-between gap-3">
         <span className="text-xs text-muted-foreground tabular-nums">
           活跃 {rules.filter(r => r.isActive === 1).length} / 共 {rules.length} 条
         </span>
@@ -254,7 +254,7 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
         </Dialog>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {RULE_CATEGORIES.map(({ value, label, icon: Icon, color }) => {
           const items = groupedRules[value] || []
           const activeCount = items.filter(r => r.isActive === 1).length

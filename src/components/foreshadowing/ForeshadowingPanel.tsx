@@ -207,7 +207,7 @@ export function ForeshadowingPanel({ novelId, onChapterSelect }: ForeshadowingPa
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b space-y-2">
+      <div className="px-3 py-2.5 border-b space-y-2">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-muted-foreground tabular-nums">共 {stats.total || 0} 条</span>
           <span className={`text-xs px-1.5 py-0.5 rounded ${STATUS_CONFIG.open.badge}`}>
@@ -319,7 +319,7 @@ export function ForeshadowingPanel({ novelId, onChapterSelect }: ForeshadowingPa
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {foreshadowings.length === 0 ? (
           <div className="border rounded-lg p-6 text-center bg-muted/10">
             <AlertTriangle className="h-8 w-8 mx-auto text-muted-foreground opacity-50 mb-3" />

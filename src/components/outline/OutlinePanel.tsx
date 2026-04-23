@@ -151,8 +151,8 @@ export function OutlinePanel({ novelId }: OutlinePanelProps) {
   if (isLoadingCurrent) return <div className="p-4 text-center text-sm">加载中...</div>
 
   return (
-    <div className="space-y-3">
-      <div className="px-3 pt-3 flex items-center justify-between">
+    <div className="flex flex-col h-full">
+      <div className="px-3 py-2.5 border-b flex items-center justify-between">
         <span className="text-xs text-muted-foreground">
           {currentOutline ? `v${currentOutline.version} · ${currentOutline.wordCount} 字` : '尚未创建'}
         </span>
@@ -287,7 +287,7 @@ export function OutlinePanel({ novelId }: OutlinePanelProps) {
         </div>
       </div>
 
-      <div className="px-3 pb-3">
+      <div className="flex-1 overflow-y-auto p-2">
         {currentOutline ? (
           <div className="border rounded-lg overflow-hidden">
             <div

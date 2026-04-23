@@ -275,7 +275,7 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
   return (
     <div className="flex flex-col h-full">
       {/* 操作栏 */}
-      <div className="px-4 py-3 border-b flex items-center justify-between gap-3">
+      <div className="px-3 py-2.5 border-b flex items-center justify-between gap-3">
         <span className="text-xs text-muted-foreground tabular-nums">{volumes?.length || 0} 卷</span>
         
         <Dialog open={dialogOpen} onOpenChange={(open) => {
@@ -412,7 +412,7 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
       </div>
 
       {/* 卷列表 */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {volumes && volumes.length > 0 ? (
           volumes.map((volume) => {
             const volumeChapters = chaptersByVolume[volume.id] || []

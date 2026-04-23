@@ -168,7 +168,7 @@ export function CharacterList({ novelId }: CharacterListProps) {
   return (
     <div className="flex flex-col h-full">
       {/* 操作栏 */}
-      <div className="px-4 py-3 border-b">
+      <div className="px-3 py-2.5 border-b">
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button variant="outline" size="sm" className="w-full gap-2 h-8">
@@ -319,7 +319,7 @@ export function CharacterList({ novelId }: CharacterListProps) {
       </div>
 
       {/* 角色列表 */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {characters && characters.length > 0 ? (
           characters.map((character: Character) => (
             <div

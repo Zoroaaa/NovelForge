@@ -202,7 +202,7 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
         className="hover:bg-muted/60 rounded-md transition-colors"
       >
         <div
-          className="flex items-center gap-3 py-2.5 px-3 cursor-pointer group"
+          className="flex items-center gap-3 py-2 px-3 cursor-pointer group"
           onClick={() => onChapterSelect?.(chapter.id)}
         >
           <Button
@@ -321,7 +321,7 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
     return (
       <div key={volumeId} className="mb-1">
         <div
-          className="flex items-center gap-2 py-2 px-3 hover:bg-muted/50 rounded-md cursor-pointer transition-colors"
+          className="flex items-center gap-2 py-2 px-3 hover:bg-muted/50 rounded-lg cursor-pointer transition-colors"
           onClick={() => toggleVolume(volumeId)}
         >
           {isExpanded ? (
@@ -376,7 +376,7 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
   return (
     <div className="flex flex-col h-full">
       {/* 操作栏 */}
-      <div className="px-4 py-3 border-b flex items-center justify-between gap-2">
+      <div className="px-3 py-2.5 border-b flex items-center justify-between gap-2">
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button variant="outline" size="sm" className="w-full gap-2 h-8">
@@ -538,7 +538,7 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
       </div>
 
       {/* 章节列表 */}
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {chapters && chapters.length > 0 ? (
           <>
             {sortedVolumes.map(volume => renderVolumeGroup(volume, volume.id))}

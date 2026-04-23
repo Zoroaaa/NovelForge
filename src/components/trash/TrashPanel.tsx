@@ -86,7 +86,7 @@ export function TrashPanel({ novelId }: TrashPanelProps) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b flex items-center justify-between gap-3 shrink-0">
+      <div className="px-3 py-2.5 border-b flex items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-2">
           <Trash2 className="h-4 w-4 text-destructive" />
           <span className="text-sm font-medium">回收站</span>
@@ -131,7 +131,7 @@ export function TrashPanel({ novelId }: TrashPanelProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1 min-h-0">
         {total === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
             <CheckCircle2 className="h-10 w-10 mb-3 opacity-20" />
