@@ -13,7 +13,7 @@ interface AuthState {
   isLoading: boolean
   
   login: (username: string, password: string) => Promise<void>
-  register: (username: string, email: string, password: string, inviteCode?: string) => Promise<void>
+  register: (username: string, email: string, password: string, inviteCode: string) => Promise<void>
   logout: () => void
   fetchUser: () => Promise<void>
   checkAuth: () => Promise<boolean>
