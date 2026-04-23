@@ -12,6 +12,7 @@ import { characters as t } from '../db/schema'
 import { eq, and, isNull } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { enqueue } from '../lib/queue'
+import { deindexContent } from '../services/embedding'
 import {
   uploadAndAnalyzeImage,
   analyzeCharacterImage,
@@ -133,9 +134,15 @@ router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
  */
 router.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB)
+  const id = c.req.param('id')
+
+  if (c.env.VECTORIZE) {
+    deindexContent(c.env, 'character', id).then(() => {}).catch(e => console.warn('Character deindex failed:', e))
+  }
+
   await db.update(t)
     .set({ deletedAt: Math.floor(Date.now() / 1000) })
-    .where(eq(t.id, c.req.param('id')))
+    .where(eq(t.id, id))
   return c.json({ ok: true })
 })
 

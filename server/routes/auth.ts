@@ -32,7 +32,7 @@ const registerSchema = z.object({
     .min(8, '密码至少8个字符')
     .max(64, '密码最多64个字符')
     .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, '密码必须包含大小写字母和数字'),
-  inviteCode: z.string().min(1, '邀请码不能为空').optional()
+  inviteCode: z.string().min(1, '邀请码不能为空'),
 })
 
 const changePasswordSchema = z.object({

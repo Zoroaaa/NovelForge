@@ -51,7 +51,7 @@ export async function getEntityTree(env: Env, novelId: string): Promise<EntityTr
         title: entity.title,
         depth: entity.depth,
         meta: entity.meta ? JSON.parse(entity.meta) : null,
-        children: buildTree(entity.id),
+        children: buildTree(entity.entityId),
       }))
   }
 

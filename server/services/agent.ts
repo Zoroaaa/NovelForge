@@ -1447,7 +1447,10 @@ ${chapter.content.slice(0, 10000)}
     summaryConfig = await resolveConfig(db, 'analysis', chapter.novelId)
     summaryConfig.apiKey = summaryConfig.apiKey || ''
   } catch (error) {
-    throw new Error(`❌ 未配置"智能分析"模型！请在全局配置中设置 analysis 阶段的模型（用于一致性检查、境界检测、伏笔提取等分析任务）`)
+    return {
+      conflicts: [],
+      warnings: [`未配置"智能分析"模型，请前往设置配置 analysis 阶段的模型后重试（用于一致性检查、境界检测、伏笔提取等分析任务）`],
+    }
   }
 
   const base = summaryConfig.apiBase || 'https://ark.cn-beijing.volces.com/api/v3'

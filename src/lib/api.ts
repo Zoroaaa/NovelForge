@@ -282,6 +282,8 @@ export const api = {
     },
     reindexAll: (body: { novelId: string; types?: string[]; clearExisting?: boolean }) =>
       req<{ ok: boolean; message: string; novelId: string }>('/api/vectorize/reindex-all', { method: 'POST', body: j(body) }),
+    indexMissing: (body: { novelId: string; types?: string[] }) =>
+      req<{ ok: boolean; message: string; novelId: string; stats: { settings: number; characters: number; foreshadowing: number } }>('/api/vectorize/index-missing', { method: 'POST', body: j(body) }),
     getStatus: () =>
       req<{ status: string; message: string; embeddingModel?: string; dimensions?: number }>('/api/vectorize/status'),
   },
@@ -359,7 +361,7 @@ export const api = {
     login: (body: { username: string; password: string }) =>
       req<{ success: boolean; data: { token: string; user: UserInfo } }>('/api/auth/login', { method: 'POST', body: j(body) }),
     
-    register: (body: { username: string; email: string; password: string; inviteCode?: string }) =>
+    register: (body: { username: string; email: string; password: string; inviteCode: string }) =>
       req<{ success: boolean; data: { token: string; user: UserInfo } }>('/api/auth/register', { method: 'POST', body: j(body) }),
     
     getMe: () =>

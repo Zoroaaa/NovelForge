@@ -88,7 +88,7 @@ export default function RegisterPage() {
         username.trim(),
         email.trim(),
         password,
-        inviteCode.trim() || undefined
+        inviteCode.trim()
       )
       toast.success('注册成功！欢迎加入 NovelForge')
       navigate('/novels', { replace: true })
@@ -193,13 +193,12 @@ export default function RegisterPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="inviteCode" className="text-gray-200">
-                  邀请码 
-                  <span className="text-gray-500 ml-1">(可选)</span>
+                  邀请码 *
                 </Label>
                 <Input
                   id="inviteCode"
                   type="text"
-                  placeholder="如有邀请码请输入"
+                  placeholder="请输入邀请码"
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value)}
                   className="bg-white/5 border-white/20 text-white placeholder:text-gray-500 focus:border-purple-500"

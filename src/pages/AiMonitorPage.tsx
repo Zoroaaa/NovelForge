@@ -65,6 +65,7 @@ export default function AiMonitorPage() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [isReindexing, setIsReindexing] = useState(false)
+  const [isIndexingMissing, setIsIndexingMissing] = useState(false)
   const [contextNovelId, setContextNovelId] = useState<string>('')
   const [contextChapterId, setContextChapterId] = useState<string>('')
   const [contextResult, setContextResult] = useState<any>(null)
@@ -163,6 +164,22 @@ export default function AiMonitorPage() {
       queryClient.invalidateQueries({ queryKey: ['vector-stats'] })
     } catch {
       toast.error('实体树重建失败')
+    }
+  }
+
+  const handleIndexMissing = async () => {
+    if (!selectedNovelId) return
+    setIsIndexingMissing(true)
+    try {
+      const result = await api.vectorize.indexMissing({ novelId: selectedNovelId })
+      if (result.ok) {
+        toast.success(result.message, { duration: 5000 })
+        setTimeout(() => refetchVectorStats(), 2000)
+      }
+    } catch (e: any) {
+      toast.error(`增量索引失败：${e.message || '未知错误'}`, { duration: 8000 })
+    } finally {
+      setTimeout(() => setIsIndexingMissing(false), 5000)
     }
   }
 
@@ -290,12 +307,12 @@ export default function AiMonitorPage() {
                   <CardHeader className="pb-3">
                     <CardTitle className="text-base font-medium flex items-center gap-2">
                       <Layers className="w-4 h-4 text-orange-600" />
-                      摘要已索引
+                      伏笔已索引
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="text-3xl font-bold">
-                      {vectorStats?.byType['summary'] || 0}
+                      {vectorStats?.byType['foreshadowing'] || 0}
                     </div>
                   </CardContent>
                 </Card>
@@ -529,6 +546,28 @@ export default function AiMonitorPage() {
                     {isReindexing && (
                       <p className="text-sm text-muted-foreground text-center">
                         后台正在执行索引重建，请稍后刷新查看进度
+                      </p>
+                    )}
+
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={handleIndexMissing}
+                      disabled={isIndexingMissing || !selectedNovelId}
+                    >
+                      {isIndexingMissing ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                      )}
+                      增量索引未索引项
+                    </Button>
+                    {hasUnindexed && !isIndexingMissing && (
+                      <p className="text-sm text-muted-foreground text-center">
+                        {vectorStats!.unindexedCounts.settings > 0 && `${vectorStats!.unindexedCounts.settings} 条设定 `}
+                        {vectorStats!.unindexedCounts.characters > 0 && `${vectorStats!.unindexedCounts.characters} 条角色 `}
+                        {vectorStats!.unindexedCounts.foreshadowing > 0 && `${vectorStats!.unindexedCounts.foreshadowing} 条伏笔 `}
+                        未索引
                       </p>
                     )}
 

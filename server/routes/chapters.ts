@@ -8,7 +8,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { drizzle } from 'drizzle-orm/d1'
-import { chapters as t } from '../db/schema'
+import { chapters as t, novels, volumes } from '../db/schema'
 import { eq, and, isNull, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { enqueue } from '../lib/queue'
@@ -70,6 +70,16 @@ router.post('/', zValidator('json', CreateSchema), async (c) => {
   const body = c.req.valid('json')
   const [row] = await db.insert(t).values(body).returning()
 
+  await db.update(novels)
+    .set({ chapterCount: sql`chapter_count + 1` })
+    .where(eq(novels.id, body.novelId))
+
+  if (body.volumeId) {
+    await db.update(volumes)
+      .set({ chapterCount: sql`chapter_count + 1` })
+      .where(eq(volumes.id, body.volumeId))
+  }
+
   return c.json(row, 201)
 })
 
@@ -122,10 +132,24 @@ router.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB)
   const id = c.req.param('id')
 
+  const chapter = await db.select({ novelId: t.novelId, volumeId: t.volumeId }).from(t).where(eq(t.id, id)).get()
+
   await db
     .update(t)
     .set({ deletedAt: Math.floor(Date.now() / 1000) })
     .where(eq(t.id, id))
+
+  if (chapter) {
+    await db.update(novels)
+      .set({ chapterCount: sql`chapter_count - 1` })
+      .where(eq(novels.id, chapter.novelId))
+
+    if (chapter.volumeId) {
+      await db.update(volumes)
+        .set({ chapterCount: sql`chapter_count - 1` })
+        .where(eq(volumes.id, chapter.volumeId))
+    }
+  }
 
   return c.json({ ok: true })
 })

@@ -20,7 +20,7 @@ import {
   fetchContentForIndexing,
 } from '../services/embedding'
 import { vectorIndex, novelSettings, characters as charactersTable, masterOutline, foreshadowing } from '../db/schema'
-import { enqueue } from '../lib/queue'
+import { enqueue, enqueueBatch, QueueMessage } from '../lib/queue'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -423,6 +423,94 @@ router.post(
     } catch (error) {
       console.error('Failed to enqueue reindex task:', error)
       return c.json({ error: 'Failed to enqueue reindex task', details: (error as Error).message }, 500)
+    }
+  }
+)
+
+router.post(
+  '/index-missing',
+  zValidator(
+    'json',
+    z.object({
+      novelId: z.string().min(1),
+      types: z.array(z.enum(['setting', 'character', 'foreshadowing'])).optional(),
+    })
+  ),
+  async (c) => {
+    const body = c.req.valid('json')
+    const { novelId, types = ['setting', 'character', 'foreshadowing'] } = body
+    const db = drizzle(c.env.DB)
+
+    if (!c.env.VECTORIZE) {
+      return c.json({ error: 'Vectorize binding not configured' }, 503)
+    }
+
+    if (!c.env.TASK_QUEUE) {
+      return c.json({ error: 'Task queue not configured', code: 'QUEUE_UNAVAILABLE' }, 503)
+    }
+
+    try {
+      const messages: QueueMessage[] = []
+      const stats = { settings: 0, characters: 0, foreshadowing: 0 }
+
+      if (types.includes('setting')) {
+        const unindexedSettings = await db
+          .select({ id: novelSettings.id, novelId: novelSettings.novelId, name: novelSettings.name, content: novelSettings.content, summary: novelSettings.summary, type: novelSettings.type, importance: novelSettings.importance })
+          .from(novelSettings)
+          .leftJoin(vectorIndex, and(eq(vectorIndex.sourceId, novelSettings.id), eq(vectorIndex.sourceType, 'setting')))
+          .where(and(eq(novelSettings.novelId, novelId), sql`${novelSettings.deletedAt} IS NULL`, sql`${novelSettings.content} IS NOT NULL`, sql`${novelSettings.content} != ''`, sql`${vectorIndex.id} IS NULL`))
+          .all()
+
+        for (const s of unindexedSettings) {
+          const indexContent = s.summary || (s.content.length > 500 ? s.content.slice(0, 500) : s.content)
+          messages.push({ type: 'index_content', payload: { sourceType: 'setting', sourceId: s.id, novelId: s.novelId, title: s.name, content: indexContent, extraMetadata: { settingType: s.type, importance: s.importance } } })
+          stats.settings++
+        }
+      }
+
+      if (types.includes('character')) {
+        const unindexedChars = await db
+          .select({ id: charactersTable.id, novelId: charactersTable.novelId, name: charactersTable.name, description: charactersTable.description, role: charactersTable.role })
+          .from(charactersTable)
+          .leftJoin(vectorIndex, and(eq(vectorIndex.sourceId, charactersTable.id), eq(vectorIndex.sourceType, 'character')))
+          .where(and(eq(charactersTable.novelId, novelId), sql`${charactersTable.deletedAt} IS NULL`, sql`${charactersTable.description} IS NOT NULL`, sql`${vectorIndex.id} IS NULL`))
+          .all()
+
+        for (const ch of unindexedChars) {
+          const indexText = `${ch.name}${ch.role ? ` (${ch.role})` : ''}\n${(ch.description || '').slice(0, 300)}`
+          messages.push({ type: 'index_content', payload: { sourceType: 'character', sourceId: ch.id, novelId: ch.novelId, title: ch.name, content: indexText } })
+          stats.characters++
+        }
+      }
+
+      if (types.includes('foreshadowing')) {
+        const unindexedForeshadowing = await db
+          .select({ id: foreshadowing.id, novelId: foreshadowing.novelId, title: foreshadowing.title, description: foreshadowing.description, importance: foreshadowing.importance })
+          .from(foreshadowing)
+          .leftJoin(vectorIndex, and(eq(vectorIndex.sourceId, foreshadowing.id), eq(vectorIndex.sourceType, 'foreshadowing')))
+          .where(and(eq(foreshadowing.novelId, novelId), sql`${foreshadowing.deletedAt} IS NULL`, sql`${foreshadowing.description} IS NOT NULL`, sql`${foreshadowing.description} != ''`, sql`${vectorIndex.id} IS NULL`))
+          .all()
+
+        for (const f of unindexedForeshadowing) {
+          if (!f.description) continue
+          messages.push({ type: 'index_content', payload: { sourceType: 'foreshadowing', sourceId: f.id, novelId: f.novelId, title: f.title, content: f.description, extraMetadata: { importance: f.importance } } })
+          stats.foreshadowing++
+        }
+      }
+
+      if (messages.length > 0) {
+        await enqueueBatch(c.env, messages)
+      }
+
+      return c.json({
+        ok: true,
+        message: `发现 ${messages.length} 条未索引记录，已提交增量索引任务`,
+        novelId,
+        stats,
+      })
+    } catch (error) {
+      console.error('Failed to index missing:', error)
+      return c.json({ error: 'Failed to index missing content', details: (error as Error).message }, 500)
     }
   }
 )

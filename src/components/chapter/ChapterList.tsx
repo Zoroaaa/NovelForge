@@ -27,6 +27,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+
+type ChapterStatus = 'draft' | 'generated' | 'revised' | 'published'
 
 interface ChapterListProps {
   novelId: string
@@ -91,6 +99,16 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
       queryClient.invalidateQueries({ queryKey: ['chapters', novelId] })
       queryClient.invalidateQueries({ queryKey: ['volumes', novelId] })
       toast.success('章节已删除')
+    },
+    onError: (error) => toast.error(error.message),
+  })
+
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: ChapterStatus }) =>
+      api.chapters.update(id, { status } as any),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chapters', novelId] })
+      toast.success('状态已更新')
     },
     onError: (error) => toast.error(error.message),
   })
@@ -201,10 +219,33 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
           <div className="flex-1 min-w-0 space-y-1">
             <p className="text-sm truncate leading-tight">{chapter.title}</p>
             <div className="flex items-center gap-2">
-              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${statusInfo.color}`}>
-                {statusInfo.icon}
-                {statusInfo.label}
-              </span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity ${statusInfo.color}`}>
+                    {statusInfo.icon}
+                    {statusInfo.label}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="right">
+                  {(Object.entries(chapterStatusConfig) as [ChapterStatus, typeof chapterStatusConfig[keyof typeof chapterStatusConfig]][]).map(([key, config]) => (
+                    <DropdownMenuItem
+                      key={key}
+                      className="gap-2 cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (key !== chapter.status) {
+                          updateStatusMutation.mutate({ id: chapter.id, status: key })
+                        }
+                      }}
+                      disabled={updateStatusMutation.isPending}
+                    >
+                      <span className={config.color.split(' ')[0]}>{config.icon}</span>
+                      {config.label}
+                      {key === chapter.status && <span className="ml-auto text-[10px] text-muted-foreground">当前</span>}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
               {chapter.wordCount > 0 && (
                 <span className="text-[11px] text-muted-foreground/60">
                   {chapter.wordCount.toLocaleString()} 字

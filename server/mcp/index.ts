@@ -507,6 +507,16 @@ export async function handleToolCall(
         wordCount: content?.length || 0,
       }).returning()
 
+      await db.update(novels)
+        .set({ chapterCount: sql`chapter_count + 1` })
+        .where(eq(novels.id, novelId))
+
+      if (volumeId) {
+        await db.update(volumes)
+          .set({ chapterCount: sql`chapter_count + 1` })
+          .where(eq(volumes.id, volumeId))
+      }
+
       return { ok: true, chapter: newChapter }
     }
 
