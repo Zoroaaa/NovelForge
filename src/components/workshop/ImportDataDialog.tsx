@@ -82,9 +82,10 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
       const token = getToken()
       const headers: Record<string, string> = {}
       if (token) headers['Authorization'] = `Bearer ${token}`
-      const res = await fetch('/api/novels', { headers })
+      const res = await fetch('/api/novels?perPage=100', { headers })
       if (!res.ok) return []
-      return res.json() as Promise<Array<{ id: string; title: string }>>
+      const data = await res.json()
+      return (data.items || []) as Array<{ id: string; title: string }>
     },
     enabled: open,
   })
