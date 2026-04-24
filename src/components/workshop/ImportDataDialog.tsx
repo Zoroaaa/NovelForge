@@ -75,6 +75,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
   const [targetModule, setTargetModule] = useState<ImportTargetModule>('chapter')
   const [formattedPreview, setFormattedPreview] = useState<FormattedImportData[]>([])
   const [selectedNovelId, setSelectedNovelId] = useState<string>('')
+  const [importMode, setImportMode] = useState<'create' | 'update' | 'upsert'>('upsert')
 
   const { data: novels = [] } = useQuery({
     queryKey: ['novels-for-import'],
@@ -125,7 +126,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
   })
 
   const importMutation = useMutation({
-    mutationFn: async (params: { module: string; data: Record<string, unknown> | Record<string, unknown>[]; novelId: string }) => {
+    mutationFn: async (params: { module: string; data: Record<string, unknown> | Record<string, unknown>[]; novelId: string; importMode: string }) => {
       const token = getToken()
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -246,6 +247,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
         module: formattedPreview[0].module,
         data: formattedPreview[0].data,
         novelId: selectedNovelId,
+        importMode,
       })
     } else {
       const successfulImports = formattedPreview.filter(p => p.parseStatus !== 'error')
@@ -265,12 +267,14 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
               module,
               data: items[0].data,
               novelId: selectedNovelId,
+              importMode,
             })
           } else {
             return importMutation.mutateAsync({
               module,
               data: items.map(i => i.data),
               novelId: selectedNovelId,
+              importMode,
             })
           }
         })
@@ -281,7 +285,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
         toast.error('部分数据导入失败')
       })
     }
-  }, [formattedPreview, selectedNovelId, importMutation])
+  }, [formattedPreview, selectedNovelId, importMode, importMutation])
 
   const handleClose = () => {
     setPastedContent('')
@@ -347,6 +351,17 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
                     </span>
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+            <span className="text-sm font-medium shrink-0">模式：</span>
+            <Select value={importMode} onValueChange={(v) => setImportMode(v as 'create' | 'update' | 'upsert')}>
+              <SelectTrigger className="w-[100px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="create">仅新建</SelectItem>
+                <SelectItem value="update">仅更新</SelectItem>
+                <SelectItem value="upsert">智能导入</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -460,31 +475,25 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
                 )}
               </div>
               <ScrollArea className="flex-1 min-h-0">
-                {formattedPreview.length === 1 ? (
-                  <pre className="p-4 text-xs font-mono whitespace-pre-wrap break-all">
-                    {JSON.stringify(formattedPreview[0].data, null, 2)}
-                  </pre>
-                ) : (
-                  <div className="p-4 space-y-4 overflow-y-auto flex-1">
-                    {formattedPreview.map((preview, idx) => (
-                      <div key={idx} className="border rounded-lg p-3 shrink-0">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-sm font-medium">文件 {idx + 1}</span>
-                          {getParseStatusIcon(preview.parseStatus)}
-                          <Badge variant="outline" className="text-xs">
-                            {MODULE_OPTIONS.find((m) => m.value === preview.module)?.label}
-                          </Badge>
-                        </div>
-                        <pre className="text-xs font-mono whitespace-pre-wrap break-all bg-muted/50 p-2 rounded">
-                          {JSON.stringify(preview.data, null, 2)}
-                        </pre>
-                        {preview.parseMessage && (
-                          <p className="text-xs text-muted-foreground mt-1">{preview.parseMessage}</p>
-                        )}
+                <div className="p-4 space-y-4">
+                  {formattedPreview.map((preview, idx) => (
+                    <div key={idx} className="border rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-sm font-medium">文件 {idx + 1}</span>
+                        {getParseStatusIcon(preview.parseStatus)}
+                        <Badge variant="outline" className="text-xs">
+                          {MODULE_OPTIONS.find((m) => m.value === preview.module)?.label}
+                        </Badge>
                       </div>
-                    ))}
-                  </div>
-                )}
+                      <pre className="text-xs font-mono whitespace-pre-wrap break-all bg-muted/50 p-2 rounded max-h-40 overflow-y-auto">
+                        {JSON.stringify(preview.data, null, 2)}
+                      </pre>
+                      {preview.parseMessage && (
+                        <p className="text-xs text-muted-foreground mt-1">{preview.parseMessage}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </ScrollArea>
             </div>
           )}
