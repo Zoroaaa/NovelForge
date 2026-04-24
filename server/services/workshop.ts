@@ -56,11 +56,20 @@ export const WORKSHOP_PROMPTS = {
   "targetWordCount": "预计总字数",
   "targetChapters": "预计章节数",
   "writingRules": [
-    {"category": "primary", "title": "核心主题", "content": "本小说的核心主旨和价值观"},
+    {"category": "world", "title": "核心主题", "content": "本小说的核心主旨和价值观"},
     {"category": "style", "title": "文风要求", "content": "语言风格、叙事视角等要求"}
   ]
 }
 \`\`\`
+
+## writingRules.category 可选类别参考：
+- style: 文风
+- pacing: 节奏  
+- character: 角色一致性
+- plot: 情节
+- world: 世界观
+- taboo: 禁忌事项
+- custom: 自定义
 
 注意事项：
 - 每次只问 2-3 个问题，不要一次问太多
@@ -79,12 +88,12 @@ export const WORKSHOP_PROMPTS = {
 
 你的任务：
 1. 帮助用户完善世界观的各个方面：
+   - 世界观（背景设定、基本规律）
+   - 境界体系（修炼等级/魔法系统/科技水平）
+   - 势力组织（正派/反派/中立势力）
    - 地理环境（大陆/国家/城市/重要地点）
-   - 力量体系（修炼等级/魔法系统/科技水平）
-   - 势力格局（正派/反派/中立势力）
-   - 历史背景（重大历史事件/传说/神话）
-   - 社会规则（经济/政治/文化/法律）
-   - 特殊设定（如果有的话）
+   - 宝物功法（法宝、功法、技能等）
+   - 其他设定（如果有的话）
 
 输出格式：
 - 先与用户讨论关键设定点
@@ -95,13 +104,33 @@ export const WORKSHOP_PROMPTS = {
 {
   "worldSettings": [
     {
+      "type": "worldview",
+      "title": "世界观",
+      "content": "详细描述..."
+    },
+    {
+      "type": "power_system",
+      "title": "境界体系",
+      "content": "详细描述..."
+    },
+    {
+      "type": "faction",
+      "title": "势力组织",
+      "content": "详细描述..."
+    },
+    {
       "type": "geography",
       "title": "地理环境",
       "content": "详细描述..."
     },
     {
-      "type": "power_system",
-      "title": "力量体系",
+      "type": "item_skill",
+      "title": "宝物功法",
+      "content": "详细描述..."
+    },
+    {
+      "type": "misc",
+      "title": "其他设定",
       "content": "详细描述..."
     }
   ]
@@ -109,7 +138,7 @@ export const WORKSHOP_PROMPTS = {
 \`\`\`
 
 注意事项：
-- 设定要自洽，不能前后矛盾
+  - 设定要自洽，不能前后矛盾
 - 要有特色，避免过于俗套
 - 考虑后续剧情发展的可能性`,
 
@@ -390,13 +419,21 @@ async function loadNovelContextData(
         .all()
 
       const worldSettings: Array<{ type: string; title: string; content: string }> = []
-      const settingTypes = ['geography', 'power_system', 'faction', 'history', 'society', 'custom']
+      const settingTypes = ['geography', 'power_system', 'faction', 'worldview', 'item_skill', 'misc']
       for (const type of settingTypes) {
         const typeSettings = allSettings.filter((s: typeof allSettings[number]) => s.type === type)
         if (typeSettings.length > 0) {
+          const typeLabel = {
+            geography: '地理环境',
+            power_system: '境界体系',
+            faction: '势力组织',
+            worldview: '世界观',
+            item_skill: '宝物功法',
+            misc: '其他设定'
+          }[type] || type
           worldSettings.push({
             type,
-            title: typeSettings[0].name || type,
+            title: typeLabel,
             content: typeSettings.map((s: typeof allSettings[number]) => `- ${s.name}: ${s.content}`).join('\n'),
           })
         }
@@ -711,10 +748,19 @@ export async function commitWorkshopSession(
           category: setting.type,
           name: setting.title,
           content: setting.content,
+          summary: '',
           importance: 'high',
           sortOrder: createdSettings.length,
         }).returning()
         createdSettings.push(novelSetting)
+
+        // 触发自动生成设定摘要
+        try {
+          const { generateSettingSummary } = await import('./agent/summarizer')
+          await generateSettingSummary(env, novelSetting.id)
+        } catch (err) {
+          console.warn('[workshop] 设定摘要生成失败:', err)
+        }
       }
       createdItems.worldSettings = createdSettings
     }
@@ -761,13 +807,22 @@ export async function commitWorkshopSession(
         const [volume] = await db.insert(volumes).values({
           novelId,
           title: vol.title,
-          summary: vol.outline || '',
+          blueprint: vol.outline || '',
           eventLine: vol.blueprint || '',
+          summary: '',
           status: 'draft',
           chapterCount: vol.chapterCount || 0,
           sortOrder: createdVolumes.length + 1,
         }).returning()
         createdVolumes.push(volume)
+
+        // 触发自动生成卷摘要
+        try {
+          const { generateVolumeSummary } = await import('./agent/summarizer')
+          await generateVolumeSummary(env, volume.id, novelId)
+        } catch (err) {
+          console.warn('[workshop] 卷摘要生成失败:', err)
+        }
 
         // 创建伏笔 -> foreshadowing
         if (vol.foreshadowingSetup && vol.foreshadowingSetup.length > 0) {
@@ -830,18 +885,27 @@ ${readonlyCtx}
   "targetWordCount": "预计总字数",
   "targetChapters": "预计章节数",
   "writingRules": [
-    {"category": "primary", "title": "核心主题", "content": "..."},
+    {"category": "world", "title": "核心主题", "content": "..."},
     {"category": "style", "title": "文风要求", "content": "..."}
   ]
 }
-\`\`\``,
+\`\`\`
+
+## writingRules.category 可选类别参考：
+- style: 文风
+- pacing: 节奏
+- character: 角色一致性
+- plot: 情节
+- world: 世界观
+- taboo: 禁忌事项
+- custom: 自定义`,
 
     worldbuild: `你是世界构建大师。你正处于【世界观构建】阶段。
 
 ${readonlyCtx}
 
 ## 你在本阶段的任务
-帮用户完善世界观：地理环境、力量体系、势力格局、历史背景、社会规则、特殊设定。
+帮用户完善世界观：世界观、境界体系、势力组织、地理环境、宝物功法、其他设定。
 先讨论关键设定点，收集足够信息后输出最终结构化文档。
 
 ## 输出约束（严格执行）
@@ -851,12 +915,12 @@ ${readonlyCtx}
 \`\`\`json
 {
   "worldSettings": [
+    {"type": "worldview", "title": "世界观", "content": "..."},
+    {"type": "power_system", "title": "境界体系", "content": "..."},
+    {"type": "faction", "title": "势力组织", "content": "..."},
     {"type": "geography", "title": "地理环境", "content": "..."},
-    {"type": "power_system", "title": "力量体系", "content": "..."},
-    {"type": "forces", "title": "势力格局", "content": "..."},
-    {"type": "history", "title": "历史背景", "content": "..."},
-    {"type": "social_rules", "title": "社会规则", "content": "..."},
-    {"type": "special_settings", "title": "特殊设定", "content": "..."}
+    {"type": "item_skill", "title": "宝物功法", "content": "..."},
+    {"type": "misc", "title": "其他设定", "content": "..."}
   ]
 }
 \`\`\`
