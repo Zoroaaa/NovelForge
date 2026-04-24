@@ -36,37 +36,6 @@ const UpdateForeshadowingSchema = z.object({
 })
 
 /**
- * GET /:novelId - 获取小说的所有伏笔
- */
-router.get('/:novelId', zValidator('query', z.object({
-  status: z.enum(['open', 'resolved', 'abandoned']).optional(),
-  limit: z.coerce.number().optional().default(50),
-})), async (c) => {
-  const novelId = c.req.param('novelId')
-  const { status, limit } = c.req.valid('query')
-  const db = drizzle(c.env.DB)
-
-  const conditions = [
-    eq(foreshadowing.novelId, novelId),
-    sql`${foreshadowing.deletedAt} IS NULL`
-  ]
-
-  if (status) {
-    conditions.push(eq(foreshadowing.status, status))
-  }
-
-  const list = await db
-    .select()
-    .from(foreshadowing)
-    .where(and(...conditions))
-    .orderBy(desc(foreshadowing.createdAt))
-    .limit(limit)
-    .all()
-
-  return c.json({ foreshadowing: list })
-})
-
-/**
  * POST / - 创建新伏笔
  */
 router.post('/', zValidator('json', CreateForeshadowingSchema), async (c) => {
@@ -183,10 +152,6 @@ router.delete('/:id', async (c) => {
     return c.json({ error: '删除伏笔失败', details: (error as Error).message }, 500)
   }
 })
-
-// ============================================================
-// 新增路由：推进追踪 / 健康 / 推荐 / 统计
-// ============================================================
 
 /**
  * GET /:id/progress - 获取某伏笔的全部推进时间线
@@ -519,6 +484,37 @@ router.get('/:novelId/stats', async (c) => {
     console.error('Failed to get foreshadowing stats:', error)
     return c.json({ error: '获取统计数据失败', details: (error as Error).message }, 500)
   }
+})
+
+/**
+ * GET /:novelId - 获取小说的所有伏笔
+ */
+router.get('/:novelId', zValidator('query', z.object({
+  status: z.enum(['open', 'resolved', 'abandoned']).optional(),
+  limit: z.coerce.number().optional().default(50),
+})), async (c) => {
+  const novelId = c.req.param('novelId')
+  const { status, limit } = c.req.valid('query')
+  const db = drizzle(c.env.DB)
+
+  const conditions = [
+    eq(foreshadowing.novelId, novelId),
+    sql`${foreshadowing.deletedAt} IS NULL`
+  ]
+
+  if (status) {
+    conditions.push(eq(foreshadowing.status, status))
+  }
+
+  const list = await db
+    .select()
+    .from(foreshadowing)
+    .where(and(...conditions))
+    .orderBy(desc(foreshadowing.createdAt))
+    .limit(limit)
+    .all()
+
+  return c.json({ foreshadowing: list })
 })
 
 export { router as foreshadowing }

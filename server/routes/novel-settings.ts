@@ -44,6 +44,45 @@ const UpdateSettingSchema = z.object({
 })
 
 /**
+ * GET /tree/:novelId - 获取树形结构的设定列表
+ * @description 获取设定树形结构，按父子关系组织
+ * @param {string} novelId - 小说ID
+ * @returns {Object} { tree: Array, stats: Object, total: number }
+ */
+router.get('/tree/:novelId', async (c) => {
+  const novelId = c.req.param('novelId')
+  const db = drizzle(c.env.DB)
+
+  const allSettings = await db
+    .select()
+    .from(novelSettings)
+    .where(and(
+      eq(novelSettings.novelId, novelId),
+      sql`${novelSettings.deletedAt} IS NULL`
+    ))
+    .orderBy(novelSettings.type, novelSettings.sortOrder)
+    .all()
+
+  const buildTree = (parentId: string | null = null): any[] => {
+    return allSettings
+      .filter(s => s.parentId === parentId)
+      .map(setting => ({
+        ...setting,
+        children: buildTree(setting.id),
+      }))
+  }
+
+  const tree = buildTree(null)
+
+  const stats = allSettings.reduce((acc, s) => {
+    acc[s.type] = (acc[s.type] || 0) + 1
+    return acc
+  }, {} as Record<string, number>)
+
+  return c.json({ tree, stats, total: allSettings.length })
+})
+
+/**
  * GET /:novelId - 获取小说的所有设定
  * @description 获取指定小说的设定列表，支持分页和多条件筛选
  * @param {string} novelId - 小说ID
@@ -301,52 +340,6 @@ router.delete('/:id', async (c) => {
     console.error('Failed to delete setting:', error)
     return c.json({ error: '删除设定失败', details: (error as Error).message }, 500)
   }
-})
-
-/**
- * GET /tree/:novelId - 获取树形结构的设定列表
- * @description 获取设定树形结构，按父子关系组织
- * @param {string} novelId - 小说ID
- * @returns {Object} { tree: Array, stats: Object, total: number }
- */
-router.get('/tree/:novelId', async (c) => {
-  const novelId = c.req.param('novelId')
-  const db = drizzle(c.env.DB)
-
-  // 查询所有未删除的设定
-  const allSettings = await db
-    .select()
-    .from(novelSettings)
-    .where(and(
-      eq(novelSettings.novelId, novelId),
-      sql`${novelSettings.deletedAt} IS NULL`
-    ))
-    .orderBy(novelSettings.type, novelSettings.sortOrder)
-    .all()
-
-  // 构建树形结构
-  const buildTree = (parentId: string | null = null): any[] => {
-    return allSettings
-      .filter(s => s.parentId === parentId)
-      .map(setting => ({
-        ...setting,
-        children: buildTree(setting.id),
-      }))
-  }
-
-  const tree = buildTree(null)
-
-  // 按 type 分组统计
-  const stats = allSettings.reduce((acc, s) => {
-    acc[s.type] = (acc[s.type] || 0) + 1
-    return acc
-  }, {} as Record<string, number>)
-
-  return c.json({
-    tree,
-    stats,
-    total: allSettings.length,
-  })
 })
 
 export { router as novelSettingsRouter }

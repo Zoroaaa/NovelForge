@@ -16,15 +16,25 @@ import {
 
 const router = new Hono<{ Bindings: Env }>()
 
+const RebuildSchema = z.object({
+  novelId: z.string().min(1),
+})
+
 /**
- * GET /:novelId - 获取实体树
- * @description 获取指定小说的完整实体树结构
+ * POST /rebuild - 重建实体索引
+ * @description 重新构建指定小说的实体索引
  * @param {string} novelId - 小说ID
- * @returns {Object} 实体树结构
+ * @returns {Object} 重建结果
+ * @throws {500} 重建失败
  */
-router.get('/:novelId', async (c) => {
-  const novelId = c.req.param('novelId')
-  const result = await getEntityTree(c.env, novelId)
+router.post('/rebuild', zValidator('json', RebuildSchema), async (c) => {
+  const { novelId } = c.req.valid('json')
+  const result = await rebuildEntityIndex(c.env, novelId)
+
+  if (!result.ok) {
+    return c.json({ error: result.message, details: result.error }, 500)
+  }
+
   return c.json(result)
 })
 
@@ -41,25 +51,15 @@ router.get('/:novelId/children/:parentId', async (c) => {
   return c.json({ children })
 })
 
-const RebuildSchema = z.object({
-  novelId: z.string().min(1),
-})
-
 /**
- * POST /rebuild - 重建实体索引
- * @description 重新构建指定小说的实体索引
+ * GET /:novelId - 获取实体树
+ * @description 获取指定小说的完整实体树结构
  * @param {string} novelId - 小说ID
- * @returns {Object} 重建结果
- * @throws {500} 重建失败
+ * @returns {Object} 实体树结构
  */
-router.post('/rebuild', zValidator('json', RebuildSchema), async (c) => {
-  const { novelId } = c.req.valid('json')
-  const result = await rebuildEntityIndex(c.env, novelId)
-  
-  if (!result.ok) {
-    return c.json({ error: result.message, details: result.error }, 500)
-  }
-  
+router.get('/:novelId', async (c) => {
+  const novelId = c.req.param('novelId')
+  const result = await getEntityTree(c.env, novelId)
   return c.json(result)
 })
 

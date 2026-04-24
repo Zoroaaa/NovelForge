@@ -43,6 +43,61 @@ router.get('/', async (c) => {
 })
 
 /**
+ * GET /:id/snapshots - 获取章节快照列表
+ * @description 获取章节的历史快照列表，用于版本恢复
+ * @param {string} id - 章节ID
+ * @returns {Object} { snapshots: Array<{ key, timestamp, preview }> }
+ * @throws {404} 章节不存在
+ */
+router.get('/:id/snapshots', async (c) => {
+  const id = c.req.param('id')
+  const db = drizzle(c.env.DB)
+
+  const chapter = await db.select({ snapshotKeys: t.snapshotKeys }).from(t).where(eq(t.id, id)).get()
+  if (!chapter) return c.json({ error: 'Chapter not found' }, 404)
+
+  const keys: string[] = chapter.snapshotKeys ? JSON.parse(chapter.snapshotKeys) : []
+  const snapshots = await Promise.all(
+    keys.map(async (key) => {
+      try {
+        const obj = await c.env.STORAGE.get(key)
+        if (!obj) return null
+        const content = await obj.text()
+        const match = key.match(/(\d+)\.txt$/)
+        const timestamp = match ? parseInt(match[1]) : 0
+        return { key, timestamp, preview: content.slice(0, 200) }
+      } catch { return null }
+    })
+  )
+  return c.json({ snapshots: snapshots.filter(Boolean) })
+})
+
+/**
+ * POST /:id/restore - 恢复章节快照
+ * @description 从历史快照恢复章节内容
+ * @param {string} id - 章节ID
+ * @param {string} key - 快照存储键
+ * @returns {Object} { ok: boolean, content: string }
+ * @throws {404} 章节或快照不存在
+ */
+router.post('/:id/restore', zValidator('json', z.object({ key: z.string() })), async (c) => {
+  const id = c.req.param('id')
+  const { key } = c.req.valid('json')
+  const db = drizzle(c.env.DB)
+
+  const chapter = await db.select().from(t).where(eq(t.id, id)).get()
+  if (!chapter) return c.json({ error: 'Chapter not found' }, 404)
+
+  const obj = await c.env.STORAGE.get(key)
+  if (!obj) return c.json({ error: 'Snapshot not found' }, 404)
+
+  const content = await obj.text()
+  await db.update(t).set({ content, updatedAt: Math.floor(Date.now() / 1e3) }).where(eq(t.id, id))
+
+  return c.json({ ok: true, content })
+})
+
+/**
  * GET /:id - 获取单个章节详情
  * @param {string} id - 章节ID
  * @returns {Object} 章节对象
@@ -128,61 +183,6 @@ router.delete('/:id', async (c) => {
     .where(eq(t.id, id))
 
   return c.json({ ok: true })
-})
-
-/**
- * GET /:id/snapshots - 获取章节快照列表
- * @description 获取章节的历史快照列表，用于版本恢复
- * @param {string} id - 章节ID
- * @returns {Object} { snapshots: Array<{ key, timestamp, preview }> }
- * @throws {404} 章节不存在
- */
-router.get('/:id/snapshots', async (c) => {
-  const id = c.req.param('id')
-  const db = drizzle(c.env.DB)
-
-  const chapter = await db.select({ snapshotKeys: t.snapshotKeys }).from(t).where(eq(t.id, id)).get()
-  if (!chapter) return c.json({ error: 'Chapter not found' }, 404)
-
-  const keys: string[] = chapter.snapshotKeys ? JSON.parse(chapter.snapshotKeys) : []
-  const snapshots = await Promise.all(
-    keys.map(async (key) => {
-      try {
-        const obj = await c.env.STORAGE.get(key)
-        if (!obj) return null
-        const content = await obj.text()
-        const match = key.match(/(\d+)\.txt$/)
-        const timestamp = match ? parseInt(match[1]) : 0
-        return { key, timestamp, preview: content.slice(0, 200) }
-      } catch { return null }
-    })
-  )
-  return c.json({ snapshots: snapshots.filter(Boolean) })
-})
-
-/**
- * POST /:id/restore - 恢复章节快照
- * @description 从历史快照恢复章节内容
- * @param {string} id - 章节ID
- * @param {string} key - 快照存储键
- * @returns {Object} { ok: boolean, content: string }
- * @throws {404} 章节或快照不存在
- */
-router.post('/:id/restore', zValidator('json', z.object({ key: z.string() })), async (c) => {
-  const id = c.req.param('id')
-  const { key } = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-
-  const chapter = await db.select().from(t).where(eq(t.id, id)).get()
-  if (!chapter) return c.json({ error: 'Chapter not found' }, 404)
-
-  const obj = await c.env.STORAGE.get(key)
-  if (!obj) return c.json({ error: 'Snapshot not found' }, 404)
-
-  const content = await obj.text()
-  await db.update(t).set({ content, updatedAt: Math.floor(Date.now() / 1e3) }).where(eq(t.id, id))
-
-  return c.json({ ok: true, content })
 })
 
 /**

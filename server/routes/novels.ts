@@ -67,6 +67,132 @@ router.get('/', zValidator('query', z.object({
 })
 
 /**
+ * GET /trash - 获取所有已删除的小说（全局回收站）
+ * @description 获取所有标记为删除的小说及其删除时间
+ * @returns {Object} { ok: boolean, novels: Array, total: number }
+ */
+router.get('/trash', async (c) => {
+  const db = drizzle(c.env.DB)
+
+  const deletedNovels = await db.select({
+    id: t.id,
+    title: t.title,
+    genre: t.genre,
+    status: t.status,
+    wordCount: t.wordCount,
+    chapterCount: t.chapterCount,
+    deletedAt: t.deletedAt,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+  })
+    .from(t)
+    .where(sql`${t.deletedAt} IS NOT NULL`)
+    .orderBy(desc(t.deletedAt))
+    .all()
+
+  return c.json({ ok: true, novels: deletedNovels, total: deletedNovels.length })
+})
+
+/**
+ * DELETE /trash - 永久删除小说及其所有关联数据
+ * @description 彻底删除小说本身，并级联清理所有关联数据
+ * @query {string} id - 小说ID
+ * @returns {Object} { ok: boolean, deleted: number }
+ */
+router.delete('/trash', async (c) => {
+  const novelId = c.req.query('id')
+  if (!novelId) {
+    return c.json({ error: 'Missing novel id' }, 400)
+  }
+
+  const db = drizzle(c.env.DB)
+
+  const deletedNovel = await db.select({ id: t.id }).from(t).where(and(eq(t.id, novelId), sql`${t.deletedAt} IS NOT NULL`)).get()
+  if (!deletedNovel) {
+    return c.json({ error: 'Novel not found in trash' }, 404)
+  }
+
+  let totalDeleted = 0
+
+  try {
+    await c.env.DB.prepare(
+      `DELETE FROM foreshadowing_progress WHERE foreshadowing_id IN (SELECT id FROM foreshadowing WHERE novel_id = ?)`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM foreshadowing WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM check_logs WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM generation_logs WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM exports WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM queue_task_logs WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM workshop_sessions WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM model_configs WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM entity_index WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM vector_index WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM chapters WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM volumes WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM characters WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM novel_settings WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM master_outline WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM writing_rules WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    const result = await c.env.DB.prepare(
+      `DELETE FROM novels WHERE id = ? AND deleted_at IS NOT NULL`
+    ).bind(novelId).run()
+
+    totalDeleted = result.meta.changes ?? 0
+
+    return c.json({ ok: true, deleted: totalDeleted })
+  } catch (e) {
+    console.error('[trash] Failed to permanently delete novel:', e)
+    return c.json({ error: '删除失败' }, 500)
+  }
+})
+
+/**
  * GET /:id - 获取单个小说详情
  * @param {string} id - 小说ID
  * @returns {Object} 小说对象
@@ -263,133 +389,6 @@ router.delete('/:id/trash', async (c) => {
   }
 
   return c.json({ ok: true, deleted: totalDeleted })
-})
-
-/**
- * GET /trash - 获取所有已删除的小说（全局回收站）
- * @description 获取所有标记为删除的小说及其删除时间
- * @returns {Object} { ok: boolean, novels: Array<{ id, title, deletedAt, ... }>, total: number }
- */
-router.get('/trash', async (c) => {
-  const db = drizzle(c.env.DB)
-
-  const deletedNovels = await db.select({
-    id: t.id,
-    title: t.title,
-    genre: t.genre,
-    status: t.status,
-    wordCount: t.wordCount,
-    chapterCount: t.chapterCount,
-    deletedAt: t.deletedAt,
-    createdAt: t.createdAt,
-    updatedAt: t.updatedAt,
-  })
-    .from(t)
-    .where(sql`${t.deletedAt} IS NOT NULL`)
-    .orderBy(desc(t.deletedAt))
-    .all()
-
-  return c.json({ ok: true, novels: deletedNovels, total: deletedNovels.length })
-})
-
-/**
- * DELETE /trash - 永久删除小说及其所有关联数据
- * @description 彻底删除小说本身，并级联清理所有关联数据
- * @param {string} id - 小说ID
- * @query {string} table - 可选，指定表名（chapters/characters/settings/outlines/volumes/foreshadowing/rules），不传则全部清除
- * @returns {Object} { ok: boolean, deleted: number }
- */
-router.delete('/trash', async (c) => {
-  const novelId = c.req.query('id')
-  if (!novelId) {
-    return c.json({ error: 'Missing novel id' }, 400)
-  }
-
-  const db = drizzle(c.env.DB)
-
-  const deletedNovel = await db.select({ id: t.id }).from(t).where(and(eq(t.id, novelId), sql`${t.deletedAt} IS NOT NULL`)).get()
-  if (!deletedNovel) {
-    return c.json({ error: 'Novel not found in trash' }, 404)
-  }
-
-  let totalDeleted = 0
-
-  try {
-    await c.env.DB.prepare(
-      `DELETE FROM foreshadowing_progress WHERE foreshadowing_id IN (SELECT id FROM foreshadowing WHERE novel_id = ?)`
-    ).bind(novelId).run()
-
-    await c.env.DB.prepare(
-      `DELETE FROM foreshadowing WHERE novel_id = ?`
-    ).bind(novelId).run()
-
-    await c.env.DB.prepare(
-      `DELETE FROM check_logs WHERE novel_id = ?`
-    ).bind(novelId).run()
-
-    await c.env.DB.prepare(
-      `DELETE FROM generation_logs WHERE novel_id = ?`
-    ).bind(novelId).run()
-
-    await c.env.DB.prepare(
-      `DELETE FROM exports WHERE novel_id = ?`
-    ).bind(novelId).run()
-
-    await c.env.DB.prepare(
-      `DELETE FROM queue_task_logs WHERE novel_id = ?`
-    ).bind(novelId).run()
-
-    await c.env.DB.prepare(
-      `DELETE FROM workshop_sessions WHERE novel_id = ?`
-    ).bind(novelId).run()
-
-    await c.env.DB.prepare(
-      `DELETE FROM model_configs WHERE novel_id = ?`
-    ).bind(novelId).run()
-
-    await c.env.DB.prepare(
-      `DELETE FROM entity_index WHERE novel_id = ?`
-    ).bind(novelId).run()
-
-    await c.env.DB.prepare(
-      `DELETE FROM vector_index WHERE novel_id = ?`
-    ).bind(novelId).run()
-
-    await c.env.DB.prepare(
-      `DELETE FROM chapters WHERE novel_id = ?`
-    ).bind(novelId).run()
-
-    await c.env.DB.prepare(
-      `DELETE FROM volumes WHERE novel_id = ?`
-    ).bind(novelId).run()
-
-    await c.env.DB.prepare(
-      `DELETE FROM characters WHERE novel_id = ?`
-    ).bind(novelId).run()
-
-    await c.env.DB.prepare(
-      `DELETE FROM novel_settings WHERE novel_id = ?`
-    ).bind(novelId).run()
-
-    await c.env.DB.prepare(
-      `DELETE FROM master_outline WHERE novel_id = ?`
-    ).bind(novelId).run()
-
-    await c.env.DB.prepare(
-      `DELETE FROM writing_rules WHERE novel_id = ?`
-    ).bind(novelId).run()
-
-    const result = await c.env.DB.prepare(
-      `DELETE FROM novels WHERE id = ? AND deleted_at IS NOT NULL`
-    ).bind(novelId).run()
-
-    totalDeleted = result.meta.changes ?? 0
-
-    return c.json({ ok: true, deleted: totalDeleted })
-  } catch (e) {
-    console.error('[trash] Failed to permanently delete novel:', e)
-    return c.json({ error: '删除失败' }, 500)
-  }
 })
 
 export { router as novels }

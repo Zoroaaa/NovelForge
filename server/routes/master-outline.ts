@@ -22,34 +22,6 @@ const CreateMasterOutlineSchema = z.object({
 })
 
 /**
- * GET /:novelId - 获取最新版本的总纲
- * @description 获取指定小说的最新版本总纲
- * @param {string} novelId - 小说ID
- * @returns {Object} { exists: boolean, outline?: Object }
- */
-router.get('/:novelId', async (c) => {
-  const novelId = c.req.param('novelId')
-  const db = drizzle(c.env.DB)
-
-  const outline = await db
-    .select()
-    .from(masterOutline)
-    .where(and(
-      eq(masterOutline.novelId, novelId),
-      sql`${masterOutline.deletedAt} IS NULL`
-    ))
-    .orderBy(desc(masterOutline.version))
-    .limit(1)
-    .get()
-
-  if (!outline) {
-    return c.json({ exists: false })
-  }
-
-  return c.json({ exists: true, outline })
-})
-
-/**
  * GET /:novelId/history - 获取所有历史版本
  * @description 获取指定小说的总纲历史版本列表
  * @param {string} novelId - 小说ID
@@ -77,6 +49,34 @@ router.get('/:novelId/history', async (c) => {
     .all()
 
   return c.json({ history })
+})
+
+/**
+ * GET /:novelId - 获取最新版本的总纲
+ * @description 获取指定小说的最新版本总纲
+ * @param {string} novelId - 小说ID
+ * @returns {Object} { exists: boolean, outline?: Object }
+ */
+router.get('/:novelId', async (c) => {
+  const novelId = c.req.param('novelId')
+  const db = drizzle(c.env.DB)
+
+  const outline = await db
+    .select()
+    .from(masterOutline)
+    .where(and(
+      eq(masterOutline.novelId, novelId),
+      sql`${masterOutline.deletedAt} IS NULL`
+    ))
+    .orderBy(desc(masterOutline.version))
+    .limit(1)
+    .get()
+
+  if (!outline) {
+    return c.json({ exists: false })
+  }
+
+  return c.json({ exists: true, outline })
 })
 
 /**
