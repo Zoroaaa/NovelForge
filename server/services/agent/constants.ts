@@ -20,14 +20,14 @@ export const ERROR_MESSAGES = {
   NEXT_CHAPTER_RESULT_INCOMPLETE: '生成结果不完整',
   NEXT_CHAPTER_PARSE_FAILED: '解析生成结果失败',
   NEXT_CHAPTER_API_ERROR: (status: number, text: string) => `API错误: ${status} ${text}`,
-  SETTING_SUMMARY_GENERATED: (name: string, length: number) => `✅ Setting summary generated for ${name} (${length} chars)`,
+  SETTING_SUMMARY_GENERATED: (name: string, length: number) => `Setting summary generated for ${name} (${length} chars)`,
   VECTORIZE_NOT_AVAILABLE: 'Vectorize service not available',
   QUERY_PARAM_REQUIRED: 'Query parameter is required',
   UNKNOWN_TOOL: (name: string) => `Unknown tool: ${name}. Available tools: queryOutline, queryCharacter, searchSemantic`,
-  SUMMARY_GENERATED: (chapterId: string, text: string) => `✅ Summary generated for chapter ${chapterId}: ${text.slice(0, 100)}`,
+  SUMMARY_GENERATED: (chapterId: string, text: string) => `Summary generated for chapter ${chapterId}: ${text.slice(0, 100)}`,
   SUMMARY_FAILED: 'Auto-summary failed (non-critical)',
   COHERENCE_CHECK_FAILED: 'Coherence check failed (non-critical)',
-  FORESHAWDOWING_EXTRACTION_FAILED: 'Foreshadowing extraction failed (non-critical)',
+  FORESHADOWING_EXTRACTION_FAILED: 'Foreshadowing extraction failed (non-critical)',
   POWER_LEVEL_DETECTION_FAILED: 'Power level detection failed (non-critical)',
 } as const
 
@@ -37,7 +37,7 @@ export const LOG_STYLES = {
   ERROR: (msg: string) => console.error(`❌ ${msg}`),
   INFO: (msg: string) => console.log(`ℹ️ ${msg}`),
   TOOL: (name: string, args?: any) => console.log(`🔧 ${name}`, args || ''),
-  ITERATION: (i: number, max: number, mode: string = 'Function Calling Mode') =>
+  ITERATION: (i: number, max: number, mode = 'Function Calling Mode') =>
     console.log(`🔄 第${i}轮迭代/${max} (${mode})`),
   ITERATION_COMPLETE: (i: number, contentLen: number, toolCalls: number) =>
     console.log(`✅ 第${i}轮完成 - 内容: ${contentLen} 字符, 工具调用: ${toolCalls} 次`),
@@ -49,7 +49,7 @@ export const LOG_STYLES = {
     console.warn(`⚠️ 达到最大迭代次数 (${max})，停止循环。总耗时: ${totalTime}ms`),
   MAX_TOTAL_TIME_EXCEEDED: (totalTime: number, iterations: number) =>
     console.warn(`⚠️ ReAct循环因总超时停止 (${totalTime}ms)。迭代次数: ${iterations}`),
-  FORESHAWDOWING_RESULT: (newCount: number, resolvedCount: number) =>
+  FORESHADOWING_RESULT: (newCount: number, resolvedCount: number) =>
     console.log(`📝 伏笔提取: ${newCount} 个新增, ${resolvedCount} 个已解决`),
   POWER_LEVEL_RESULT: (count: number) =>
     console.log(`⚡ 境界突破: 检测到 ${count} 个突破`),
@@ -85,13 +85,33 @@ export const AGENT_LABELS = {
   TOOL_USAGE_FORMAT: '使用方式：{"name": "工具名", "arguments": {...}}',
 } as const
 
-export const JSON_OUTPUT_PROMPT = '你是一个专业的JSON生成助手。请严格按照指定格式输出JSON，不要包含任何其他内容。'
+// ============================================================
+// LLM Prompt 常量（集中管理，避免各文件各写各的）
+// ============================================================
 
-export const SUMMARY_SYSTEM_PROMPT = `你是一个专业的文本摘要助手，擅长为小说内容生成简洁准确的摘要。
-你只输出摘要文本本身，不要输出任何解释、标题或格式标记。`
+/** 通用 JSON 输出系统提示 */
+export const JSON_OUTPUT_PROMPT =
+  '你是一个专业的JSON生成助手。请严格按照指定格式输出JSON，不要包含任何其他内容。'
 
-export const SETTING_SUMMARY_SYSTEM_PROMPT = `你是一个专业的小说世界观设定助手，擅长将冗长的设定描述精炼为语义丰富的短摘要。
-你只输出摘要文本本身（纯文本），不要输出任何解释、标题或格式标记。`
+/** 章节/总纲/卷摘要：通用摘要系统提示 */
+export const SUMMARY_SYSTEM_PROMPT =
+  '你是一个专业的文本摘要助手，擅长为小说内容生成简洁准确的摘要。只输出摘要文本本身，不要输出任何解释、标题或格式标记。'
+
+/** 设定摘要专用系统提示 */
+export const SETTING_SUMMARY_SYSTEM_PROMPT =
+  '你是一个专业的小说世界观设定助手，擅长将冗长的设定描述精炼为语义丰富的短摘要。只输出摘要文本本身（纯文本），不要输出任何解释、标题或格式标记。'
+
+/** 大纲批量生成系统提示 */
+export const OUTLINE_BATCH_SYSTEM_PROMPT =
+  '你是一个专业的小说大纲助手，擅长构建连贯的章节大纲序列。你只输出JSON，不要其他内容。'
+
+/** 下一章标题/摘要生成系统提示 */
+export const NEXT_CHAPTER_SYSTEM_PROMPT =
+  '你是一个专业的小说创作助手，擅长生成连贯的章节标题和摘要。你只输出JSON，不要其他内容。'
+
+// ============================================================
+// 字数与循环配置
+// ============================================================
 
 export const CHAPTER_GEN_DEFAULTS = {
   WORD_COUNT_MIN: 3000,

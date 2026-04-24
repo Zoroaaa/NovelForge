@@ -78,7 +78,7 @@ router.post('/session/:id/message', async (c) => {
 
   try {
     const body = await c.req.json()
-    const { message } = body
+    const { message, stage } = body
 
     if (!message || typeof message !== 'string') {
       return c.json({ ok: false, error: '消息内容不能为空' }, 400)
@@ -94,6 +94,7 @@ router.post('/session/:id/message', async (c) => {
       c.env,
       sessionId,
       message,
+      stage,
       (chunk) => {
         // 发送文本块
         const data = `data: ${JSON.stringify({ content: chunk })}\n\n`

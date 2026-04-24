@@ -223,7 +223,7 @@ export default function WorkshopPage() {
       const response = await fetch(`/api/workshop/session/${sessionId}/message`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ message: userMessage }),
+        body: JSON.stringify({ message: userMessage, stage }),
       })
 
       if (!response.ok) throw new Error('发送消息失败')
@@ -265,7 +265,7 @@ export default function WorkshopPage() {
                   return merged
                 })
               }
-              setMessages(prev => prev.map(m => (m.id === assistantId ? m : m)))
+              // removed: no-op setMessages that blocked extractedData re-render
             }
 
             if (data.type === 'error') {

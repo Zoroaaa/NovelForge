@@ -157,16 +157,17 @@ async function checkForeshadowingConsistency(
         )
 
         for (const fs of semanticTargets) {
-          const results = await searchSimilar(env.VECTORIZE, chapterVector, {
-            topK: 3,
-            filter: { sourceType: 'chapter' },
+          const fsVector = await embedText(env.AI, fs.description.slice(0, 500))
+          const results = await searchSimilar(env.VECTORIZE, fsVector, {
+            topK: 5,
+            filter: { sourceType: 'chapter', novelId },
           })
 
-          const hasSemanticMatch = results.length > 0 &&
-            results[0].score > 0.6 &&
-            results[0].metadata.sourceId === currentChapter.id
+          const hasMatch = results.some(
+            (r) => r.metadata.sourceId === currentChapter.id && r.score > 0.6
+          )
 
-          if (hasSemanticMatch) {
+          if (hasMatch) {
             semanticConfirmedIds.add(fs.id)
           } else if (fs.importance === 'high') {
             issues.push({

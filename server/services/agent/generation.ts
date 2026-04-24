@@ -108,10 +108,10 @@ export async function generateChapter(
       try {
         const foreshadowingResult = await extractForeshadowingFromChapter(env, chapterId, novelId)
         if (foreshadowingResult.newForeshadowing.length > 0 || foreshadowingResult.resolvedForeshadowingIds.length > 0) {
-          LOG_STYLES.FORESHAWDOWING_RESULT(foreshadowingResult.newForeshadowing.length, foreshadowingResult.resolvedForeshadowingIds.length)
+          LOG_STYLES.FORESHADOWING_RESULT(foreshadowingResult.newForeshadowing.length, foreshadowingResult.resolvedForeshadowingIds.length)
         }
       } catch (foreshadowError) {
-        LOG_STYLES.WARN(`${ERROR_MESSAGES.FORESHAWDOWING_EXTRACTION_FAILED}: ${foreshadowError}`)
+        LOG_STYLES.WARN(`${ERROR_MESSAGES.FORESHADOWING_EXTRACTION_FAILED}: ${foreshadowError}`)
         onToolCall({
           type: 'tool_call',
           name: 'postprocess_warning',

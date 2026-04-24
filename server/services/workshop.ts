@@ -457,6 +457,7 @@ export async function processWorkshopMessage(
   env: Env,
   sessionId: string,
   userMessage: string,
+  stageOverride: string | undefined,
   onChunk: (text: string) => void,
   onDone: (extractedData: WorkshopExtractedData) => void,
   onError: (error: Error) => void
@@ -474,15 +475,24 @@ export async function processWorkshopMessage(
     const messages: WorkshopMessage[] = JSON.parse(session.messages || '[]')
     const currentData: WorkshopExtractedData = JSON.parse(session.extractedData || '{}')
 
-    // 3. 添加用户消息到历史
+    // 3. 用前端传来的 stage 覆盖 DB 里的值（解决切换竞态）
+    const activeStage = stageOverride || session.stage
+    if (stageOverride && stageOverride !== session.stage) {
+      await db.update(workshopSessions)
+        .set({ stage: stageOverride, updatedAt: Math.floor(Date.now() / 1000) })
+        .where(eq(workshopSessions.id, sessionId))
+        .run()
+    }
+
+    // 4. 添加用户消息到历史
     messages.push({
       role: 'user',
       content: userMessage,
       timestamp: Date.now(),
     })
 
-    // 4. 构建系统 Prompt
-    const systemPrompt = buildSystemPrompt(session.stage, currentData)
+    // 4. 构建系统 Prompt（使用 activeStage）
+    const systemPrompt = buildSystemPrompt(activeStage, currentData)
 
     // 5. 构建 LLM 消息数组
     const llmMessages = [
@@ -554,7 +564,7 @@ export async function processWorkshopMessage(
       },
       onDone: async () => {
         // 8. 尝试从 AI 回复中提取结构化数据
-        const newExtractedData = extractStructuredData(fullResponse, session.stage, currentData)
+        const newExtractedData = extractStructuredData(fullResponse, activeStage, currentData)
 
         // 9. 更新占位消息为最终内容（而非push新消息）
         messages[messages.length - 1] = {
@@ -794,22 +804,176 @@ export async function commitWorkshopSession(
 // ============================================================
 
 function buildSystemPrompt(stage: string, currentData: WorkshopExtractedData): string {
-  const basePrompt = WORKSHOP_PROMPTS[stage as keyof typeof WORKSHOP_PROMPTS]
+  // 把已有数据序列化为只读上下文（AI 可以参考，但不能修改）
+  const readonlyCtx = buildReadonlyContext(stage, currentData)
 
-  if (!basePrompt) {
-    return WORKSHOP_PROMPTS.concept
+  const stagePrompts: Record<string, string> = {
+    concept: `你是专业的小说策划顾问。你正处于【概念构思】阶段。
+
+${readonlyCtx}
+
+## 你在本阶段的任务
+帮用户完善小说的基本概念：类型/流派、世界观背景、主角设定、核心冲突/爽点、预计篇幅、文风要求。
+每次提问不超过 2-3 个，保持自然对话。
+
+## 输出约束（严格执行）
+- 当信息足够时，输出如下 JSON 代码块进行汇总
+- ⛔ 禁止输出 worldSettings / characters / volumes 字段，这些属于其他阶段
+- ✅ 只允许输出以下字段：
+
+\`\`\`json
+{
+  "title": "小说标题",
+  "genre": "流派",
+  "description": "一句话简介",
+  "coreAppeal": ["核心爽点1", "核心爽点2"],
+  "targetWordCount": "预计总字数",
+  "targetChapters": "预计章节数",
+  "writingRules": [
+    {"category": "primary", "title": "核心主题", "content": "..."},
+    {"category": "style", "title": "文风要求", "content": "..."}
+  ]
+}
+\`\`\``,
+
+    worldbuild: `你是世界构建大师。你正处于【世界观构建】阶段。
+
+${readonlyCtx}
+
+## 你在本阶段的任务
+帮用户完善世界观：地理环境、力量体系、势力格局、历史背景、社会规则、特殊设定。
+先讨论关键设定点，收集足够信息后输出最终结构化文档。
+
+## 输出约束（严格执行）
+- ⛔ 禁止输出 title / genre / characters / volumes / writingRules 等字段
+- ✅ 只允许输出以下字段：
+
+\`\`\`json
+{
+  "worldSettings": [
+    {"type": "geography", "title": "地理环境", "content": "..."},
+    {"type": "power_system", "title": "力量体系", "content": "..."},
+    {"type": "forces", "title": "势力格局", "content": "..."},
+    {"type": "history", "title": "历史背景", "content": "..."},
+    {"type": "social_rules", "title": "社会规则", "content": "..."},
+    {"type": "special_settings", "title": "特殊设定", "content": "..."}
+  ]
+}
+\`\`\`
+
+注意：设定要自洽，输出的 worldSettings 是完整版本（替换旧版本，而非追加）。`,
+
+    character_design: `你是角色塑造专家。你正处于【角色设计】阶段。
+
+${readonlyCtx}
+
+## 你在本阶段的任务
+帮用户设计角色：主角（1-2人）、主要配角（3-5人）、反派（1-2人）。
+每个角色需要：姓名、性格、外貌、背景、目标、与其他角色的关系。
+
+## 输出约束（严格执行）
+- ⛔ 禁止输出 worldSettings / volumes / title / genre 等字段
+- ✅ 只允许输出以下字段：
+
+\`\`\`json
+{
+  "characters": [
+    {
+      "name": "角色名",
+      "role": "protagonist|supporting|antagonist",
+      "description": "详细描述...",
+      "attributes": {"key": "value"},
+      "relationships": ["与其他角色的关系"]
+    }
+  ]
+}
+\`\`\`
+
+注意：角色要立体，输出的 characters 是完整版本（替换旧版本）。`,
+
+    volume_outline: `你是故事架构师。你正处于【卷纲规划】阶段。
+
+${readonlyCtx}
+
+## 你在本阶段的任务
+帮用户将故事分成若干卷（建议 3-8 卷），为每卷制定：标题、主要事件线、关键转折点、伏笔安排、预计章节数。
+
+## 输出约束（严格执行）
+- ⛔ 禁止输出 worldSettings / characters / title / genre 等字段
+- ✅ 只允许输出以下字段：
+
+\`\`\`json
+{
+  "volumes": [
+    {
+      "title": "第一卷标题",
+      "outline": "本卷主要内容概述...",
+      "blueprint": "详细的情节蓝图...",
+      "chapterCount": 10,
+      "keyEvents": ["事件1", "事件2"],
+      "foreshadowingSetup": ["伏笔1"],
+      "foreshadowingResolve": []
+    }
+  ]
+}
+\`\`\`
+
+注意：每卷都要有明确冲突和高潮，输出的 volumes 是完整版本（替换旧版本）。`,
   }
 
-  // 替换模板变量
-  return basePrompt
-    .replace('{{concept_data}}', JSON.stringify({
-      title: currentData.title,
-      genre: currentData.genre,
-      description: currentData.description,
-    }, null, 2))
-    .replace('{{worldbuild_data}}', JSON.stringify(currentData.worldSettings || [], null, 2))
-    .replace('{{character_data}}', JSON.stringify(currentData.characters || [], null, 2))
-    .replace('{{volume_data}}', JSON.stringify(currentData.volumes || [], null, 2))
+  return stagePrompts[stage] || stagePrompts.concept
+}
+
+/**
+ * 构建只读上下文：当前阶段可以参考哪些已有数据，但不能修改
+ */
+function buildReadonlyContext(stage: string, data: WorkshopExtractedData): string {
+  const parts: string[] = ['## 当前已有数据（只读参考，禁止在 JSON 输出中修改这些字段）']
+
+  // concept 阶段：没有只读上下文（它是起点）
+  if (stage === 'concept') {
+    if (data.title || data.genre || data.description) {
+      parts.push(`### 已有概念信息\n${JSON.stringify({ title: data.title, genre: data.genre, description: data.description }, null, 2)}`)
+    } else {
+      return ''
+    }
+    return parts.join('\n')
+  }
+
+  // worldbuild 阶段：可以参考 concept 数据
+  if (stage === 'worldbuild') {
+    parts.push(`### 小说概念（只读）\n${JSON.stringify({ title: data.title, genre: data.genre, description: data.description, coreAppeal: data.coreAppeal }, null, 2)}`)
+    if (data.worldSettings?.length) {
+      parts.push(`### 已有世界观（本阶段可修改/完善，但必须完整输出替换版本）\n${JSON.stringify(data.worldSettings, null, 2)}`)
+    }
+    return parts.join('\n')
+  }
+
+  // character_design 阶段：可以参考 concept + worldbuild
+  if (stage === 'character_design') {
+    parts.push(`### 小说概念（只读）\n${JSON.stringify({ title: data.title, genre: data.genre, description: data.description }, null, 2)}`)
+    if (data.worldSettings?.length) {
+      parts.push(`### 世界观设定（只读）\n${JSON.stringify(data.worldSettings, null, 2)}`)
+    }
+    if (data.characters?.length) {
+      parts.push(`### 已有角色（本阶段可修改/完善，但必须完整输出替换版本）\n${JSON.stringify(data.characters, null, 2)}`)
+    }
+    return parts.join('\n')
+  }
+
+  // volume_outline 阶段：可以参考 concept + character
+  if (stage === 'volume_outline') {
+    parts.push(`### 小说概念（只读）\n${JSON.stringify({ title: data.title, genre: data.genre, description: data.description }, null, 2)}`)
+    if (data.characters?.length) {
+      parts.push(`### 角色设定（只读）\n${JSON.stringify(data.characters, null, 2)}`)
+    }
+    if (data.volumes?.length) {
+      parts.push(`### 已有卷纲（本阶段可修改/完善，但必须完整输出替换版本）\n${JSON.stringify(data.volumes, null, 2)}`)
+    }
+    return parts.join('\n')
+  }
+
+  return ''
 }
 
 function extractStructuredData(
