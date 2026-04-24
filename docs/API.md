@@ -20,6 +20,10 @@
   - [向量索引增强 (Vectorize)](#向量化索引-vectorize)
   - [上下文诊断 (Context)](#上下文诊断-context)
   - [综合检查 (Check)](#综合检查-check)
+- **v1.7.0 新增**
+  - [伏笔进度追踪 (Foreshadowing Progress)](#伏笔进度追踪-foreshadowing-progress)
+  - [工坊导入 (Workshop Import)](#工坊导入-workshop-import)
+  - [小说管理增强 (Novels Enhanced)](#小说管理增强-novels-enhanced)
 - [小说管理 (Novels)](#小说管理-novels)
 - [总纲管理 (Master Outline)](#总纲管理-master-outline)
 - [创作规则 (Writing Rules)](#创作规则-writing-rules)
@@ -738,6 +742,163 @@ data: {}
     ]
   },
   "hasIssues": true
+}
+```
+
+---
+
+## v1.7.0 新增 API
+
+### 伏笔进度追踪 (Foreshadowing Progress)
+
+> **需要认证**
+
+#### 获取伏笔进度列表
+
+**GET** `/api/foreshadowing/:novelId/progress`
+
+**响应示例**:
+```json
+{
+  "progress": [
+    {
+      "id": "fp123",
+      "foreshadowingId": "fs456",
+      "chapterId": "chap789",
+      "progress": 30,
+      "status": "in_progress",
+      "notes": "林风开始怀疑天雷珠的来历",
+      "createdAt": 1713763200,
+      "updatedAt": 1713763200
+    }
+  ]
+}
+```
+
+#### 更新伏笔进度
+
+**PUT** `/api/foreshadowing-progress/:id`
+
+**请求体**:
+```json
+{
+  "progress": 60,
+  "status": "in_progress",
+  "notes": "天雷珠之谜逐渐揭开"
+}
+```
+
+---
+
+### 工坊导入 (Workshop Import)
+
+> **需要认证**
+
+#### 导入工坊数据
+
+**POST** `/api/workshop-import`
+
+**请求体**:
+```json
+{
+  "novelId": "novel456",
+  "data": {
+    "title": "小说标题",
+    "genre": "玄幻",
+    "worldSettings": [...],
+    "characters": [...],
+    "volumes": [...]
+  }
+}
+```
+
+**响应示例**:
+```json
+{
+  "ok": true,
+  "message": "导入成功",
+  "novelId": "novel456",
+  "imported": {
+    "settings": 5,
+    "characters": 8,
+    "volumes": 3
+  }
+}
+```
+
+#### 格式化工坊导入
+
+**POST** `/api/workshop-format-import`
+
+**请求体**:
+```json
+{
+  "format": "json",
+  "data": {
+    "novel": {
+      "title": "混沌元尊",
+      "genre": "玄幻"
+    },
+    "characters": [...],
+    "settings": [...],
+    "outline": {...}
+  }
+}
+```
+
+**响应示例**:
+```json
+{
+  "ok": true,
+  "novelId": "new123",
+  "created": {
+    "novel": true,
+    "characters": 5,
+    "settings": 10
+  }
+}
+```
+
+---
+
+### 小说管理增强 (Novels Enhanced)
+
+> **需要认证**
+
+#### 获取小说统计
+
+**GET** `/api/novels/:id/stats`
+
+**响应示例**:
+```json
+{
+  "totalWordCount": 125000,
+  "totalChapterCount": 42,
+  "generatedChapterCount": 38,
+  "revisedChapterCount": 4,
+  "foreshadowingCount": 15,
+  "resolvedForeshadowingCount": 3,
+  "characterCount": 12
+}
+```
+
+#### 批量操作小说
+
+**POST** `/api/novels/batch`
+
+**请求体**:
+```json
+{
+  "action": "delete",
+  "novelIds": ["novel1", "novel2"]
+}
+```
+
+**响应示例**:
+```json
+{
+  "ok": true,
+  "affected": 2
 }
 ```
 
@@ -2117,6 +2278,6 @@ novel = client.novels.create(
 
 <div align="center">
 
-**API Version: 1.6.0**
+**API Version: 1.7.0**
 
 </div>

@@ -2,7 +2,7 @@
 
 ## 概述
 
-NovelForge 现已支持 MCP (Model Context Protocol)，允许 Claude Desktop 直接访问小说数据。此功能从 v1.4.0 版本开始提供。
+NovelForge 现已支持 MCP (Model Context Protocol)，允许 Claude Desktop 直接访问小说数据。此功能从 v1.4.0 版本开始提供，v1.7.0 版本增强了伏笔查询功能。
 
 ## 支持的 MCP 工具
 

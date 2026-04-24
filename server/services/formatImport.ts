@@ -340,21 +340,11 @@ export async function formatImportData(
 
   let llmConfig
   try {
-    if (db) {
-      const { drizzle } = await import('drizzle-orm/d1')
-      llmConfig = await resolveConfig(drizzle(db), 'workshop', novelId || '')
-    } else {
-      llmConfig = await resolveConfig(null as any, 'workshop', novelId || '')
-    }
+    llmConfig = await resolveConfig(db, 'workshop', novelId || '')
     llmConfig.apiKey = llmConfig.apiKey || ''
   } catch {
     try {
-      if (db) {
-        const { drizzle } = await import('drizzle-orm/d1')
-        llmConfig = await resolveConfig(drizzle(db), 'chapter_gen', novelId || '')
-      } else {
-        llmConfig = await resolveConfig(null as any, 'chapter_gen', novelId || '')
-      }
+      llmConfig = await resolveConfig(db, 'chapter_gen', novelId || '')
       llmConfig.apiKey = llmConfig.apiKey || ''
     } catch {
       result.parseStatus = 'error'

@@ -543,6 +543,23 @@ CREATE INDEX idx_queue_logs_novel ON queue_task_logs(novel_id, created_at DESC);
 CREATE INDEX idx_queue_logs_status ON queue_task_logs(status, created_at DESC);
 ```
 
+#### `foreshadowing_progress` - 伏笔进度追踪表（v1.7.0 新增）
+```sql
+CREATE TABLE foreshadowing_progress (
+  id TEXT PRIMARY KEY,
+  foreshadowing_id TEXT NOT NULL,
+  chapter_id TEXT,
+  progress INTEGER DEFAULT 0,    -- 进度百分比 0-100
+  status TEXT DEFAULT 'open',    -- open/in_progress/resolved
+  notes TEXT,                    -- 进度说明
+  created_at INTEGER,
+  updated_at INTEGER
+);
+
+CREATE INDEX idx_foreshadowing_progress_fid ON foreshadowing_progress(foreshadowing_id);
+CREATE INDEX idx_foreshadowing_progress_cid ON foreshadowing_progress(chapter_id);
+```
+
 #### `workshop_sessions` - 创意工坊会话表（v1.5.0 增强）
 ```sql
 CREATE TABLE workshop_sessions (
@@ -766,14 +783,17 @@ const results = await searchSimilar(vectorize, queryVector, {
 
 ---
 
-### 7. 伏笔追踪服务 (`/server/services/foreshadowing.ts`) (v2.0 新增)
+### 7. 伏笔追踪服务 (`/server/services/foreshadowing.ts`) (v2.0 新增，v1.7.0 增强)
 
-**职责**: 自动从章节内容中提取伏笔，追踪伏笔状态
+**职责**: 自动从章节内容中提取伏笔，追踪伏笔状态和进度
 
 **核心功能**:
 - `extractForeshadowingFromChapter()` - 从章节提取伏笔
+- `updateForeshadowingProgress()` - 更新伏笔进度 (v1.7.0 新增)
+- `getForeshadowingProgress()` - 获取伏笔进度详情 (v1.7.0 新增)
 - 自动检测已收尾的伏笔
 - 支持重要性分级（high/normal/low）
+- 进度追踪支持多章节分布收尾 (v1.7.0)
 
 **工作流程**:
 ```
@@ -813,9 +833,15 @@ interface PowerLevelData {
 
 ---
 
-### 9. 创意工坊服务 (`/server/services/workshop.ts`) (v1.5.0 新增)
+### 9. 创意工坊服务 (`/server/services/workshop.ts`) (v1.5.0 新增，v1.7.0 增强)
 
 **职责**: 多阶段对话式创作引擎，帮助作者从零开始构建小说框架
+
+**v1.7.0 增强**:
+- 工坊流程优化
+- 数据验证增强
+- 提交确认流程改进
+- 与 formatImport 服务集成
 
 **核心功能**:
 - `createSession()` - 创建新的创意会话
@@ -873,7 +899,24 @@ const STAGE_PROMPTS = {
 
 ---
 
-### 10. 认证与安全模块 (`/server/lib/auth.ts`) (v1.5.0 新增)
+### 10. 格式导入服务 (`/server/services/formatImport.ts`) (v1.7.0 新增)
+
+**职责**: 处理结构化工坊数据的导入和转换
+
+**核心功能**:
+- `importWorkshopData()` - 导入工坊数据
+- `importFormatData()` - 导入格式化工坊数据
+- `validateImportData()` - 数据验证
+- `rollbackImport()` - 错误回滚
+
+**支持的数据格式**:
+- JSON 格式工坊数据
+- 批量创建小说、角色、设定等
+- 数据验证和转换
+
+---
+
+### 11. 认证与安全模块 (`/server/lib/auth.ts`) (v1.5.0 新增)
 
 **职责**: 用户认证、密码安全、JWT 管理
 

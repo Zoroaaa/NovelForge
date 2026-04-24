@@ -21,11 +21,14 @@ router.post('/format-import', zValidator('json', formatImportSchema), async (c) 
     const body = c.req.valid('json')
     const { content, module, novelId } = body
 
+    const { drizzle } = await import('drizzle-orm/d1')
+    const db = drizzle(c.env.DB)
+
     const result = await formatImportData(
       content,
       module as ImportTargetModule,
       novelId,
-      c.env.DB
+      db
     )
 
     return c.json({

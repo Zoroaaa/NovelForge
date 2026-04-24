@@ -3,8 +3,8 @@
 <div align="center">
 
 ![NovelForge Logo](https://img.shields.io/badge/NovelForge-AI%20Writing%20Studio-blue?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-1.6.0-success?style=for-the-badge)
-![Phase](https://img.shields.io/badge/Phase-6%20Complete-success?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-1.7.0-success?style=for-the-badge)
+![Phase](https://img.shields.io/badge/Phase-7%20Complete-success?style=for-the-badge)
 ![Cloudflare](https://img.shields.io/badge/Cloudflare-Pages%2BWorkers-orange?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
@@ -240,6 +240,8 @@ Total: 12,000 tokens
 | **🗑️ 回收站** | 软删除数据查看 · 单条/批量永久删除 (v1.6.0 新增) |
 | **🛡️ 质量检查** | 角色一致性检查 · 章节连贯性检查 · 综合评分 (v1.6.0 新增) |
 | **⚡ 队列任务** | 异步索引重建 · 后台任务处理 · 任务日志追踪 (v1.6.0 新增) |
+| **📥 工坊导入** | 结构化数据导入 · 批量创建 · 数据验证 (v1.7.0 新增) |
+| **🪝 伏笔进度** | 伏笔收尾进度追踪 · 多章节分布 · 状态可视化 (v1.7.0 新增) |
 
 ---
 
