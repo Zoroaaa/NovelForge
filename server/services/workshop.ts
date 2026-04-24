@@ -42,7 +42,7 @@ export interface WorkshopExtractedData {
   targetWordCount?: string
   /** @description 预计章节数，可能是数字或描述性文本（如"约200章"） */
   targetChapters?: string
-  worldSettings?: Array<{ type: string; title: string; content: string }>
+  worldSettings?: Array<{ type: string; title: string; content: string; importance?: string }>
   masterOutline?: string
   characters?: Array<{
     name: string
@@ -58,6 +58,9 @@ export interface WorkshopExtractedData {
     outline: string
     blueprint: string
     chapterCount: number
+    summary?: string
+    eventLine?: string[]
+    notes?: string[]
     keyEvents?: string[]
     foreshadowingSetup?: string[]
     foreshadowingResolve?: string[]
