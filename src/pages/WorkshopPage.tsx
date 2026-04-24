@@ -549,21 +549,23 @@ export default function WorkshopPage() {
                   </p>
                 </div>
 
-                <div className="space-y-3 pt-4">
-                  <p className="text-sm font-medium text-left text-muted-foreground">创作流程：</p>
-                  {STAGES.map((s, idx) => (
-                    <div key={s.id} className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${
-                      idx === 0 
-                        ? 'bg-primary/5 border-primary/30 shadow-sm' 
-                        : 'bg-muted/30 border-transparent hover:border-border'
-                    }`}>
-                      <s.icon className={`h-5 w-5 mt-0.5 shrink-0 ${idx === 0 ? 'text-primary' : 'text-muted-foreground'}`} />
-                      <div className="text-left min-w-0">
-                        <p className="font-medium text-sm">{s.label}</p>
-                        <p className="text-xs text-muted-foreground">{s.description}</p>
+                <div className="pt-4">
+                  <p className="text-sm font-medium text-left text-muted-foreground mb-3">创作流程：</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {STAGES.map((s, idx) => (
+                      <div key={s.id} className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${
+                        idx === 0 
+                          ? 'bg-primary/5 border-primary/30 shadow-sm' 
+                          : 'bg-muted/30 border-transparent hover:border-border'
+                      }`}>
+                        <s.icon className={`h-5 w-5 mt-0.5 shrink-0 ${idx === 0 ? 'text-primary' : 'text-muted-foreground'}`} />
+                        <div className="text-left min-w-0">
+                          <p className="font-medium text-sm">{s.label}</p>
+                          <p className="text-xs text-muted-foreground">{s.description}</p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
 
                 <Button
