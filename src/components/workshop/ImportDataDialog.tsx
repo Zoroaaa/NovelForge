@@ -349,8 +349,9 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-hidden flex flex-col gap-4 min-h-0">
-          <div className="flex items-center gap-3 shrink-0">
+        <ScrollArea className="flex-1 min-h-0">
+        <div className="flex flex-col gap-4 pb-2" style={{ minHeight: 0 }}>
+          <div className="flex items-center gap-3 flex-shrink-0">
             <span className="text-sm font-medium shrink-0">导入到：</span>
             <Select value={selectedNovelId} onValueChange={setSelectedNovelId}>
               <SelectTrigger className="w-[200px]">
@@ -393,7 +394,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
             </Select>
           </div>
 
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'paste' | 'file')} className="flex-1 flex flex-col overflow-hidden">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'paste' | 'file')} className="flex-shrink-0 flex flex-col">
             <TabsList className="shrink-0">
               <TabsTrigger value="paste" className="gap-1.5">
                 <ClipboardPaste className="h-4 w-4" />
@@ -405,20 +406,20 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="paste" className="flex-1 flex flex-col overflow-hidden mt-2 min-h-0">
+            <TabsContent value="paste" className="mt-2">
               <Textarea
                 value={pastedContent}
                 onChange={(e) => setPastedContent(e.target.value)}
                 placeholder={`粘贴你的数据内容...\n\n支持的格式：\n- JSON 格式的结构化数据\n- Markdown 格式的文档\n- 纯文本内容\n\n示例（角色JSON）：\n{\n  "name": "张三",\n  "role": "protagonist",\n  "description": "主角..."\n}`}
-                className="flex-1 min-h-[200px] font-mono text-sm"
+                className="h-[180px] font-mono text-sm resize-none"
               />
             </TabsContent>
 
-            <TabsContent value="file" className="flex-1 flex flex-col overflow-hidden mt-2 min-h-0">
+            <TabsContent value="file" className="mt-2">
               <div
                 onDrop={handleDrop}
                 onDragOver={(e) => e.preventDefault()}
-                className="flex-1 border-2 border-dashed border-muted-foreground/25 rounded-lg flex flex-col items-center justify-center p-8 transition-colors hover:border-violet-400 hover:bg-violet-50/50 dark:hover:bg-violet-900/20 overflow-y-auto"
+                className="h-[180px] border-2 border-dashed border-muted-foreground/25 rounded-lg flex flex-col items-center justify-center p-4 transition-colors hover:border-violet-400 hover:bg-violet-50/50 dark:hover:bg-violet-900/20 overflow-y-auto"
               >
                 <input
                   type="file"
@@ -436,7 +437,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
                           <FileText className="h-5 w-5 text-violet-600" />
                           <span className="text-sm font-medium">已选择 {selectedFiles.length} 个文件</span>
                         </div>
-                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                        <div className="space-y-1 max-h-[88px] overflow-y-auto pr-1">
                           {selectedFiles.map((file, idx) => (
                             <div key={idx} className="flex items-center justify-between text-sm bg-muted/50 rounded px-2 py-1">
                               <span className="truncate">{file.name}</span>
@@ -486,7 +487,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
           </Button>
 
           {formattedPreview.length > 0 && (
-            <div className="flex-1 min-h-0 flex flex-col border rounded-lg overflow-hidden">
+            <div className="flex flex-col border rounded-lg overflow-hidden flex-shrink-0" style={{ maxHeight: '280px' }}>
               <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/50 shrink-0">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">解析预览 ({formattedPreview.length} 个文件)</span>
@@ -501,7 +502,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
                   <span className="text-xs text-muted-foreground">{formattedPreview[0].parseMessage}</span>
                 )}
               </div>
-              <ScrollArea className="flex-1 min-h-0">
+              <ScrollArea className="flex-1 overflow-y-auto">
                 <div className="p-4 space-y-4">
                   {formattedPreview.map((preview, idx) => (
                     <div key={idx} className="border rounded-lg p-3">
@@ -529,7 +530,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
                           </Select>
                         )}
                       </div>
-                      <pre className="text-xs font-mono whitespace-pre-wrap break-all bg-muted/50 p-2 rounded overflow-x-auto">
+                      <pre className="text-xs font-mono whitespace-pre-wrap break-all bg-muted/50 p-2 rounded overflow-x-auto max-h-[160px] overflow-y-auto">
                         {JSON.stringify(preview.data, null, 2)}
                       </pre>
                       {preview.parseMessage && (
@@ -542,6 +543,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
             </div>
           )}
         </div>
+        </ScrollArea>
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>
