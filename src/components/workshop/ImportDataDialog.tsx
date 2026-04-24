@@ -71,9 +71,9 @@ const MODULE_OPTIONS: { value: ImportTargetModule; label: string; icon: string; 
 export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: ImportDataDialogProps) {
   const [activeTab, setActiveTab] = useState<'paste' | 'file'>('paste')
   const [pastedContent, setPastedContent] = useState('')
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [targetModule, setTargetModule] = useState<ImportTargetModule>('chapter')
-  const [formattedPreview, setFormattedPreview] = useState<FormattedImportData | null>(null)
+  const [formattedPreview, setFormattedPreview] = useState<FormattedImportData[]>([])
   const [selectedNovelId, setSelectedNovelId] = useState<string>('')
 
   const { data: novels = [] } = useQuery({
@@ -116,7 +116,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
       return res.json() as Promise<FormattedImportData>
     },
     onSuccess: (data) => {
-      setFormattedPreview(data)
+      setFormattedPreview([data])
       toast.success('数据解析完成，请确认导入')
     },
     onError: (error) => {
@@ -125,7 +125,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
   })
 
   const importMutation = useMutation({
-    mutationFn: async (params: { module: string; data: Record<string, unknown>; novelId: string }) => {
+    mutationFn: async (params: { module: string; data: Record<string, unknown> | Record<string, unknown>[]; novelId: string }) => {
       const token = getToken()
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -143,9 +143,6 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
     onSuccess: (data) => {
       if (data.ok) {
         toast.success(data.message || '数据导入成功')
-        if (onImportSuccess && formattedPreview) {
-          onImportSuccess(formattedPreview)
-        }
         handleClose()
       } else {
         toast.error(data.error || '导入失败')
@@ -157,36 +154,63 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
   })
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setSelectedFile(file)
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        const content = event.target?.result as string
-        setPastedContent(content)
+    const files = Array.from(e.target.files || [])
+    if (files.length > 0) {
+      setSelectedFiles(files)
+      if (files.length === 1) {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          const content = event.target?.result as string
+          setPastedContent(content)
+        }
+        reader.readAsText(files[0])
+      } else {
+        Promise.all(files.map(file => {
+          return new Promise<string>((resolve) => {
+            const reader = new FileReader()
+            reader.onload = (event) => resolve(event.target?.result as string)
+            reader.readAsText(file)
+          })
+        })).then(contents => {
+          setPastedContent(contents.join('\n\n--- 文件分割线 ---\n\n'))
+        })
       }
-      reader.readAsText(file)
     }
   }, [])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
-    const file = e.dataTransfer.files?.[0]
-    if (file) {
-      const validTypes = ['.json', '.txt', '.md', '.markdown']
+    const files = Array.from(e.dataTransfer.files)
+    const validFiles = files.filter(file => {
       const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
-      if (!validTypes.includes(ext)) {
-        toast.error('仅支持 JSON、TXT、MD 格式文件')
-        return
+      return ['.json', '.txt', '.md', '.markdown'].includes(ext)
+    })
+    if (validFiles.length > 0) {
+      if (validFiles.length === 1) {
+        setSelectedFiles(validFiles)
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          const content = event.target?.result as string
+          setPastedContent(content)
+          setActiveTab('file')
+        }
+        reader.readAsText(validFiles[0])
+      } else {
+        setSelectedFiles(prev => [...prev, ...validFiles])
+        Promise.all(validFiles.map(file => {
+          return new Promise<string>((resolve) => {
+            const reader = new FileReader()
+            reader.onload = (event) => resolve(event.target?.result as string)
+            reader.readAsText(file)
+          })
+        })).then(contents => {
+          setPastedContent(prev => prev + '\n\n--- 文件分割线 ---\n\n' + contents.join('\n\n--- 文件分割线 ---\n\n'))
+          setActiveTab('file')
+        })
       }
-      setSelectedFile(file)
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        const content = event.target?.result as string
-        setPastedContent(content)
-        setActiveTab('file')
-      }
-      reader.readAsText(file)
+    }
+    if (files.length !== validFiles.length) {
+      toast.error('部分文件格式不支持，已过滤')
     }
   }, [])
 
@@ -195,23 +219,74 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
       toast.error('请先导入数据')
       return
     }
-    formatMutation.mutate(pastedContent)
+
+    const contents = pastedContent.split(/\n\n--- 文件分割线 ---\n\n/).filter(c => c.trim())
+
+    setFormattedPreview([])
+
+    if (contents.length === 1) {
+      formatMutation.mutate(contents[0])
+    } else {
+      Promise.all(contents.map(content => formatMutation.mutateAsync(content)))
+        .then(results => {
+          setFormattedPreview(results)
+          toast.success(`已解析 ${results.length} 个文件`)
+        })
+        .catch(() => {
+          toast.error('部分文件解析失败')
+        })
+    }
   }, [pastedContent, formatMutation])
 
   const handleConfirmImport = useCallback(() => {
-    if (formattedPreview && selectedNovelId) {
+    if (formattedPreview.length === 0 || !selectedNovelId) return
+
+    if (formattedPreview.length === 1) {
       importMutation.mutate({
-        module: formattedPreview.module,
-        data: formattedPreview.data,
+        module: formattedPreview[0].module,
+        data: formattedPreview[0].data,
         novelId: selectedNovelId,
+      })
+    } else {
+      const successfulImports = formattedPreview.filter(p => p.parseStatus !== 'error')
+      const moduleGroups: Record<string, FormattedImportData[]> = {}
+
+      for (const preview of successfulImports) {
+        if (!moduleGroups[preview.module]) {
+          moduleGroups[preview.module] = []
+        }
+        moduleGroups[preview.module].push(preview)
+      }
+
+      Promise.all(
+        Object.entries(moduleGroups).map(([module, items]) => {
+          if (items.length === 1) {
+            return importMutation.mutateAsync({
+              module,
+              data: items[0].data,
+              novelId: selectedNovelId,
+            })
+          } else {
+            return importMutation.mutateAsync({
+              module,
+              data: items.map(i => i.data),
+              novelId: selectedNovelId,
+            })
+          }
+        })
+      ).then(() => {
+        toast.success(`成功导入 ${successfulImports.length} 条数据`)
+        handleClose()
+      }).catch(() => {
+        toast.error('部分数据导入失败')
       })
     }
   }, [formattedPreview, selectedNovelId, importMutation])
 
   const handleClose = () => {
     setPastedContent('')
-    setSelectedFile(null)
-    setFormattedPreview(null)
+    setSelectedFiles([])
+    setFormattedPreview([])
     setActiveTab('paste')
     setSelectedNovelId('')
     onOpenChange(false)
@@ -301,26 +376,32 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
               <div
                 onDrop={handleDrop}
                 onDragOver={(e) => e.preventDefault()}
-                className="flex-1 border-2 border-dashed border-muted-foreground/25 rounded-lg flex flex-col items-center justify-center p-8 transition-colors hover:border-violet-400 hover:bg-violet-50/50 dark:hover:bg-violet-900/20"
+                className="flex-1 border-2 border-dashed border-muted-foreground/25 rounded-lg flex flex-col items-center justify-center p-8 transition-colors hover:border-violet-400 hover:bg-violet-50/50 dark:hover:bg-violet-900/20 overflow-y-auto"
               >
                 <input
                   type="file"
                   id="file-input"
                   accept=".json,.txt,.md,.markdown"
                   onChange={handleFileSelect}
+                  multiple
                   className="hidden"
                 />
                 <label htmlFor="file-input" className="cursor-pointer flex flex-col items-center gap-3">
-                  {selectedFile ? (
+                  {selectedFiles.length > 0 ? (
                     <>
-                      <div className="w-16 h-16 rounded-xl bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center">
-                        <FileText className="h-8 w-8 text-violet-600" />
-                      </div>
-                      <div className="text-center">
-                        <p className="font-medium">{selectedFile.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {(selectedFile.size / 1024).toFixed(1)} KB
-                        </p>
+                      <div className="w-full max-w-md">
+                        <div className="flex items-center gap-2 mb-2">
+                          <FileText className="h-5 w-5 text-violet-600" />
+                          <span className="text-sm font-medium">已选择 {selectedFiles.length} 个文件</span>
+                        </div>
+                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                          {selectedFiles.map((file, idx) => (
+                            <div key={idx} className="flex items-center justify-between text-sm bg-muted/50 rounded px-2 py-1">
+                              <span className="truncate">{file.name}</span>
+                              <span className="text-xs text-muted-foreground ml-2">{(file.size / 1024).toFixed(1)} KB</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                       <Button variant="outline" size="sm" className="mt-2">
                         重新选择文件
@@ -334,7 +415,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
                       <div className="text-center">
                         <p className="font-medium">拖拽文件到此处，或点击选择</p>
                         <p className="text-sm text-muted-foreground mt-1">
-                          支持 .json, .txt, .md, .markdown 格式
+                          支持 .json, .txt, .md, .markdown 格式，可多选
                         </p>
                       </div>
                     </>
@@ -362,24 +443,48 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
             )}
           </Button>
 
-          {formattedPreview && (
+          {formattedPreview.length > 0 && (
             <div className="flex-1 min-h-0 flex flex-col border rounded-lg overflow-hidden">
               <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/50 shrink-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">解析预览</span>
-                  {getParseStatusIcon(formattedPreview.parseStatus)}
-                  <Badge variant="outline" className="text-xs">
-                    {MODULE_OPTIONS.find((m) => m.value === formattedPreview.module)?.label}
-                  </Badge>
+                  <span className="text-sm font-medium">解析预览 ({formattedPreview.length} 个文件)</span>
+                  {formattedPreview.length === 1 && getParseStatusIcon(formattedPreview[0].parseStatus)}
+                  {formattedPreview.length > 1 && (
+                    <Badge variant="outline" className="text-xs">
+                      {formattedPreview.filter(p => p.parseStatus === 'success').length}/{formattedPreview.length} 成功
+                    </Badge>
+                  )}
                 </div>
-                {formattedPreview.parseMessage && (
-                  <span className="text-xs text-muted-foreground">{formattedPreview.parseMessage}</span>
+                {formattedPreview.length === 1 && formattedPreview[0].parseMessage && (
+                  <span className="text-xs text-muted-foreground">{formattedPreview[0].parseMessage}</span>
                 )}
               </div>
               <ScrollArea className="flex-1 min-h-0">
-                <pre className="p-4 text-xs font-mono whitespace-pre-wrap break-all">
-                  {JSON.stringify(formattedPreview.data, null, 2)}
-                </pre>
+                {formattedPreview.length === 1 ? (
+                  <pre className="p-4 text-xs font-mono whitespace-pre-wrap break-all">
+                    {JSON.stringify(formattedPreview[0].data, null, 2)}
+                  </pre>
+                ) : (
+                  <div className="p-4 space-y-4">
+                    {formattedPreview.map((preview, idx) => (
+                      <div key={idx} className="border rounded-lg p-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-sm font-medium">文件 {idx + 1}</span>
+                          {getParseStatusIcon(preview.parseStatus)}
+                          <Badge variant="outline" className="text-xs">
+                            {MODULE_OPTIONS.find((m) => m.value === preview.module)?.label}
+                          </Badge>
+                        </div>
+                        <pre className="text-xs font-mono whitespace-pre-wrap break-all bg-muted/50 p-2 rounded max-h-40 overflow-y-auto">
+                          {JSON.stringify(preview.data, null, 2)}
+                        </pre>
+                        {preview.parseMessage && (
+                          <p className="text-xs text-muted-foreground mt-1">{preview.parseMessage}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </ScrollArea>
             </div>
           )}
@@ -391,7 +496,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
           </Button>
           <Button
             onClick={handleConfirmImport}
-            disabled={!formattedPreview || !selectedNovelId || importMutation.isPending}
+            disabled={formattedPreview.length === 0 || !selectedNovelId || importMutation.isPending}
           >
             {importMutation.isPending ? (
               <>
