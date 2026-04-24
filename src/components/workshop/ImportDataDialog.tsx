@@ -47,7 +47,7 @@ export type ImportTargetModule =
 
 export interface FormattedImportData {
   module: ImportTargetModule
-  data: Record<string, unknown>
+  data: Record<string, unknown> | Record<string, unknown>[]
   rawContent: string
   parseStatus: 'success' | 'warning' | 'error'
   parseMessage?: string
@@ -76,6 +76,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
   const [formattedPreview, setFormattedPreview] = useState<FormattedImportData[]>([])
   const [selectedNovelId, setSelectedNovelId] = useState<string>('')
   const [importMode, setImportMode] = useState<'create' | 'update' | 'upsert'>('upsert')
+  const [selectedUpdateIds, setSelectedUpdateIds] = useState<Record<number, string>>({})
 
   const { data: novels = [] } = useQuery({
     queryKey: ['novels-for-import'],
@@ -96,6 +97,20 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
       setSelectedNovelId(novels[0].id)
     }
   }, [novels, selectedNovelId])
+
+  const { data: existingItems = [] } = useQuery({
+    queryKey: ['existing-items', targetModule, selectedNovelId],
+    queryFn: async () => {
+      const token = getToken()
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const res = await fetch(`/api/workshop-import/list/${targetModule}?novelId=${selectedNovelId}`, { headers })
+      if (!res.ok) return []
+      const result = await res.json()
+      return result.items || []
+    },
+    enabled: open && importMode === 'update' && !!selectedNovelId,
+  })
 
   const formatMutation = useMutation({
     mutationFn: async (content: string) => {
@@ -126,7 +141,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
   })
 
   const importMutation = useMutation({
-    mutationFn: async (params: { module: string; data: Record<string, unknown> | Record<string, unknown>[]; novelId: string; importMode: string }) => {
+    mutationFn: async (params: { module: string; data: Record<string, unknown>; novelId: string; importMode: string }) => {
       const token = getToken()
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -242,55 +257,67 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
   const handleConfirmImport = useCallback(() => {
     if (formattedPreview.length === 0 || !selectedNovelId) return
 
-    if (formattedPreview.length === 1) {
+    const successfulImports = formattedPreview.filter(p => p.parseStatus !== 'error')
+
+    const flatData: Array<{ idx: number; module: string; data: Record<string, unknown> }> = []
+
+    const flatten = (arr: unknown[], originalIdx: number, module: string) => {
+      for (const item of arr) {
+        if (Array.isArray(item)) {
+          flatten(item, originalIdx, module)
+        } else if (item && typeof item === 'object') {
+          flatData.push({ idx: originalIdx, module, data: item as Record<string, unknown> })
+        }
+      }
+    }
+
+    for (const preview of successfulImports) {
+      const originalIdx = formattedPreview.indexOf(preview)
+      if (Array.isArray(preview.data)) {
+        flatten(preview.data, originalIdx, preview.module)
+      } else {
+        flatData.push({ idx: originalIdx, module: preview.module, data: preview.data })
+      }
+    }
+
+    if (flatData.length === 1) {
+      const item = flatData[0]
+      const data = importMode === 'update' && selectedUpdateIds[item.idx]
+        ? { ...item.data, id: selectedUpdateIds[item.idx] }
+        : item.data
       importMutation.mutate({
-        module: formattedPreview[0].module,
-        data: formattedPreview[0].data,
+        module: item.module,
+        data,
         novelId: selectedNovelId,
         importMode,
       })
     } else {
-      const successfulImports = formattedPreview.filter(p => p.parseStatus !== 'error')
-      const moduleGroups: Record<string, FormattedImportData[]> = {}
-
-      for (const preview of successfulImports) {
-        if (!moduleGroups[preview.module]) {
-          moduleGroups[preview.module] = []
-        }
-        moduleGroups[preview.module].push(preview)
-      }
-
       Promise.all(
-        Object.entries(moduleGroups).map(([module, items]) => {
-          if (items.length === 1) {
-            return importMutation.mutateAsync({
-              module,
-              data: items[0].data,
-              novelId: selectedNovelId,
-              importMode,
-            })
-          } else {
-            return importMutation.mutateAsync({
-              module,
-              data: items.map(i => i.data),
-              novelId: selectedNovelId,
-              importMode,
-            })
-          }
+        flatData.map((item, idx) => {
+          const data = importMode === 'update' && selectedUpdateIds[item.idx]
+            ? { ...item.data, id: selectedUpdateIds[item.idx] }
+            : item.data
+          return importMutation.mutateAsync({
+            module: item.module,
+            data,
+            novelId: selectedNovelId,
+            importMode,
+          })
         })
       ).then(() => {
-        toast.success(`成功导入 ${successfulImports.length} 条数据`)
+        toast.success(`成功导入 ${flatData.length} 条数据`)
         handleClose()
       }).catch(() => {
         toast.error('部分数据导入失败')
       })
     }
-  }, [formattedPreview, selectedNovelId, importMode, importMutation])
+  }, [formattedPreview, selectedNovelId, importMode, importMutation, selectedUpdateIds])
 
   const handleClose = () => {
     setPastedContent('')
     setSelectedFiles([])
     setFormattedPreview([])
+    setSelectedUpdateIds({})
     setActiveTab('paste')
     setSelectedNovelId('')
     onOpenChange(false)
@@ -322,8 +349,8 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-hidden flex flex-col gap-4">
-          <div className="flex items-center gap-3">
+        <div className="flex-1 overflow-hidden flex flex-col gap-4 min-h-0">
+          <div className="flex items-center gap-3 shrink-0">
             <span className="text-sm font-medium shrink-0">导入到：</span>
             <Select value={selectedNovelId} onValueChange={setSelectedNovelId}>
               <SelectTrigger className="w-[200px]">
@@ -378,7 +405,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="paste" className="flex-1 flex flex-col overflow-hidden mt-2">
+            <TabsContent value="paste" className="flex-1 flex flex-col overflow-hidden mt-2 min-h-0">
               <Textarea
                 value={pastedContent}
                 onChange={(e) => setPastedContent(e.target.value)}
@@ -387,7 +414,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
               />
             </TabsContent>
 
-            <TabsContent value="file" className="flex-1 flex flex-col overflow-hidden mt-2">
+            <TabsContent value="file" className="flex-1 flex flex-col overflow-hidden mt-2 min-h-0">
               <div
                 onDrop={handleDrop}
                 onDragOver={(e) => e.preventDefault()}
@@ -478,14 +505,31 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
                 <div className="p-4 space-y-4">
                   {formattedPreview.map((preview, idx) => (
                     <div key={idx} className="border rounded-lg p-3">
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <span className="text-sm font-medium">文件 {idx + 1}</span>
                         {getParseStatusIcon(preview.parseStatus)}
                         <Badge variant="outline" className="text-xs">
                           {MODULE_OPTIONS.find((m) => m.value === preview.module)?.label}
                         </Badge>
+                        {importMode === 'update' && existingItems.length > 0 && (
+                          <Select
+                            value={selectedUpdateIds[idx] || ''}
+                            onValueChange={(value) => setSelectedUpdateIds(prev => ({ ...prev, [idx]: value }))}
+                          >
+                            <SelectTrigger className="w-[180px] h-7 text-xs">
+                              <SelectValue placeholder="选择要更新的记录" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {existingItems.map((item: any) => (
+                                <SelectItem key={item.id} value={item.id}>
+                                  {item.name || item.title || `ID: ${item.id.slice(0, 8)}`}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
                       </div>
-                      <pre className="text-xs font-mono whitespace-pre-wrap break-all bg-muted/50 p-2 rounded max-h-40 overflow-y-auto">
+                      <pre className="text-xs font-mono whitespace-pre-wrap break-all bg-muted/50 p-2 rounded overflow-x-auto">
                         {JSON.stringify(preview.data, null, 2)}
                       </pre>
                       {preview.parseMessage && (

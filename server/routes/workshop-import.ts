@@ -37,6 +37,114 @@ type ImportResult = {
   existed: boolean
 }
 
+router.get('/list/:module', zValidator('param', z.object({
+  module: z.enum(['chapter', 'volume', 'setting', 'character', 'rule', 'foreshadowing']),
+})), zValidator('query', z.object({
+  novelId: z.string().min(1),
+})), async (c) => {
+  const db = drizzle(c.env.DB)
+  const { module } = c.req.valid('param')
+  const { novelId } = c.req.valid('query')
+
+  try {
+    let items: any[] = []
+
+    switch (module) {
+      case 'character':
+        items = await db.select({
+          id: characters.id,
+          name: characters.name,
+          role: characters.role,
+          description: characters.description,
+        })
+        .from(characters)
+        .where(and(
+          eq(characters.novelId, novelId),
+          eq(characters.deletedAt, null as any)
+        ))
+        .all()
+        break
+
+      case 'volume':
+        items = await db.select({
+          id: volumes.id,
+          title: volumes.title,
+          blueprint: volumes.blueprint,
+          status: volumes.status,
+        })
+        .from(volumes)
+        .where(and(
+          eq(volumes.novelId, novelId),
+          eq(volumes.deletedAt, null as any)
+        ))
+        .all()
+        break
+
+      case 'chapter':
+        items = await db.select({
+          id: chapters.id,
+          title: chapters.title,
+          status: chapters.status,
+          wordCount: chapters.wordCount,
+        })
+        .from(chapters)
+        .where(eq(chapters.novelId, novelId))
+        .all()
+        break
+
+      case 'setting':
+        items = await db.select({
+          id: novelSettings.id,
+          name: novelSettings.name,
+          type: novelSettings.type,
+          category: novelSettings.category,
+        })
+        .from(novelSettings)
+        .where(and(
+          eq(novelSettings.novelId, novelId),
+          eq(novelSettings.deletedAt, null as any)
+        ))
+        .all()
+        break
+
+      case 'rule':
+        items = await db.select({
+          id: writingRules.id,
+          title: writingRules.title,
+          category: writingRules.category,
+          content: writingRules.content,
+        })
+        .from(writingRules)
+        .where(and(
+          eq(writingRules.novelId, novelId),
+          eq(writingRules.deletedAt, null as any)
+        ))
+        .all()
+        break
+
+      case 'foreshadowing':
+        items = await db.select({
+          id: foreshadowing.id,
+          title: foreshadowing.title,
+          status: foreshadowing.status,
+          importance: foreshadowing.importance,
+        })
+        .from(foreshadowing)
+        .where(eq(foreshadowing.novelId, novelId))
+        .all()
+        break
+
+      default:
+        return c.json({ ok: false, error: 'Invalid module' }, 400)
+    }
+
+    return c.json({ ok: true, items })
+  } catch (error) {
+    console.error('List items failed:', error)
+    return c.json({ ok: false, error: (error as Error).message }, 500)
+  }
+})
+
 router.post('/import', zValidator('json', importDataSchema), async (c) => {
   const db = drizzle(c.env.DB)
 
@@ -478,16 +586,6 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
       error: (error as Error).message,
     }, 500)
   }
-})
-
-router.post('/import-batch', zValidator('json', z.object({
-  module: z.enum(['chapter', 'volume', 'setting', 'character', 'rule', 'foreshadowing']),
-  data: z.array(z.record(z.string(), z.unknown())),
-  novelId: z.string().min(1, 'novelId 不能为空'),
-  importMode: z.enum(['create', 'update', 'upsert']).default('upsert'),
-})), async (c) => {
-  const body = c.req.valid('json')
-  return c.json({ ...body, ok: true, message: '请使用 /import 接口' })
 })
 
 export { router as workshopImport }
