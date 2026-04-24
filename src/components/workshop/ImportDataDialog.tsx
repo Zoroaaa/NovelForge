@@ -363,8 +363,8 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
           </Button>
 
           {formattedPreview && (
-            <div className="flex-1 overflow-hidden flex flex-col border rounded-lg">
-              <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/50">
+            <div className="flex-1 min-h-0 flex flex-col border rounded-lg overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/50 shrink-0">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">解析预览</span>
                   {getParseStatusIcon(formattedPreview.parseStatus)}
@@ -376,7 +376,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
                   <span className="text-xs text-muted-foreground">{formattedPreview.parseMessage}</span>
                 )}
               </div>
-              <ScrollArea className="flex-1">
+              <ScrollArea className="flex-1 min-h-0">
                 <pre className="p-4 text-xs font-mono whitespace-pre-wrap break-all">
                   {JSON.stringify(formattedPreview.data, null, 2)}
                 </pre>
