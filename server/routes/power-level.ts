@@ -501,7 +501,7 @@ router.post('/apply-suggestion', zValidator('json', ApplySuggestionSchema), asyn
   }
 
   const previousCurrent = (existingData.current as string) || ''
-  const updatedData = {
+  const updatedData: Record<string, unknown> = {
     ...existingData,
     system: suggestedSystem || (existingData.system as string) || '未知体系',
     current: suggestedCurrent,
