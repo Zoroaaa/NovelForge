@@ -61,7 +61,7 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
 
 你的任务：
 1. 识别输入的内容属于哪种设定类型
-2. 提取关键信息：类型(type)、名称(name)、详细描述(content)
+2. 提取关键信息：类型(type)、名称(name)、详细描述(content)、重要程度(importance)
 3. 返回标准化的 JSON 格式：
 
 \`\`\`json
@@ -94,7 +94,7 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
 
 你的任务：
 1. 识别输入的格式
-2. 提取关键信息：姓名(name)、角色定位(role)、详细描述(description)、属性(attributes)
+2. 提取关键信息：姓名(name)、角色定位(role)、详细描述(description)、别名(aliases)、属性(attributes)、战斗力(powerLevel)
 3. 返回标准化的 JSON 格式：
 
 \`\`\`json
@@ -176,7 +176,7 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
 
 你的任务：
 1. 识别输入的格式
-2. 提取关键信息：卷标题(title)、卷概要(summary)、详细蓝图(blueprint)、事件线(eventLine)、备注(notes)
+2. 提取关键信息：卷标题(title)、卷概要(summary)、详细蓝图(blueprint)、事件线(eventLine)、备注(notes)、预计章节数(chapterCount)
 3. 返回标准化的 JSON 格式：
 
 \`\`\`json

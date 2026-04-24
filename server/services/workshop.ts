@@ -24,260 +24,6 @@ const {
 } = schema
 
 // ============================================================
-// Phase 3.2: 分层 Prompt 体系
-// ============================================================
-
-export const WORKSHOP_PROMPTS = {
-  /**
-   * 阶段 1：概念构思
-   * 输入：用户的一句话描述
-   * 输出：小说名 + 总纲 + 核心设定（类型、流派、核心爽点）
-   */
-  concept: `你是一个专业的小说策划顾问。用户想要写一部小说，你需要通过提问帮助他们完善创意。
-
-你的任务：
-1. 理解用户的初始想法
-2. 提出关键问题来明确：
-   - 小说类型/流派（玄幻/都市/科幻/言情/悬疑等）
-   - 世界观背景（古代/现代/未来/架空等）
-   - 主角设定（身份、性格、起点状态）
-   - 核心冲突/爽点（读者最期待的是什么）
-   - 预计篇幅（短篇/中篇/长篇，大概多少字）
-
-输出格式要求：
-- 用自然语言与用户对话
-- 当收集到足够信息后，用以下 JSON 格式总结（放在代码块中）：
-\`\`\`json
-{
-  "title": "小说标题",
-  "genre": "流派",
-  "description": "一句话简介",
-  "coreAppeal": ["核心爽点1", "核心爽点2"],
-  "targetWordCount": "预计总字数",
-  "targetChapters": "预计章节数",
-  "writingRules": [
-    {"category": "world", "title": "核心主题", "content": "本小说的核心主旨和价值观"},
-    {"category": "style", "title": "文风要求", "content": "语言风格、叙事视角等要求"}
-  ]
-}
-\`\`\`
-
-## writingRules.category 可选类别参考：
-- style: 文风
-- pacing: 节奏  
-- character: 角色一致性
-- plot: 情节
-- world: 世界观
-- taboo: 禁忌事项
-- custom: 自定义
-
-注意事项：
-- 每次只问 2-3 个问题，不要一次问太多
-- 保持友好、专业的语气
-- 如果用户已经提供了某些信息，就不要重复询问`,
-
-  /**
-   * 阶段 2：世界观构建
-   * 输入：概念阶段的结果 + 用户补充
-   * 输出：完整的世界观文档（3000 字左右）
-   */
-  worldbuild: `你是一个世界构建大师。现在我们要为一部小说建立详细的世界观。
-
-当前小说信息：
-{{concept_data}}
-
-你的任务：
-1. 帮助用户完善世界观的各个方面：
-   - 世界观（背景设定、基本规律）
-   - 境界体系（修炼等级/魔法系统/科技水平）
-   - 势力组织（正派/反派/中立势力）
-   - 地理环境（大陆/国家/城市/重要地点）
-   - 宝物功法（法宝、功法、技能等）
-   - 其他设定（如果有的话）
-
-输出格式：
-- 先与用户讨论关键设定点
-- 最终生成结构化的世界观文档（2000-3000字）
-- 使用以下 JSON 格式输出最终结果：
-
-\`\`\`json
-{
-  "worldSettings": [
-    {
-      "type": "worldview",
-      "title": "世界观",
-      "content": "详细描述..."
-    },
-    {
-      "type": "power_system",
-      "title": "境界体系",
-      "content": "详细描述..."
-    },
-    {
-      "type": "faction",
-      "title": "势力组织",
-      "content": "详细描述..."
-    },
-    {
-      "type": "geography",
-      "title": "地理环境",
-      "content": "详细描述..."
-    },
-    {
-      "type": "item_skill",
-      "title": "宝物功法",
-      "content": "详细描述..."
-    },
-    {
-      "type": "misc",
-      "title": "其他设定",
-      "content": "详细描述..."
-    }
-  ]
-}
-\`\`\`
-
-注意事项：
-  - 设定要自洽，不能前后矛盾
-- 要有特色，避免过于俗套
-- 考虑后续剧情发展的可能性`,
-
-  /**
-   * 阶段 3：角色设计
-   * 输入：总纲 + 世界观
-   * 输出：角色卡（主角/配角/反派）
-   */
-  character_design: `你是一个角色塑造专家。现在我们要为小说设计角色。
-
-当前小说信息：
-{{concept_data}}
-{{worldbuild_data}}
-
-你的任务：
-1. 帮助用户设计以下角色：
-   - **主角**（1-2人）：姓名、性格、外貌、背景、目标、成长弧线
-   - **主要配角**（3-5人）：与主角的关系、作用、特点
-   - **反派**（1-2人）：动机、能力、与主角的冲突
-
-对每个角色，需要讨论：
-- 基本信息（姓名、年龄、性别、身份）
-- 性格特征（优点、缺点、怪癖）
-- 外貌描写（标志性特征）
-- 能力/技能（如果是战斗类小说）
-- 与其他角色的关系
-- 在故事中的作用和发展
-
-输出格式：
-\`\`\`json
-{
-  "characters": [
-    {
-      "name": "角色名",
-      "role": "protagonist|supporting|antagonist",
-      "description": "详细描述...",
-      "attributes": {"key": "value"},
-      "relationships": ["与其他角色的关系"]
-    }
-  ]
-}
-\`\`\`
-
-注意事项：
-- 角色要有立体感，避免脸谱化
-- 角色之间要有化学反应
-- 反派要有合理的动机，不要太脸谱化
-- 考虑角色成长的可能性`,
-
-  /**
-   * 阶段 4：卷纲规划
-   * 输入：总纲 + 角色
-   * 输出：卷纲（事件线+蓝图）
-   */
-  volume_outline: `你是一个故事架构师。现在我们要为小说规划分卷大纲。
-
-当前小说信息：
-{{concept_data}}
-{{character_data}}
-
-你的任务：
-1. 帮助用户将故事分成若干卷（建议 3-8 卷）
-2. 为每卷制定：
-   - 卷标题
-   - 主要事件线（起承转合）
-   - 关键转折点
-   - 涉及的主要角色
-   - 伏笔安排（埋入/收尾）
-   - 预计章节数
-
-输出格式：
-\`\`\`json
-{
-  "volumes": [
-    {
-      "title": "第一卷标题",
-      "outline": "本卷主要内容概述...",
-      "blueprint": "详细的情节蓝图...",
-      "chapterCount": 10,
-      "keyEvents": ["事件1", "事件2"],
-      "foreshadowingSetup": ["伏笔1", "伏笔2"],
-      "foreshadowingResolve": []
-    }
-  ]
-}
-\`\`\`
-
-注意事项：
-- 每卷都要有明确的冲突和高潮
-- 卷与卷之间要衔接自然
-- 控制好节奏，张弛有度
-- 埋下的伏笔要在后续卷中收尾`,
-
-  /**
-   * 阶段 5：章节大纲细化
-   * 输入：卷纲 + 前情
-   * 输出：章节大纲（关键事件+伏笔指令）
-   */
-  chapter_outline: `你是一个细化的故事编辑。现在我们要为每一章制定详细大纲。
-
-当前卷的信息：
-{{volume_data}}
-
-你的任务：
-1. 将卷纲拆分为具体的章节
-2. 为每章制定：
-   - 章节标题
-   - 本章的核心任务（推进什么剧情）
-   - 开头场景（如何承接上章）
-   - 结尾悬念（如何吸引读下去）
-   - 出场角色
-   - 重要对话/描写要点
-   - 伏笔操作（埋入或收尾哪个伏笔）
-
-输出格式：
-\`\`\`json
-{
-  "chapters": [
-    {
-      "title": "第X章 标题",
-      "outline": "本章大纲...",
-      "characters": ["出场角色"],
-      "foreshadowingActions": [
-        {"action": "setup|resolve", "target": "伏笔名称", "description": "如何操作"}
-      ],
-      "keyScenes": ["场景1", "场景2"]
-    }
-  ]
-}
-\`\`\`
-
-注意事项：
-- 每章都要有实质性的内容推进
-- 注意节奏变化，不要每章都一样
-- 伏笔的埋入和收尾要自然
-- 考虑读者的阅读体验`,
-}
-
-// ============================================================
 // Workshop 服务函数
 // ============================================================
 
@@ -292,7 +38,9 @@ export interface WorkshopExtractedData {
   genre?: string
   description?: string
   coreAppeal?: string[]
+  /** @description 预计总字数，可能是数字或描述性文本（如"约50万字"） */
   targetWordCount?: string
+  /** @description 预计章节数，可能是数字或描述性文本（如"约200章"） */
   targetChapters?: string
   worldSettings?: Array<{ type: string; title: string; content: string }>
   masterOutline?: string
@@ -453,12 +201,24 @@ async function loadNovelContextData(
       .all()
 
     if (chars.length > 0) {
-      extractedData.characters = chars.map((c: typeof chars[number]) => ({
-        name: c.name,
-        role: c.role || 'supporting',
-        description: c.description || '',
-        attributes: c.attributes ? JSON.parse(c.attributes) : {},
-      }))
+      extractedData.characters = chars.map((c: typeof chars[number]) => {
+        let parsedAttrs = {}
+        try {
+          parsedAttrs = c.attributes ? JSON.parse(c.attributes) : {}
+        } catch (e) {
+          console.warn('[workshop] 解析角色attributes失败:', e)
+        }
+
+        return {
+          name: c.name,
+          role: c.role || 'supporting',
+          description: c.description || '',
+          aliases: c.aliases ? JSON.parse(c.aliases) : undefined,
+          attributes: parsedAttrs,
+          relationships: (parsedAttrs as any).relationships || undefined,
+          powerLevel: c.powerLevel || undefined,
+        }
+      })
     }
   }
 
@@ -748,13 +508,11 @@ export async function commitWorkshopSession(
           category: setting.type,
           name: setting.title,
           content: setting.content,
-          summary: '',
-          importance: 'high',
+          importance: setting.importance || 'normal',
           sortOrder: createdSettings.length,
         }).returning()
         createdSettings.push(novelSetting)
 
-        // 触发自动生成设定摘要
         try {
           const { generateSettingSummary } = await import('./agent/summarizer')
           await generateSettingSummary(env, novelSetting.id)
@@ -771,11 +529,12 @@ export async function commitWorkshopSession(
       for (const rule of data.writingRules) {
         const [writingRule] = await db.insert(writingRules).values({
           novelId,
-          category: rule.category || 'general',
+          category: rule.category || 'custom',
           title: rule.title,
           content: rule.content,
           priority: rule.priority || 3,
           isActive: 1,
+          sortOrder: createdRules.length,
         }).returning()
         createdRules.push(writingRule)
       }
@@ -786,6 +545,11 @@ export async function commitWorkshopSession(
     if (data.characters && data.characters.length > 0) {
       const createdCharacters = []
       for (const char of data.characters) {
+        const finalAttributes = {
+          ...(char.attributes || {}),
+          ...(char.relationships ? { relationships: char.relationships } : {}),
+        }
+
         const [character] = await db.insert(characters).values({
           novelId,
           name: char.name,
@@ -793,7 +557,9 @@ export async function commitWorkshopSession(
           description: char.description || '',
           aliases: char.aliases ? JSON.stringify(char.aliases) : null,
           powerLevel: char.powerLevel || null,
-          attributes: char.attributes ? JSON.stringify(char.attributes) : null,
+          attributes: Object.keys(finalAttributes).length > 0 
+            ? JSON.stringify(finalAttributes) 
+            : null,
         }).returning()
         createdCharacters.push(character)
       }
@@ -804,19 +570,27 @@ export async function commitWorkshopSession(
     if (data.volumes && data.volumes.length > 0) {
       const createdVolumes: any[] = []
       for (const vol of data.volumes) {
+        const summaryValue = vol.summary || null
+        const eventLineValue = Array.isArray(vol.eventLine)
+          ? JSON.stringify(vol.eventLine)
+          : null
+        const notesValue = Array.isArray(vol.notes)
+          ? JSON.stringify(vol.notes)
+          : null
+
         const [volume] = await db.insert(volumes).values({
           novelId,
           title: vol.title,
-          blueprint: vol.outline || '',
-          eventLine: vol.blueprint || '',
-          summary: '',
-          status: 'draft',
+          summary: summaryValue,
+          blueprint: vol.blueprint || null,
+          eventLine: eventLineValue,
+          notes: notesValue,
           chapterCount: vol.chapterCount || 0,
-          sortOrder: createdVolumes.length + 1,
+          sortOrder: createdVolumes.length,
+          status: 'draft',
         }).returning()
         createdVolumes.push(volume)
 
-        // 触发自动生成卷摘要
         try {
           const { generateVolumeSummary } = await import('./agent/summarizer')
           await generateVolumeSummary(env, volume.id, novelId)
@@ -824,15 +598,25 @@ export async function commitWorkshopSession(
           console.warn('[workshop] 卷摘要生成失败:', err)
         }
 
-        // 创建伏笔 -> foreshadowing
-        if (vol.foreshadowingSetup && vol.foreshadowingSetup.length > 0) {
-          for (const fs of vol.foreshadowingSetup) {
-            await db.insert(foreshadowing).values({
-              novelId,
-              title: fs,
-              status: 'open',
-              importance: 'normal',
-            }).run()
+        if (notesValue) {
+          try {
+            const notesData = JSON.parse(notesValue)
+            for (const note of notesData) {
+              const noteStr = typeof note === 'string' ? note : note.title || JSON.stringify(note)
+              const noteDesc = typeof note === 'string' 
+                ? `来自卷"${vol.title}"的备注` 
+                : note.description || ''
+
+              await db.insert(foreshadowing).values({
+                novelId,
+                title: noteStr,
+                description: noteDesc,
+                status: 'open',
+                importance: 'normal',
+              }).run()
+            }
+          } catch (err) {
+            console.warn('[workshop] 伏笔/备注解析失败:', err)
           }
         }
       }
@@ -944,10 +728,11 @@ ${readonlyCtx}
   "characters": [
     {
       "name": "角色名",
-      "role": "protagonist|supporting|antagonist",
+      "role": "protagonist|supporting|antagonist|minor",
       "description": "详细描述...",
-      "attributes": {"key": "value"},
-      "relationships": ["与其他角色的关系"]
+      "aliases": ["别名1", "别名2"],
+      "attributes": {"key": "value", "relationships": ["与其他角色的关系"]},
+      "powerLevel": "战斗力等级"
     }
   ]
 }
@@ -971,18 +756,47 @@ ${readonlyCtx}
   "volumes": [
     {
       "title": "第一卷标题",
-      "outline": "本卷主要内容概述...",
+      "summary": "本卷主要内容概述（1-2句话）",
       "blueprint": "详细的情节蓝图...",
-      "chapterCount": 10,
-      "keyEvents": ["事件1", "事件2"],
-      "foreshadowingSetup": ["伏笔1"],
-      "foreshadowingResolve": []
+      "eventLine": ["关键事件1", "重要转折点"],
+      "notes": ["伏笔1", "备注信息"],
+      "chapterCount": 10
     }
   ]
 }
 \`\`\`
 
 注意：每卷都要有明确冲突和高潮，输出的 volumes 是完整版本（替换旧版本）。`,
+
+    chapter_outline: `你是细化的故事编辑。你正处于【章节大纲细化】阶段。
+
+${readonlyCtx}
+
+## 你在本阶段任务
+帮用户将卷纲拆分为具体章节，为每章制定：标题、核心任务、开头场景、结尾悬念、出场角色、伏笔操作。
+
+## 输出约束（严格执行）
+- ⛔ 禁止输出 worldSettings / characters / title / genre 等字段
+- ✅ 只允许输出以下字段：
+
+\`\`\`json
+{
+  "chapters": [
+    {
+      "title": "第X章 标题",
+      "summary": "本章简要概述",
+      "outline": "本章大纲...",
+      "characters": ["出场角色"],
+      "foreshadowingActions": [
+        {"action": "setup|resolve", "target": "伏笔名称", "description": "如何操作"}
+      ],
+      "keyScenes": ["场景1", "场景2"]
+    }
+  ]
+}
+\`\`\`
+
+注意：每章都要有实质性内容推进，输出的 chapters 是完整版本（替换旧版本）。`,
   }
 
   return stagePrompts[stage] || stagePrompts.concept
@@ -1125,7 +939,7 @@ function buildOutlineContent(data: WorkshopExtractedData): string {
   }
   if (data.volumes?.length) {
     parts.push('## 分卷大纲')
-    data.volumes.forEach((vol, idx) => parts.push(`### 第${idx + 1}卷：${vol.title}\n${vol.outline}`))
+    data.volumes.forEach((vol, idx) => parts.push(`### 第${idx + 1}卷：${vol.title}\n${vol.summary || '暂无概述'}`))
   }
 
   return parts.join('\n\n')

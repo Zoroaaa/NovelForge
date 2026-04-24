@@ -62,19 +62,30 @@ interface ExtractedData {
   coreAppeal?: string[]
   targetWordCount?: string
   targetChapters?: string
-  worldSettings?: Array<{ type: string; title: string; content: string }>
+  worldSettings?: Array<{ type: string; title: string; content: string; importance?: string }>
   characters?: Array<{
     name: string
-    role: string
+    role: 'protagonist' | 'supporting' | 'antagonist' | 'minor'
     description: string
+    aliases?: string[]
     attributes?: Record<string, unknown>
-    relationships?: string[]
+    powerLevel?: string
   }>
   volumes?: Array<{
     title: string
-    outline: string
-    blueprint: string
-    chapterCount: number
+    summary?: string
+    blueprint?: string
+    eventLine?: string[]
+    notes?: string[]
+    chapterCount?: number
+  }>
+  chapters?: Array<{
+    title: string
+    summary?: string
+    outline?: string
+    characters?: string[]
+    foreshadowingActions?: Array<{ action: 'setup' | 'resolve'; target: string; description: string }>
+    keyScenes?: string[]
   }>
 }
 
@@ -90,6 +101,7 @@ const STAGES = [
   { id: 'worldbuild', label: '世界观构建', icon: Globe, description: '建立完整的世界观体系' },
   { id: 'character_design', label: '角色设计', icon: Users, description: '设计主要角色和关系' },
   { id: 'volume_outline', label: '卷纲规划', icon: Layers, description: '规划分卷和事件线' },
+  { id: 'chapter_outline', label: '章节大纲', icon: FileText, description: '细化每章内容和伏笔操作' },
 ]
 
 export default function WorkshopPage() {
@@ -690,8 +702,18 @@ export default function WorkshopPage() {
                   <PreviewCard title="世界观设定" icon={Globe}>
                     {extractedData.worldSettings.map((ws, i) => (
                       <div key={i} className="mb-3 last:mb-0">
-                        <p className="font-medium text-sm mb-1">{ws.title}</p>
-                        <p className="text-xs text-muted-foreground whitespace-pre-wrap">{ws.content}</p>
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="font-medium text-sm">{ws.title}</p>
+                          {ws.importance && (
+                            <Badge 
+                              variant={ws.importance === 'high' ? 'destructive' : ws.importance === 'low' ? 'secondary' : 'outline'} 
+                              className="text-[10px]"
+                            >
+                              {ws.importance === 'high' ? '重要' : ws.importance === 'low' ? '次要' : '普通'}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground whitespace-pre-wrap line-clamp-3">{ws.content}</p>
                       </div>
                     ))}
                   </PreviewCard>
@@ -704,7 +726,7 @@ export default function WorkshopPage() {
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-medium text-sm">{char.name}</span>
                           <Badge variant="outline" className="text-[10px]">
-                            {char.role === 'protagonist' ? '主角' : char.role === 'antagonist' ? '反派' : '配角'}
+                            {char.role === 'protagonist' ? '主角' : char.role === 'antagonist' ? '反派' : char.role === 'minor' ? '次要' : '配角'}
                           </Badge>
                         </div>
                         <p className="text-xs text-muted-foreground line-clamp-2">{char.description}</p>
@@ -724,9 +746,47 @@ export default function WorkshopPage() {
                             约{vol.chapterCount}章
                           </span>
                         </div>
-                        <p className="text-xs text-muted-foreground line-clamp-2">{vol.outline}</p>
+                        <p className="text-xs text-muted-foreground line-clamp-2 mb-1">{vol.summary || '暂无概述'}</p>
+                        {vol.eventLine && vol.eventLine.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {vol.eventLine.slice(0, 3).map((event, idx) => (
+                              <Badge key={idx} variant="secondary" className="text-[10px]">{event}</Badge>
+                            ))}
+                            {vol.eventLine.length > 3 && (
+                              <Badge variant="secondary" className="text-[10px]">+{vol.eventLine.length - 3}</Badge>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
+                  </PreviewCard>
+                )}
+
+                {extractedData.chapters && extractedData.chapters.length > 0 && (
+                  <PreviewCard title="章节大纲" icon={FileText}>
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                      {extractedData.chapters.map((chap, i) => (
+                        <div key={i} className="border-l-2 border-primary/20 pl-3 py-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant="secondary" className="text-[10px]">第{i + 1}章</Badge>
+                            <span className="font-medium text-sm">{chap.title}</span>
+                          </div>
+                          {chap.summary && (
+                            <p className="text-xs text-muted-foreground line-clamp-2 ml-5">{chap.summary}</p>
+                          )}
+                          {chap.characters && chap.characters.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1 ml-5">
+                              {chap.characters.slice(0, 4).map((char, idx) => (
+                                <Badge key={idx} variant="outline" className="text-[10px]">{char}</Badge>
+                              ))}
+                              {chap.characters.length > 4 && (
+                                <Badge variant="outline" className="text-[10px]">+{chap.characters.length - 4}</Badge>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </PreviewCard>
                 )}
               </div>
