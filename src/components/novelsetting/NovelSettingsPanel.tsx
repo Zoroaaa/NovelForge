@@ -307,7 +307,7 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
                   </Button>
                 </Label>
                 <Textarea
-                  placeholder="用于语义检索的精炼摘要，留空则自动从描述截取前400字"
+                  placeholder="用于语义检索的精炼摘要，建议点击上方'AI 生成摘要'按钮自动生成，或手动输入专业摘要"
                   rows={3}
                   maxLength={400}
                   value={formData.summary}
@@ -315,7 +315,7 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
                 />
                 <p className="text-[10px] text-muted-foreground flex justify-between">
                   <span>{formData.summary.length}/400 字</span>
-                  <span>此摘要将用于向量索引检索，影响 AI 写作时是否能找到该设定</span>
+                  <span>此摘要将用于向量索引检索，影响 AI 写作时是否能找到该设定。留空将在保存后由 AI 自动生成</span>
                 </p>
               </div>
 

@@ -12,6 +12,9 @@ import {
   chapters,
   characters,
   novelSettings,
+  masterOutline,
+  writingRules,
+  foreshadowing,
 } from '../db/schema'
 import { eq, and, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
@@ -91,15 +94,11 @@ export async function getEntityChildren(
 export async function rebuildEntityIndex(env: Env, novelId: string): Promise<{
   ok: boolean
   message: string
-  stats: {
-    volumes: number
-    characters: number
-    settings: number
-  }
+  stats: Record<string, number>
   error?: string
 }> {
   const db = drizzle(env.DB)
-  
+
   try {
     await db.delete(entityIndex).where(eq(entityIndex.novelId, novelId))
 
@@ -109,7 +108,7 @@ export async function rebuildEntityIndex(env: Env, novelId: string): Promise<{
       .get()
 
     if (!novel) {
-      return { ok: false, message: '小说不存在', stats: { volumes: 0, characters: 0, settings: 0 } }
+      return { ok: false, message: '小说不存在', stats: {} }
     }
 
     await db.insert(entityIndex).values({
@@ -126,6 +125,83 @@ export async function rebuildEntityIndex(env: Env, novelId: string): Promise<{
       }),
     })
 
+    const MODULE_PREFIX = '__module__'
+    let stats: Record<string, number> = {}
+
+    const mo = await db.select()
+      .from(masterOutline)
+      .where(and(eq(masterOutline.novelId, novelId), sql`${masterOutline.deletedAt} IS NULL`))
+      .get()
+
+    if (mo) {
+      await db.insert(entityIndex).values({
+        entityType: 'master-outline',
+        entityId: mo.id,
+        novelId,
+        parentId: `${MODULE_PREFIX}master-outline`,
+        title: mo.title || '总纲',
+        depth: 2,
+        meta: JSON.stringify({ version: mo.version, wordCount: mo.wordCount, hasContent: !!mo.content }),
+      })
+      stats['总纲'] = 1
+    }
+
+    await db.insert(entityIndex).values({
+      entityType: 'module',
+      entityId: `${MODULE_PREFIX}master-outline`,
+      novelId,
+      parentId: novelId,
+      title: '总纲',
+      depth: 1,
+      sortOrder: 0,
+      meta: JSON.stringify({ moduleType: 'master-outline', count: mo ? 1 : 0 }),
+    })
+
+    await db.insert(entityIndex).values({
+      entityType: 'module',
+      entityId: `${MODULE_PREFIX}settings`,
+      novelId,
+      parentId: novelId,
+      title: '设定',
+      depth: 1,
+      sortOrder: 1,
+      meta: JSON.stringify({ moduleType: 'settings' }),
+    })
+
+    const settingList = await db.select()
+      .from(novelSettings)
+      .where(and(eq(novelSettings.novelId, novelId), sql`${novelSettings.deletedAt} IS NULL`))
+      .orderBy(novelSettings.sortOrder)
+      .all()
+
+    for (const setting of settingList) {
+      await db.insert(entityIndex).values({
+        entityType: 'setting',
+        entityId: setting.id,
+        novelId,
+        parentId: `${MODULE_PREFIX}settings`,
+        title: setting.name,
+        depth: 2,
+        meta: JSON.stringify({
+          type: setting.type,
+          category: setting.category,
+          importance: setting.importance,
+        }),
+      })
+    }
+    stats['设定'] = settingList.length
+
+    await db.insert(entityIndex).values({
+      entityType: 'module',
+      entityId: `${MODULE_PREFIX}volumes`,
+      novelId,
+      parentId: novelId,
+      title: '卷',
+      depth: 1,
+      sortOrder: 2,
+      meta: JSON.stringify({ moduleType: 'volumes' }),
+    })
+
     const volumeList = await db.select()
       .from(volumes)
       .where(eq(volumes.novelId, novelId))
@@ -137,9 +213,9 @@ export async function rebuildEntityIndex(env: Env, novelId: string): Promise<{
         entityType: 'volume',
         entityId: vol.id,
         novelId,
-        parentId: novelId,
+        parentId: `${MODULE_PREFIX}volumes`,
         title: vol.title,
-        depth: 1,
+        depth: 2,
         meta: JSON.stringify({
           status: vol.status,
           wordCount: vol.wordCount,
@@ -150,10 +226,7 @@ export async function rebuildEntityIndex(env: Env, novelId: string): Promise<{
 
       const chapterList = await db.select()
         .from(chapters)
-        .where(and(
-          eq(chapters.volumeId, vol.id),
-          sql`${chapters.deletedAt} IS NULL`
-        ))
+        .where(and(eq(chapters.volumeId, vol.id), sql`${chapters.deletedAt} IS NULL`))
         .orderBy(chapters.sortOrder)
         .all()
 
@@ -164,7 +237,7 @@ export async function rebuildEntityIndex(env: Env, novelId: string): Promise<{
           novelId,
           parentId: vol.id,
           title: ch.title,
-          depth: 2,
+          depth: 3,
           meta: JSON.stringify({
             status: ch.status,
             wordCount: ch.wordCount,
@@ -174,13 +247,22 @@ export async function rebuildEntityIndex(env: Env, novelId: string): Promise<{
         })
       }
     }
+    stats['卷'] = volumeList.length
+
+    await db.insert(entityIndex).values({
+      entityType: 'module',
+      entityId: `${MODULE_PREFIX}characters`,
+      novelId,
+      parentId: novelId,
+      title: '角色',
+      depth: 1,
+      sortOrder: 3,
+      meta: JSON.stringify({ moduleType: 'characters' }),
+    })
 
     const charList = await db.select()
       .from(characters)
-      .where(and(
-        eq(characters.novelId, novelId),
-        sql`${characters.deletedAt} IS NULL`
-      ))
+      .where(and(eq(characters.novelId, novelId), sql`${characters.deletedAt} IS NULL`))
       .all()
 
     for (const char of charList) {
@@ -188,58 +270,97 @@ export async function rebuildEntityIndex(env: Env, novelId: string): Promise<{
         entityType: 'character',
         entityId: char.id,
         novelId,
-        parentId: novelId,
+        parentId: `${MODULE_PREFIX}characters`,
         title: char.name,
-        depth: 1,
+        depth: 2,
         meta: JSON.stringify({
           role: char.role,
           hasPowerLevel: !!char.powerLevel,
         }),
       })
     }
+    stats['角色'] = charList.length
 
-    const settingList = await db.select()
-      .from(novelSettings)
-      .where(and(
-        eq(novelSettings.novelId, novelId),
-        sql`${novelSettings.deletedAt} IS NULL`
-      ))
+    await db.insert(entityIndex).values({
+      entityType: 'module',
+      entityId: `${MODULE_PREFIX}foreshadowing`,
+      novelId,
+      parentId: novelId,
+      title: '伏笔',
+      depth: 1,
+      sortOrder: 4,
+      meta: JSON.stringify({ moduleType: 'foreshadowing' }),
+    })
+
+    const foreshadowingList = await db.select()
+      .from(foreshadowing)
+      .where(and(eq(foreshadowing.novelId, novelId), sql`${foreshadowing.deletedAt} IS NULL`))
       .all()
 
-    for (const setting of settingList) {
+    for (const item of foreshadowingList) {
       await db.insert(entityIndex).values({
-        entityType: 'setting',
-        entityId: setting.id,
+        entityType: 'foreshadowing',
+        entityId: item.id,
         novelId,
-        parentId: novelId,
-        title: setting.name,
-        depth: 1,
+        parentId: `${MODULE_PREFIX}foreshadowing`,
+        title: item.title,
+        depth: 2,
         meta: JSON.stringify({
-          type: setting.type,
-          category: setting.category,
-          importance: setting.importance,
+          status: item.status,
+          importance: item.importance,
         }),
       })
     }
+    stats['伏笔'] = foreshadowingList.length
+
+    await db.insert(entityIndex).values({
+      entityType: 'module',
+      entityId: `${MODULE_PREFIX}rules`,
+      novelId,
+      parentId: novelId,
+      title: '规则',
+      depth: 1,
+      sortOrder: 5,
+      meta: JSON.stringify({ moduleType: 'rules' }),
+    })
+
+    const rulesList = await db.select()
+      .from(writingRules)
+      .where(and(eq(writingRules.novelId, novelId), sql`${writingRules.deletedAt} IS NULL`))
+      .orderBy(writingRules.sortOrder)
+      .all()
+
+    for (const rule of rulesList) {
+      await db.insert(entityIndex).values({
+        entityType: 'rule',
+        entityId: rule.id,
+        novelId,
+        parentId: `${MODULE_PREFIX}rules`,
+        title: rule.title,
+        depth: 2,
+        meta: JSON.stringify({
+          category: rule.category,
+          priority: rule.priority,
+          isActive: rule.isActive,
+        }),
+      })
+    }
+    stats['规则'] = rulesList.length
 
     console.log(`Entity index rebuilt for novel ${novelId}`)
 
-    return { 
-      ok: true, 
+    return {
+      ok: true,
       message: '索引重建完成',
-      stats: {
-        volumes: volumeList.length,
-        characters: charList.length,
-        settings: settingList.length,
-      }
+      stats,
     }
   } catch (error) {
     console.error('Failed to rebuild entity index:', error)
-    return { 
-      ok: false, 
-      message: '索引重建失败', 
+    return {
+      ok: false,
+      message: '索引重建失败',
       error: (error as Error).message,
-      stats: { volumes: 0, characters: 0, settings: 0 }
+      stats: {},
     }
   }
 }

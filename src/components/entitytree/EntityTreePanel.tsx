@@ -17,6 +17,10 @@ import {
   RefreshCw,
   Loader2,
   TreePine,
+  ScrollText,
+  Eye,
+  Scale,
+  FolderOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -25,7 +29,7 @@ interface EntityTreePanelProps {
   onChapterSelect?: (chapterId: string) => void
 }
 
-type EntityType = 'novel' | 'volume' | 'chapter' | 'character' | 'setting'
+type EntityType = 'novel' | 'module' | 'master-outline' | 'volume' | 'chapter' | 'character' | 'setting' | 'foreshadowing' | 'rule'
 
 const ENTITY_CONFIG: Record<EntityType, {
   icon: React.ElementType
@@ -33,11 +37,15 @@ const ENTITY_CONFIG: Record<EntityType, {
   color: string
   bgColor: string
 }> = {
-  novel:     { icon: BookOpen,   label: '小说',     color: 'text-purple-600',   bgColor: 'bg-purple-50 dark:bg-purple-950' },
-  volume:    { icon: Library,    label: '卷',        color: 'text-blue-600',    bgColor: 'bg-blue-50 dark:bg-blue-950' },
-  chapter:   { icon: FileText,   label: '章节',      color: 'text-green-600',   bgColor: 'bg-green-50 dark:bg-green-950' },
-  character: { icon: Users,      label: '角色',      color: 'text-orange-600',  bgColor: 'bg-orange-50 dark:bg-orange-950' },
-  setting:   { icon: Layers,     label: '设定',      color: 'text-cyan-600',    bgColor: 'bg-cyan-50 dark:bg-cyan-950' },
+  novel:         { icon: BookOpen,     label: '小说',     color: 'text-purple-600',   bgColor: 'bg-purple-50 dark:bg-purple-950' },
+  module:        { icon: FolderOpen,   label: '模块',     color: 'text-gray-600',    bgColor: 'bg-gray-50 dark:bg-gray-900' },
+  'master-outline': { icon: ScrollText, label: '总纲',     color: 'text-indigo-600',  bgColor: 'bg-indigo-50 dark:bg-indigo-950' },
+  volume:        { icon: Library,      label: '卷',        color: 'text-blue-600',    bgColor: 'bg-blue-50 dark:bg-blue-950' },
+  chapter:       { icon: FileText,     label: '章节',      color: 'text-green-600',   bgColor: 'bg-green-50 dark:bg-green-950' },
+  character:     { icon: Users,        label: '角色',      color: 'text-orange-600',  bgColor: 'bg-orange-50 dark:bg-orange-950' },
+  setting:       { icon: Layers,       label: '设定',      color: 'text-cyan-600',    bgColor: 'bg-cyan-50 dark:bg-cyan-950' },
+  foreshadowing: { icon: Eye,          label: '伏笔',      color: 'text-pink-600',    bgColor: 'bg-pink-50 dark:bg-pink-950' },
+  rule:          { icon: Scale,        label: '规则',      color: 'text-red-600',     bgColor: 'bg-red-50 dark:bg-red-950' },
 }
 
 interface TreeNode {
@@ -122,6 +130,45 @@ function TreeNodeItem({
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-normal">
                 {String(node.meta.type)}
               </Badge>
+            )}
+            {node.type === 'master-outline' && (
+              <>
+                {!!node.meta.hasContent && (
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-normal text-indigo-600 border-indigo-300">
+                    已编写
+                  </Badge>
+                )}
+                {node.meta.version !== undefined && (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal">
+                    v{String(node.meta.version)}
+                  </Badge>
+                )}
+              </>
+            )}
+            {node.type === 'foreshadowing' && !!node.meta.status && (
+              <Badge variant="outline" className={cn(
+                'text-[10px] px-1.5 py-0 h-4 font-normal',
+                String(node.meta.status) === 'open' ? 'text-yellow-600 border-yellow-300' :
+                String(node.meta.status) === 'resolved' ? 'text-green-600 border-green-300' :
+                'text-gray-600 border-gray-300'
+              )}>
+                {String(node.meta.status) === 'open' ? '未解决' :
+                 String(node.meta.status) === 'resolved' ? '已解决' : '已放弃'}
+              </Badge>
+            )}
+            {node.type === 'rule' && (
+              <>
+                {node.meta.category && (
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-normal">
+                    {String(node.meta.category)}
+                  </Badge>
+                )}
+                {node.meta.priority !== undefined && (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal">
+                    P{String(node.meta.priority)}
+                  </Badge>
+                )}
+              </>
             )}
           </div>
         )}

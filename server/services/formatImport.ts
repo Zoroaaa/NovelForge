@@ -22,58 +22,27 @@ export interface FormattedImportData {
 }
 
 const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
-  chapter: `你是一个小说章节格式化专家。用户的输入可能是：
-1. 纯文本章节内容
-2. Markdown 格式的章节
-3. JSON 格式的章节对象（可能包含 title, content, outline 等字段）
-4. 其他变体
+  master_outline: `你是一个小说总纲格式化专家。用户的输入可能是：
+1. 纯文本描述的总纲内容
+2. Markdown 格式的总纲文档
+3. JSON 格式的总纲对象（可能包含 title, content 等字段）
+4. 包含世界观、核心设定、主线剧情等各类信息的大纲
 
 你的任务：
 1. 识别输入的格式
-2. 提取关键信息：标题(title)、内容(content)、章节大纲(outline，如果有的话)
-3. 返回标准化的 JSON 格式：
-
-如果输入是章节内容：
-\`\`\`json
-{
-  "title": "从内容中提取的章节标题",
-  "content": "完整的章节正文内容",
-  "outline": "如果能从内容中概括出简短大纲则填入，否则为 null"
-}
-\`\`\`
-
-如果输入已经包含结构化数据，尽量保持原样但补充完整必要字段。
-
-注意事项：
-- content 应该是完整的正文，不包含元数据标记
-- 如果无法提取标题，使用 "未命名章节" 作为默认值
-- 只返回 JSON，不要有其他解释文字`,
-
-  volume: `你是一个小说卷/部结构格式化专家。用户的输入可能是：
-1. 纯文本描述（"第一卷：觉醒之路，讲述主角从普通人成长为修士的历程..."）
-2. Markdown 格式的卷大纲
-3. JSON 格式的卷对象（可能包含 title, outline, blueprint, chapterCount 等字段）
-4. 其他变体
-
-你的任务：
-1. 识别输入的格式
-2. 提取关键信息：卷标题(title)、卷概要(outline)、详细蓝图(blueprint)、预计章节数(chapterCount)
+2. 提取关键信息：总纲标题(title)、总纲内容(content)
 3. 返回标准化的 JSON 格式：
 
 \`\`\`json
 {
-  "title": "提取的卷标题",
-  "outline": "卷的简要概述（1-2句话）",
-  "blueprint": "详细的卷情节蓝图，包含起承转合",
-  "chapterCount": 10,
-  "keyEvents": ["关键事件1", "关键事件2"],
-  "foreshadowingSetup": ["伏笔1", "伏笔2"]
+  "title": "总纲标题",
+  "content": "完整的总纲正文内容（Markdown 格式，涵盖世界观、核心设定、主线剧情等）"
 }
 \`\`\`
 
 注意事项：
-- chapterCount 应该是一个合理的数字（5-30之间）
-- 如果是卷列表格式（如 "第一卷... 第二卷..."），请解析成数组
+- content 应该是完整的总纲内容，支持 Markdown 格式
+- 如果无法提取标题，使用 "总纲" 作为默认值
 - 只返回 JSON，不要有其他解释文字`,
 
   setting: `你是一个小说世界观设定格式化专家。用户的输入可能是：
@@ -100,21 +69,21 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
   "type": "根据内容推断的设定类型",
   "name": "设定项的名称",
   "content": "详细的设定描述内容（Markdown 格式）",
-  "summary": "简要摘要（100字以内，用于 RAG 索引）"
+  "importance": "normal"
 }
 \`\`\`
 
 如果输入是多个设定项，解析成数组格式：
 \`\`\`json
 [
-  {"type": "faction", "name": "青云宗", "content": "...", "summary": "..."},
-  {"type": "faction", "name": "魔煞门", "content": "...", "summary": "..."}
+  {"type": "faction", "name": "青云宗", "content": "...", "importance": "normal"},
+  {"type": "faction", "name": "魔煞门", "content": "...", "importance": "high"}
 ]
 \`\`\`
 
 注意事项：
 - type 必须是上述六种类型之一
-- content 应该是完整的描述，支持 Markdown 格式
+- importance 可以是 high（重要）、normal（普通）、low（次要）
 - 只返回 JSON，不要有其他解释文字`,
 
   character: `你是一个小说角色格式化专家。用户的输入可能是：
@@ -125,23 +94,23 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
 
 你的任务：
 1. 识别输入的格式
-2. 提取关键信息：姓名(name)、角色定位(role)、详细描述(description)、属性(attributes)、关系(relationships)
+2. 提取关键信息：姓名(name)、角色定位(role)、详细描述(description)、属性(attributes)
 3. 返回标准化的 JSON 格式：
 
 \`\`\`json
 {
   "name": "角色姓名",
-  "role": "protagonist | supporting | antagonist",
+  "role": "protagonist | supporting | antagonist | minor",
   "description": "详细的角色描述（外貌、性格、背景等）",
   "aliases": ["别名1", "别名2"],
   "attributes": {
     "age": "年龄或外貌年龄",
     "gender": "性别",
     "personality": "性格特点",
-    "background": "背景故事"
+    "background": "背景故事",
+    "relationships": ["与其他角色的关系描述"]
   },
-  "powerLevel": "战斗力等级（如果是玄幻/修仙类）",
-  "relationships": ["与其他角色的关系描述"]
+  "powerLevel": "战斗力等级（如果是玄幻/修仙类）"
 }
 \`\`\`
 
@@ -154,9 +123,7 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
 \`\`\`
 
 注意事项：
-- role 只接受三个值：protagonist（主角）、supporting（配角）、antagonist（反派）
-- attributes 是对象，存放结构化的属性信息
-- relationships 是字符串数组
+- role 接受四个值：protagonist（主角）、supporting（配角）、antagonist（反派）、minor（次要角色）
 - 只返回 JSON，不要有其他解释文字`,
 
   rule: `你是一个小说创作规则格式化专家。用户的输入可能是：
@@ -201,6 +168,33 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
 - priority 为 1-5，1 表示最高优先级
 - 只返回 JSON，不要有其他解释文字`,
 
+  volume: `你是一个小说卷/部结构格式化专家。用户的输入可能是：
+1. 纯文本描述（"第一卷：觉醒之路，讲述主角从普通人成长为修士的历程..."）
+2. Markdown 格式的卷大纲
+3. JSON 格式的卷对象（可能包含 title, summary, blueprint 等字段）
+4. 其他变体
+
+你的任务：
+1. 识别输入的格式
+2. 提取关键信息：卷标题(title)、卷概要(summary)、详细蓝图(blueprint)、事件线(eventLine)、备注(notes)
+3. 返回标准化的 JSON 格式：
+
+\`\`\`json
+{
+  "title": "提取的卷标题",
+  "summary": "卷的简要概述（1-2句话）",
+  "blueprint": "详细的卷情节蓝图，包含起承转合",
+  "eventLine": ["关键事件1", "关键事件2", "重要转折点"],
+  "notes": ["伏笔1：神秘玉佩的出现", "伏笔2：反派势力的铺垫"],
+  "chapterCount": 10
+}
+\`\`\`
+
+注意事项：
+- chapterCount 为可选参考字段（5-30之间），不强制存储
+- 如果是卷列表格式（如 "第一卷... 第二卷..."），请解析成数组
+- 只返回 JSON，不要有其他解释文字`,
+
   foreshadowing: `你是一个小说伏笔格式化专家。用户的输入可能是：
 1. 纯文本描述的伏笔内容
 2. Markdown 格式的伏笔文档
@@ -209,7 +203,7 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
 
 你的任务：
 1. 识别输入的格式
-2. 提取关键信息：伏笔标题(title)、伏笔描述(description)、状态(status)
+2. 提取关键信息：伏笔标题(title)、伏笔描述(description)、状态(status)、重要程度(importance)
 3. 返回标准化的 JSON 格式：
 
 \`\`\`json
@@ -234,29 +228,47 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
 - importance 可以是 high（重要）、normal（普通）、low（次要）
 - 只返回 JSON，不要有其他解释文字`,
 
-  master_outline: `你是一个小说总纲格式化专家。用户的输入可能是：
-1. 纯文本描述的总纲内容
-2. Markdown 格式的总纲文档
-3. JSON 格式的总纲对象（可能包含 title, content, summary 等字段）
-4. 包含世界观、核心设定、主线剧情等各类信息的大纲
+  chapter: `你是一个小说章节格式化专家。用户的输入可能是：
+1. 纯文本章节内容
+2. Markdown 格式的章节
+3. JSON 格式的章节对象（可能包含 title, content, summary 等字段）
+4. 其他变体
 
 你的任务：
 1. 识别输入的格式
-2. 提取关键信息：总纲标题(title)、总纲内容(content)、摘要(summary)
+2. 提取关键信息：标题(title)、内容(content)、章节摘要(summary，如果用户明确提供)
 3. 返回标准化的 JSON 格式：
 
+如果输入是章节内容：
 \`\`\`json
 {
-  "title": "总纲标题",
-  "content": "完整的总纲正文内容（Markdown 格式，涵盖世界观、核心设定、主线剧情等）",
-  "summary": "简要摘要（200字以内，用于 RAG 索引）"
+  "title": "从内容中提取的章节标题",
+  "content": "完整的章节正文内容",
+  "summary": null
+}
+\`\`\`
+
+如果输入已经包含结构化数据且用户提供了summary：
+\`\`\`json
+{
+  "title": "章节标题",
+  "content": "完整的章节正文内容",
+  "summary": "用户提供的章节摘要（如果有）"
+}
+\`\`\`
+
+如果输入已经包含结构化数据但未提供summary：
+\`\`\`json
+{
+  "title": "章节标题",
+  "content": "完整的章节正文内容"
 }
 \`\`\`
 
 注意事项：
-- content 应该是完整的总纲内容，支持 Markdown 格式，涵盖小说的世界观、核心设定、主要势力、故事主线等
-- 如果无法提取标题，使用 "未命名总纲" 作为默认值
-- 如果没有提供 summary，自动从 content 前 200 字生成
+- content 应该是完整的正文，不包含元数据标记
+- summary 仅在用户明确提供时填写，不要自动生成或截取
+- 如果无法提取标题，使用 "未命名章节" 作为默认值
 - 只返回 JSON，不要有其他解释文字`,
 }
 

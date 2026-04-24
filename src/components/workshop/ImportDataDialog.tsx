@@ -61,13 +61,13 @@ interface ImportDataDialogProps {
 }
 
 const MODULE_OPTIONS: { value: ImportTargetModule; label: string; icon: string; description: string }[] = [
-  { value: 'chapter', label: '章节', icon: '📄', description: '小说章节内容' },
-  { value: 'volume', label: '卷', icon: '📚', description: '卷/部结构' },
+  { value: 'master_outline', label: '总纲', icon: '📜', description: '小说总纲/大纲' },
   { value: 'setting', label: '设定', icon: '⚙️', description: '世界观、势力、地理等设定' },
   { value: 'character', label: '角色', icon: '👤', description: '角色信息' },
   { value: 'rule', label: '规则', icon: '📋', description: '创作规则' },
+  { value: 'volume', label: '卷', icon: '📚', description: '卷/部结构' },
   { value: 'foreshadowing', label: '伏笔', icon: '🎭', description: '伏笔线索' },
-  { value: 'master_outline', label: '总纲', icon: '📜', description: '小说总纲/大纲' },
+  { value: 'chapter', label: '章节', icon: '📄', description: '小说章节内容' },
 ]
 
 export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: ImportDataDialogProps) {
