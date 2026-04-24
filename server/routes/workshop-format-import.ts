@@ -12,7 +12,7 @@ const router = new Hono<{ Bindings: Env }>()
 
 const formatImportSchema = z.object({
   content: z.string().min(1, '内容不能为空'),
-  module: z.enum(['chapter', 'volume', 'setting', 'character', 'rule', 'foreshadowing']),
+  module: z.enum(['chapter', 'volume', 'setting', 'character', 'rule', 'foreshadowing', 'master_outline']),
   novelId: z.string().optional(),
 })
 

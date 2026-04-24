@@ -15,13 +15,14 @@ import {
   novelSettings,
   writingRules,
   foreshadowing,
+  masterOutline,
 } from '../db/schema'
 import { enqueue } from '../lib/queue'
 
 const router = new Hono<{ Bindings: Env }>()
 
 const importDataSchema = z.object({
-  module: z.enum(['chapter', 'volume', 'setting', 'character', 'rule', 'foreshadowing']),
+  module: z.enum(['chapter', 'volume', 'setting', 'character', 'rule', 'foreshadowing', 'master_outline']),
   data: z.union([
     z.record(z.string(), z.unknown()),
     z.array(z.record(z.string(), z.unknown()))
@@ -38,7 +39,7 @@ type ImportResult = {
 }
 
 router.get('/list/:module', zValidator('param', z.object({
-  module: z.enum(['chapter', 'volume', 'setting', 'character', 'rule', 'foreshadowing']),
+  module: z.enum(['chapter', 'volume', 'setting', 'character', 'rule', 'foreshadowing', 'master_outline']),
 })), zValidator('query', z.object({
   novelId: z.string().min(1),
 })), async (c) => {
@@ -133,6 +134,25 @@ router.get('/list/:module', zValidator('param', z.object({
         .where(eq(foreshadowing.novelId, novelId))
         .all()
         break
+
+      case 'master_outline': {
+        const outlineList = await db.select({
+          id: masterOutline.id,
+          title: masterOutline.title,
+          version: masterOutline.version,
+          summary: masterOutline.summary,
+          wordCount: masterOutline.wordCount,
+        })
+        .from(masterOutline)
+        .where(and(
+          eq(masterOutline.novelId, novelId),
+          sql`${masterOutline.deletedAt} IS NULL`
+        ))
+        .orderBy(desc(masterOutline.version))
+        .all()
+        items = outlineList
+        break
+      }
 
       default:
         return c.json({ ok: false, error: 'Invalid module' }, 400)
@@ -560,6 +580,56 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
               }).returning()
               results.push({ action: 'created', id: foreshadow.id, name: title, existed: false })
             }
+          }
+          break
+        }
+
+        case 'master_outline': {
+          const outlineData = itemData as {
+            id?: string
+            title?: string
+            content?: string
+            summary?: string
+          }
+
+          const title = outlineData.title || '未命名总纲'
+          const content = outlineData.content || ''
+
+          if (importMode === 'update') {
+            if (!outlineData.id) {
+              results.push({ action: 'skipped', id: '', name: title, existed: false })
+              continue
+            }
+            await db.update(masterOutline)
+              .set({
+                title,
+                content,
+                summary: outlineData.summary || content.slice(0, 200),
+                wordCount: content.length,
+                updatedAt: Math.floor(Date.now() / 1000),
+              })
+              .where(eq(masterOutline.id, outlineData.id))
+            results.push({ action: 'updated', id: outlineData.id, name: title, existed: true })
+          } else {
+            const lastVersion = await db
+              .select({ version: masterOutline.version })
+              .from(masterOutline)
+              .where(eq(masterOutline.novelId, novelId))
+              .orderBy(desc(masterOutline.version))
+              .limit(1)
+              .get()
+
+            const newVersion = (lastVersion?.version || 0) + 1
+
+            const [outline] = await db.insert(masterOutline).values({
+              novelId,
+              title,
+              content,
+              summary: outlineData.summary || content.slice(0, 200),
+              version: newVersion,
+              wordCount: content.length,
+            }).returning()
+            results.push({ action: 'created', id: outline.id, name: title, existed: false })
           }
           break
         }

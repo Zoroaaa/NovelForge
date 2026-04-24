@@ -44,6 +44,7 @@ export type ImportTargetModule =
   | 'character'
   | 'rule'
   | 'foreshadowing'
+  | 'master_outline'
 
 export interface FormattedImportData {
   module: ImportTargetModule
@@ -66,6 +67,7 @@ const MODULE_OPTIONS: { value: ImportTargetModule; label: string; icon: string; 
   { value: 'character', label: '角色', icon: '👤', description: '角色信息' },
   { value: 'rule', label: '规则', icon: '📋', description: '创作规则' },
   { value: 'foreshadowing', label: '伏笔', icon: '🎭', description: '伏笔线索' },
+  { value: 'master_outline', label: '总纲', icon: '📜', description: '小说总纲/大纲' },
 ]
 
 export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: ImportDataDialogProps) {

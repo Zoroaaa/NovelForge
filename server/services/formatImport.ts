@@ -11,6 +11,7 @@ export type ImportTargetModule =
   | 'character'
   | 'rule'
   | 'foreshadowing'
+  | 'master_outline'
 
 export interface FormattedImportData {
   module: ImportTargetModule
@@ -232,6 +233,31 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
 - status 只能是 open（开放）、resolved（已回收）、abandoned（已放弃）三者之一
 - importance 可以是 high（重要）、normal（普通）、low（次要）
 - 只返回 JSON，不要有其他解释文字`,
+
+  master_outline: `你是一个小说总纲格式化专家。用户的输入可能是：
+1. 纯文本描述的总纲内容
+2. Markdown 格式的总纲文档
+3. JSON 格式的总纲对象（可能包含 title, content, summary 等字段）
+4. 包含世界观、核心设定、主线剧情等各类信息的大纲
+
+你的任务：
+1. 识别输入的格式
+2. 提取关键信息：总纲标题(title)、总纲内容(content)、摘要(summary)
+3. 返回标准化的 JSON 格式：
+
+\`\`\`json
+{
+  "title": "总纲标题",
+  "content": "完整的总纲正文内容（Markdown 格式，涵盖世界观、核心设定、主线剧情等）",
+  "summary": "简要摘要（200字以内，用于 RAG 索引）"
+}
+\`\`\`
+
+注意事项：
+- content 应该是完整的总纲内容，支持 Markdown 格式，涵盖小说的世界观、核心设定、主要势力、故事主线等
+- 如果无法提取标题，使用 "未命名总纲" 作为默认值
+- 如果没有提供 summary，自动从 content 前 200 字生成
+- 只返回 JSON，不要有其他解释文字`,
 }
 
 function detectModuleFromContent(content: string): ImportTargetModule | null {
@@ -266,6 +292,11 @@ function detectModuleFromContent(content: string): ImportTargetModule | null {
   if (lowerContent.includes('伏笔') || lowerContent.includes('foreshadowing') ||
       lowerContent.includes('悬念') || lowerContent.includes('线索')) {
     return 'foreshadowing'
+  }
+
+  if (lowerContent.includes('总纲') || lowerContent.includes('大纲') ||
+      lowerContent.includes('主线') || lowerContent.includes('master outline')) {
+    return 'master_outline'
   }
 
   return null
