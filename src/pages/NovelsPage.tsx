@@ -5,7 +5,7 @@
  * @modified 2026-04-22 - 重构为MainLayout架构，优化视觉层次和功能入口
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   Search,
@@ -44,6 +44,7 @@ import { useState, useMemo } from 'react'
  */
 export default function NovelsPage() {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string | null>(null)
   const [editingNovel, setEditingNovel] = useState<Novel | null>(null)
@@ -152,6 +153,17 @@ export default function NovelsPage() {
         toast.success(`状态已更新为：${statusLabels[newStatus] || newStatus}`)
       })
       .catch((error) => toast.error(error.message))
+  }
+
+  const handleWorkshopOpen = async (novelId: string, stage: string) => {
+    try {
+      const result = await api.workshop.createSession({ novelId, stage })
+      if (result.ok && result.session) {
+        navigate(`/workshop?session=${result.session.id}`)
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '创建创作会话失败')
+    }
   }
 
   const statusLabels: Record<string, string> = {
@@ -325,6 +337,7 @@ export default function NovelsPage() {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onStatusChange={handleStatusChange}
+                onWorkshopOpen={handleWorkshopOpen}
               />
             ))}
           </div>

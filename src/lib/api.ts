@@ -388,6 +388,20 @@ export const api = {
       req<{ success: boolean; message: string }>(`/api/invite-codes/${id}`, { method: 'DELETE' }),
   },
 
+  // AI 创作工坊 API
+  workshop: {
+    createSession: (body: { novelId?: string; stage?: string }) =>
+      req<{ ok: boolean; session: { id: string; stage: string; status: string; createdAt: number } }>('/api/workshop/session', { method: 'POST', body: j(body) }),
+    getSession: (sessionId: string) =>
+      req<{ ok: boolean; session: { id: string; novelId?: string; stage: string; status: string; messages: unknown[]; extractedData: Record<string, unknown>; createdAt: number; updatedAt: number } }>(`/api/workshop/session/${sessionId}`),
+    listSessions: () =>
+      req<{ ok: boolean; sessions: Array<{ id: string; title?: string; stage: string; status: string; updatedAt: number }> }>('/api/workshop/sessions'),
+    deleteSession: (sessionId: string) =>
+      req<{ ok: boolean; message: string }>(`/api/workshop/session/${sessionId}`, { method: 'DELETE' }),
+    updateSession: (sessionId: string, body: { title?: string; stage?: string }) =>
+      req<{ ok: boolean; message: string }>(`/api/workshop/session/${sessionId}`, { method: 'PATCH', body: j(body) }),
+  },
+
   // 系统设置API（管理员）
   systemSettings: {
     getRegistrationStatus: () =>

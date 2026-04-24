@@ -17,6 +17,10 @@ const {
   characters,
   volumes,
   chapters,
+  novelSettings,
+  writingRules,
+  foreshadowing,
+  entityIndex,
 } = schema
 
 // ============================================================
@@ -50,7 +54,11 @@ export const WORKSHOP_PROMPTS = {
   "description": "一句话简介",
   "coreAppeal": ["核心爽点1", "核心爽点2"],
   "targetWordCount": "预计总字数",
-  "targetChapters": "预计章节数"
+  "targetChapters": "预计章节数",
+  "writingRules": [
+    {"category": "primary", "title": "核心主题", "content": "本小说的核心主旨和价值观"},
+    {"category": "style", "title": "文风要求", "content": "语言风格、叙事视角等要求"}
+  ]
 }
 \`\`\`
 
@@ -258,10 +266,13 @@ export interface WorkshopExtractedData {
   targetWordCount?: string
   targetChapters?: string
   worldSettings?: Array<{ type: string; title: string; content: string }>
+  masterOutline?: string
   characters?: Array<{
     name: string
     role: string
     description: string
+    aliases?: string[]
+    powerLevel?: string
     attributes?: Record<string, any>
     relationships?: string[]
   }>
@@ -285,10 +296,21 @@ export interface WorkshopExtractedData {
     }>
     keyScenes?: string[]
   }>
+  writingRules?: Array<{
+    category: string
+    title: string
+    content: string
+    priority?: number
+  }>
 }
 
 /**
  * 创建新的 Workshop 会话
+ * 如果传入了 novelId，会自动带入该小说已有的数据到 extractedData
+ * stage 决定带入哪些阶段的数据：
+ * - worldbuild: 带入 concept 数据（小说名、总纲）
+ * - character_design: 带入 concept + worldbuild 数据
+ * - volume_outline: 带入 concept + worldbuild + character 数据
  */
 export async function createWorkshopSession(
   env: Env,
@@ -299,15 +321,111 @@ export async function createWorkshopSession(
 ): Promise<any> {
   const db = drizzle(env.DB)
 
+  let extractedData: WorkshopExtractedData = {}
+
+  if (data.novelId) {
+    extractedData = await loadNovelContextData(db, data.novelId, data.stage || 'concept')
+  }
+
   const [session] = await db.insert(workshopSessions).values({
     novelId: data.novelId || null,
     stage: data.stage || 'concept',
     messages: JSON.stringify([]),
-    extractedData: JSON.stringify({}),
+    extractedData: JSON.stringify(extractedData),
     status: 'active',
   }).returning()
 
   return session
+}
+
+/**
+ * 从已有小说加载上下文数据到 extractedData
+ */
+async function loadNovelContextData(
+  db: any,
+  novelId: string,
+  targetStage: string
+): Promise<WorkshopExtractedData> {
+  const extractedData: WorkshopExtractedData = {}
+
+  const novel = await db
+    .select()
+    .from(novels)
+    .where(eq(novels.id, novelId))
+    .get()
+
+  if (!novel) {
+    return extractedData
+  }
+
+  extractedData.title = novel.title
+  if (novel.genre) extractedData.genre = novel.genre
+  if (novel.description) extractedData.description = novel.description
+
+  if (targetStage === 'worldbuild' || targetStage === 'character_design' || targetStage === 'volume_outline') {
+    const outline = await db
+      .select()
+      .from(masterOutline)
+      .where(eq(masterOutline.novelId, novelId))
+      .get()
+
+    if (outline) {
+      if (outline.summary) extractedData.description = outline.summary
+      if (outline.content) extractedData.masterOutline = outline.content
+    }
+  }
+
+  if (targetStage === 'character_design' || targetStage === 'volume_outline') {
+    const settings = await db
+      .select()
+      .from(novelSettings)
+      .where(eq(novelSettings.novelId, novelId))
+      .get()
+
+    if (settings) {
+      const allSettings = await db
+        .select()
+        .from(novelSettings)
+        .where(eq(novelSettings.novelId, novelId))
+        .all()
+
+      const worldSettings: Array<{ type: string; title: string; content: string }> = []
+      const settingTypes = ['geography', 'power_system', 'faction', 'history', 'society', 'custom']
+      for (const type of settingTypes) {
+        const typeSettings = allSettings.filter((s: typeof allSettings[number]) => s.type === type)
+        if (typeSettings.length > 0) {
+          worldSettings.push({
+            type,
+            title: typeSettings[0].name || type,
+            content: typeSettings.map((s: typeof allSettings[number]) => `- ${s.name}: ${s.content}`).join('\n'),
+          })
+        }
+      }
+
+      if (worldSettings.length > 0) {
+        extractedData.worldSettings = worldSettings
+      }
+    }
+  }
+
+  if (targetStage === 'volume_outline') {
+    const chars = await db
+      .select()
+      .from(characters)
+      .where(eq(characters.novelId, novelId))
+      .all()
+
+    if (chars.length > 0) {
+      extractedData.characters = chars.map((c: typeof chars[number]) => ({
+        name: c.name,
+        role: c.role || 'supporting',
+        description: c.description || '',
+        attributes: c.attributes ? JSON.parse(c.attributes) : {},
+      }))
+    }
+  }
+
+  return extractedData
 }
 
 /**
@@ -573,7 +691,42 @@ export async function commitWorkshopSession(
       createdItems.outline = outline
     }
 
-    // 3. 创建角色
+    // 3. 创建世界设定 -> novelSettings
+    if (data.worldSettings && data.worldSettings.length > 0) {
+      const createdSettings: any[] = []
+      for (const setting of data.worldSettings) {
+        const [novelSetting] = await db.insert(novelSettings).values({
+          novelId,
+          type: setting.type,
+          category: setting.type,
+          name: setting.title,
+          content: setting.content,
+          importance: 'high',
+          sortOrder: createdSettings.length,
+        }).returning()
+        createdSettings.push(novelSetting)
+      }
+      createdItems.worldSettings = createdSettings
+    }
+
+    // 4. 创建创作规则 -> writingRules
+    if (data.writingRules && data.writingRules.length > 0) {
+      const createdRules: any[] = []
+      for (const rule of data.writingRules) {
+        const [writingRule] = await db.insert(writingRules).values({
+          novelId,
+          category: rule.category || 'general',
+          title: rule.title,
+          content: rule.content,
+          priority: rule.priority || 3,
+          isActive: 1,
+        }).returning()
+        createdRules.push(writingRule)
+      }
+      createdItems.writingRules = createdRules
+    }
+
+    // 5. 创建角色 -> characters
     if (data.characters && data.characters.length > 0) {
       const createdCharacters = []
       for (const char of data.characters) {
@@ -582,6 +735,8 @@ export async function commitWorkshopSession(
           name: char.name,
           role: char.role || 'supporting',
           description: char.description || '',
+          aliases: char.aliases ? JSON.stringify(char.aliases) : null,
+          powerLevel: char.powerLevel || null,
           attributes: char.attributes ? JSON.stringify(char.attributes) : null,
         }).returning()
         createdCharacters.push(character)
@@ -589,7 +744,7 @@ export async function commitWorkshopSession(
       createdItems.characters = createdCharacters
     }
 
-    // 4. 创建卷
+    // 6. 创建卷 -> volumes
     if (data.volumes && data.volumes.length > 0) {
       const createdVolumes: any[] = []
       for (const vol of data.volumes) {
@@ -598,14 +753,31 @@ export async function commitWorkshopSession(
           title: vol.title,
           summary: vol.outline || '',
           eventLine: vol.blueprint || '',
+          status: 'draft',
+          chapterCount: vol.chapterCount || 0,
           sortOrder: createdVolumes.length + 1,
         }).returning()
         createdVolumes.push(volume)
+
+        // 创建伏笔 -> foreshadowing
+        if (vol.foreshadowingSetup && vol.foreshadowingSetup.length > 0) {
+          for (const fs of vol.foreshadowingSetup) {
+            await db.insert(foreshadowing).values({
+              novelId,
+              title: fs,
+              status: 'open',
+              importance: 'normal',
+            }).run()
+          }
+        }
       }
       createdItems.volumes = createdVolumes
     }
 
-    // 5. 更新会话状态为已提交
+    // 7. 更新 entityIndex 总索引
+    await rebuildEntityIndex(db, novelId, data)
+
+    // 8. 更新会话状态为已提交
     await db.update(workshopSessions)
       .set({ status: 'committed', novelId })
       .where(eq(workshopSessions.id, sessionId))
@@ -662,6 +834,7 @@ function extractStructuredData(
           if (parsed.coreAppeal) newData.coreAppeal = parsed.coreAppeal
           if (parsed.targetWordCount) newData.targetWordCount = parsed.targetWordCount
           if (parsed.targetChapters) newData.targetChapters = parsed.targetChapters
+          if (parsed.writingRules) newData.writingRules = parsed.writingRules
           break
 
         case 'worldbuild':
@@ -710,6 +883,10 @@ function buildOutlineContent(data: WorkshopExtractedData): string {
 
   if (data.description) parts.push(`## 简介\n${data.description}`)
   if (data.coreAppeal?.length) parts.push(`## 核心看点\n${data.coreAppeal.join('\n')}`)
+  if (data.writingRules?.length) {
+    parts.push('## 创作规则')
+    data.writingRules.forEach(rule => parts.push(`### ${rule.title}\n${rule.content}`))
+  }
   if (data.worldSettings?.length) {
     parts.push('## 世界观设定')
     data.worldSettings.forEach(ws => parts.push(`### ${ws.title}\n${ws.content}`))
@@ -724,4 +901,80 @@ function buildOutlineContent(data: WorkshopExtractedData): string {
   }
 
   return parts.join('\n\n')
+}
+
+async function rebuildEntityIndex(
+  db: any,
+  novelId: string,
+  data: WorkshopExtractedData
+): Promise<void> {
+  const now = Math.floor(Date.now() / 1000)
+
+  const entries = []
+
+  entries.push({
+    entityType: 'novel',
+    entityId: novelId,
+    novelId,
+    parentId: null,
+    title: data.title || '未命名小说',
+    sortOrder: 0,
+    depth: 0,
+  })
+
+  if (data.worldSettings) {
+    for (let i = 0; i < data.worldSettings.length; i++) {
+      const setting = data.worldSettings[i]
+      entries.push({
+        entityType: 'setting',
+        entityId: `ws_${i}`,
+        novelId,
+        parentId: novelId,
+        title: setting.title,
+        sortOrder: i,
+        depth: 1,
+        meta: JSON.stringify({ type: setting.type }),
+      })
+    }
+  }
+
+  if (data.characters) {
+    for (let i = 0; i < data.characters.length; i++) {
+      const char = data.characters[i]
+      entries.push({
+        entityType: 'character',
+        entityId: `char_${i}`,
+        novelId,
+        parentId: novelId,
+        title: char.name,
+        sortOrder: i,
+        depth: 1,
+        meta: JSON.stringify({ role: char.role }),
+      })
+    }
+  }
+
+  if (data.volumes) {
+    for (let i = 0; i < data.volumes.length; i++) {
+      const vol = data.volumes[i]
+      entries.push({
+        entityType: 'volume',
+        entityId: `vol_${i}`,
+        novelId,
+        parentId: novelId,
+        title: vol.title,
+        sortOrder: i,
+        depth: 1,
+      })
+    }
+  }
+
+  if (entries.length > 1) {
+    for (const entry of entries.slice(1)) {
+      await db.insert(entityIndex).values({
+        ...entry,
+        updatedAt: now,
+      }).onConflictDoNothing().run()
+    }
+  }
 }

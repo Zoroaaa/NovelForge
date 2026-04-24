@@ -27,6 +27,9 @@ import {
   ChevronRight,
   ImagePlus,
   RefreshCw,
+  Globe,
+  Users,
+  Layers,
 } from 'lucide-react'
 import type { Novel } from '@/lib/types'
 
@@ -35,6 +38,7 @@ interface NovelCardProps {
   onEdit: (novel: Novel) => void
   onDelete: (novel: Novel) => void
   onStatusChange?: (id: string, status: string) => void
+  onWorkshopOpen?: (novelId: string, stage: string) => void
 }
 
 const genreColors: Record<string, string> = {
@@ -70,7 +74,7 @@ const statusConfig: Record<string, { label: string; color: string; icon: React.R
   },
 }
 
-export function NovelCard({ novel, onEdit, onDelete, onStatusChange }: NovelCardProps) {
+export function NovelCard({ novel, onEdit, onDelete, onStatusChange, onWorkshopOpen }: NovelCardProps) {
   const navigate = useNavigate()
   const [uploading, setUploading] = useState(false)
   const [coverUrl, setCoverUrl] = useState(novel.coverR2Key ? `/api/novels/${novel.id}/cover?t=${novel.updatedAt}` : null)
@@ -238,6 +242,27 @@ export function NovelCard({ novel, onEdit, onDelete, onStatusChange }: NovelCard
             <BookOpen className="mr-2 h-4 w-4" />
             进入工作台
           </DropdownMenuItem>
+          {onWorkshopOpen && (
+            <>
+              <div className="h-px bg-border my-1" />
+              <div className="px-2 py-1.5 text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+                <Sparkles className="h-3 w-3" />
+                AI 创作工坊
+              </div>
+              <DropdownMenuItem onClick={() => onWorkshopOpen(novel.id, 'worldbuild')} className="pl-6">
+                <Globe className="mr-2 h-4 w-4" />
+                继续世界观构建
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onWorkshopOpen(novel.id, 'character_design')} className="pl-6">
+                <Users className="mr-2 h-4 w-4" />
+                继续角色设计
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onWorkshopOpen(novel.id, 'volume_outline')} className="pl-6">
+                <Layers className="mr-2 h-4 w-4" />
+                继续卷纲规划
+              </DropdownMenuItem>
+            </>
+          )}
           <DropdownMenuItem onClick={() => onEdit(novel)}>
             <Edit className="mr-2 h-4 w-4" />
             编辑信息
