@@ -16,6 +16,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -182,6 +183,9 @@ export function RulesPanel({ novelId }: RulesPanelProps) {
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingId ? '编辑规则' : '新增规则'}</DialogTitle>
+              <DialogDescription>
+                {editingId ? '修改规则信息' : '创建新的创作规则'}
+              </DialogDescription>
             </DialogHeader>
             
             <form onSubmit={handleSubmit} className="space-y-4">

@@ -12,6 +12,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { ModelConfig } from '@/components/model/ModelConfig'
@@ -66,6 +67,9 @@ export function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
                 <Settings2 className="h-5 w-5" />
                 模型配置
               </DialogTitle>
+              <DialogDescription>
+                配置AI模型参数和生成设置
+              </DialogDescription>
             </DialogHeader>
             <Tabs defaultValue="models" className="mt-4">
               <TabsList className="grid w-full grid-cols-3 h-8">

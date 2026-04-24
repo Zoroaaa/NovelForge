@@ -18,6 +18,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
 import {
@@ -703,6 +704,9 @@ export default function WorkshopPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>确认提交创作数据？</DialogTitle>
+            <DialogDescription>
+              确认后将创建新的小说项目并写入数据库
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 py-4">

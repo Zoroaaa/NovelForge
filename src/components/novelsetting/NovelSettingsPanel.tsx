@@ -15,6 +15,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -233,6 +234,9 @@ export function NovelSettingsPanel({ novelId }: NovelSettingsPanelProps) {
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingId ? '编辑设定' : '新增设定'}</DialogTitle>
+              <DialogDescription>
+                {editingId ? '修改设定信息' : '创建新的小说设定'}
+              </DialogDescription>
             </DialogHeader>
             
             <form onSubmit={handleSubmit} className="space-y-4">

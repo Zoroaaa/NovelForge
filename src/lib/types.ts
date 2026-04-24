@@ -424,6 +424,27 @@ export interface PowerLevelBatchResult {
   }>
 }
 
+export interface PowerLevelValidationResult {
+  ok: boolean
+  characterId: string
+  characterName: string
+  isConsistent: boolean
+  dbLevel: { system: string; current: string } | null
+  assessedLevel: { system: string; current: string } | null
+  confidence: 'high' | 'medium' | 'low'
+  reasoning: string
+  suggestion: string
+  analyzedChapters: number
+}
+
+export interface PowerLevelApplyResult {
+  ok: boolean
+  characterId: string
+  characterName: string
+  previousLevel: string
+  newLevel: string
+}
+
 /**
  * 总索引节点 (entity_index)
  * 用于构建前端树形结构

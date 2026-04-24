@@ -14,6 +14,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
@@ -180,6 +181,9 @@ export function CharacterImageUpload({
             <ImageIcon className="h-5 w-5" />
             上传角色图片
           </DialogTitle>
+          <DialogDescription>
+            上传角色形象图片，支持拖拽上传
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 mt-4">

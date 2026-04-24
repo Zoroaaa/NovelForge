@@ -313,4 +313,224 @@ router.get('/character/:id', async (c) => {
   })
 })
 
+const ValidateSchema = z.object({
+  characterId: z.string().min(1),
+  novelId: z.string().min(1),
+  recentChapterCount: z.coerce.number().int().min(1).max(10).optional().default(3),
+})
+
+const ApplySuggestionSchema = z.object({
+  characterId: z.string().min(1),
+  novelId: z.string().min(1),
+  suggestedCurrent: z.string().min(1),
+  suggestedSystem: z.string().optional(),
+  note: z.string().optional(),
+})
+
+router.post('/validate', zValidator('json', ValidateSchema), async (c) => {
+  const { characterId, novelId, recentChapterCount } = c.req.valid('json')
+  const db = drizzle(c.env.DB)
+
+  const charRow = await db
+    .select({
+      id: characters.id,
+      name: characters.name,
+      powerLevel: characters.powerLevel,
+    })
+    .from(characters)
+    .where(and(eq(characters.id, characterId), sql`${characters.deletedAt} IS NULL`))
+    .get()
+
+  if (!charRow) {
+    return c.json({ error: '角色不存在' }, 404)
+  }
+
+  let dbPowerLevel: { system: string; current: string } | null = null
+  if (charRow.powerLevel) {
+    try {
+      const parsed = JSON.parse(charRow.powerLevel)
+      dbPowerLevel = {
+        system: (parsed.system as string) || '未知体系',
+        current: (parsed.current as string) || '未知',
+      }
+    } catch {}
+  }
+
+  const recentChapters = await db
+    .select({ id: chapters.id, title: chapters.title, content: chapters.content, sortOrder: chapters.sortOrder })
+    .from(chapters)
+    .where(
+      and(
+        eq(chapters.novelId, novelId),
+        sql`${chapters.deletedAt} IS NULL`,
+        sql`${chapters.content} IS NOT NULL`
+      )
+    )
+    .orderBy(desc(chapters.sortOrder))
+    .limit(recentChapterCount)
+    .all()
+
+  if (recentChapters.length === 0) {
+    return c.json({
+      ok: true,
+      characterId,
+      characterName: charRow.name,
+      isConsistent: true,
+      dbLevel: dbPowerLevel,
+      assessedLevel: null,
+      reason: '没有可分析的章节内容',
+    })
+  }
+
+  let detectionConfig
+  try {
+    detectionConfig = await (await import('../services/llm')).resolveConfig(db, 'analysis', novelId)
+    detectionConfig.apiKey = detectionConfig.apiKey || ''
+  } catch {
+    return c.json({ error: '未配置"智能分析"模型' }, 400)
+  }
+
+  const chapterTexts = recentChapters.reverse().map((ch, i) =>
+    `【第${i + 1}章】《${ch.title}》\n${(ch.content || '').slice(0, 2000)}`
+  ).join('\n\n---\n\n')
+
+  const validatePrompt = `你是一个小说境界分析专家。请根据以下最近 ${recentChapters.length} 章的内容，判断角色"${charRow.name}"的**当前实际境界**。
+
+【角色数据库记录的境界】：
+${dbPowerLevel ? `体系：${dbPowerLevel.system}，当前：${dbPowerLevel.current}` : '无记录'}
+
+【最近章节内容】：
+${chapterTexts}
+
+请以JSON格式输出（只输出JSON，不要其他内容）：
+{
+  "assessedSystem": "判断出的境界体系名称",
+  "assessedCurrent": "判断出的当前实际境界",
+  "isConsistent": true/false,
+  "confidence": "high/medium/low",
+  "reasoning": "50字以内的判断依据",
+  "suggestion": "如果不一致，给出建议更新的境界值（与assessedCurrent相同即可）"
+}
+
+判断标准：
+- 综合所有章节的描述来判断角色当前实力水平
+- 如果最新章节明确提到了新的境界变化，以最新的为准
+- 如果数据库记录与你的判断一致，isConsistent 为 true
+- confidence 表示判断置信度：高（多次明确提及）/ 中（有暗示但不够明确）/ 低（信息不足）`
+
+  const base = detectionConfig.apiBase || (() => {
+    switch (detectionConfig.provider) {
+      case 'volcengine': return 'https://ark.cn-beijing.volces.com/api/v3'
+      case 'anthropic': return 'https://api.anthropic.com/v1'
+      case 'openai': return 'https://api.openai.com/v1'
+      default: return 'https://ark.cn-beijing.volces.com/api/v3'
+    }
+  })()
+
+  const resp = await fetch(`${base}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${detectionConfig.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: detectionConfig.modelId,
+      messages: [
+        { role: 'system', content: '你是一个JSON生成助手，只输出JSON，不要其他内容。' },
+        { role: 'user', content: validatePrompt },
+      ],
+      stream: false,
+      temperature: 0.2,
+      max_tokens: 1000,
+    }),
+  })
+
+  if (!resp.ok) {
+    throw new Error(`Validation API error: ${resp.status}`)
+  }
+
+  const result = await resp.json() as any
+  const content = result.choices?.[0]?.message?.content || '{}'
+
+  let validated: Record<string, unknown> = {}
+  try {
+    validated = JSON.parse(content)
+  } catch {
+    return c.json({ error: 'LLM 返回格式解析失败', rawContent: content.slice(0, 500) }, 500)
+  }
+
+  const assessedLevel = {
+    system: (validated.assessedSystem as string) || dbPowerLevel?.system || '未知体系',
+    current: (validated.assessedCurrent as string) || '未知',
+  }
+
+  const isConsistent = validated.isConsistent === true ||
+    (!!dbPowerLevel && dbPowerLevel.current === assessedLevel.current && dbPowerLevel.system === assessedLevel.system)
+
+  return c.json({
+    ok: true,
+    characterId,
+    characterName: charRow.name,
+    isConsistent,
+    dbLevel: dbPowerLevel,
+    assessedLevel,
+    confidence: validated.confidence || 'low',
+    reasoning: (validated.reasoning as string) || '',
+    suggestion: (validated.suggestion as string) || assessedLevel.current,
+    analyzedChapters: recentChapters.length,
+  })
+})
+
+router.post('/apply-suggestion', zValidator('json', ApplySuggestionSchema), async (c) => {
+  const { characterId, novelId, suggestedCurrent, suggestedSystem, note } = c.req.valid('json')
+  const db = drizzle(c.env.DB)
+
+  const charRow = await db
+    .select({ id: characters.id, name: characters.name, powerLevel: characters.powerLevel })
+    .from(characters)
+    .where(eq(characters.id, characterId))
+    .get()
+
+  if (!charRow) {
+    return c.json({ error: '角色不存在' }, 404)
+  }
+
+  let existingData: Record<string, unknown> = { system: '', current: '', breakthroughs: [] }
+  if (charRow.powerLevel) {
+    try { existingData = JSON.parse(charRow.powerLevel) } catch {}
+  }
+
+  const previousCurrent = (existingData.current as string) || ''
+  const updatedData = {
+    ...existingData,
+    system: suggestedSystem || (existingData.system as string) || '未知体系',
+    current: suggestedCurrent,
+  }
+
+  if (previousCurrent && previousCurrent !== suggestedCurrent) {
+    const breakthroughs = Array.isArray(existingData.breakthroughs) ? [...existingData.breakthroughs] : []
+    breakthroughs.push({
+      chapterId: 'manual-validation',
+      from: previousCurrent,
+      to: suggestedCurrent,
+      note: note || '基于校验结果手动更新',
+      timestamp: Date.now(),
+    })
+    updatedData.breakthroughs = breakthroughs
+  }
+
+  await db
+    .update(characters)
+    .set({ powerLevel: JSON.stringify(updatedData) })
+    .where(eq(characters.id, characterId))
+
+  return c.json({
+    ok: true,
+    characterId,
+    characterName: charRow.name,
+    previousLevel: previousCurrent || '无',
+    newLevel: suggestedCurrent,
+  })
+})
+
 export { router as powerLevel }

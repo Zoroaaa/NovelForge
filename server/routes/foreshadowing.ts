@@ -465,7 +465,7 @@ router.get('/:novelId/stats', async (c) => {
         sql`${foreshadowing.chapterId} IS NOT NULL`
       ))
       .groupBy(foreshadowing.chapterId)
-      .orderBy(desc(sql`planted + resolved`))
+      .orderBy(desc(count(sql`CASE WHEN ${foreshadowing.status} != 'abandoned' THEN 1 END`)), desc(count(sql`CASE WHEN ${foreshadowing.status} = 'resolved' THEN 1 END`)))
       .limit(5)
       .all()
 

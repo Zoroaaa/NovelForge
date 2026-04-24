@@ -13,6 +13,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -148,6 +149,9 @@ export function ExportDialog({ novelId, novelTitle }: ExportDialogProps) {
             <Download className="h-5 w-5 text-primary" />
             导出小说
           </DialogTitle>
+          <DialogDescription>
+            选择格式和选项将小说导出为不同文件格式
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 mt-4">

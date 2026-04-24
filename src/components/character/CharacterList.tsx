@@ -16,6 +16,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -179,6 +180,9 @@ export function CharacterList({ novelId }: CharacterListProps) {
           <DialogContent className="max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingId ? '编辑角色' : '添加新角色'}</DialogTitle>
+              <DialogDescription>
+                {editingId ? '修改角色信息' : '创建新的角色'}
+              </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleCreate} className="space-y-4">
               {/* 图片上传 */}

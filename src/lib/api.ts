@@ -9,7 +9,8 @@ import type {
   NovelInput, ChapterInput, VolumeInput, CharacterInput, ModelConfig, GenerateOptions,
   MasterOutline, WritingRule, NovelSetting, ForeshadowingItem,
   ForeshadowingProgress, ForeshadowingHealthReport, ForeshadowingSuggestion, ForeshadowingStats,
-  PowerLevelDetectionResult, PowerLevelBatchResult, PowerLevelHistoryItem
+  PowerLevelDetectionResult, PowerLevelBatchResult, PowerLevelHistoryItem,
+  PowerLevelValidationResult, PowerLevelApplyResult
 } from './types'
 
 const TOKEN_KEY = 'auth_token'
@@ -278,6 +279,10 @@ export const api = {
                                    req<PowerLevelBatchResult>('/api/power-level/batch-detect', { method: 'POST', body: j(body), timeout: 300000 }),
     history:   (novelId: string)     => req<{ history: PowerLevelHistoryItem[] }>(`/api/power-level/history/${novelId}`),
     character: (characterId: string) => req<{ characterId: string; characterName: string; hasData: boolean; data: PowerLevelHistoryItem | null }>(`/api/power-level/character/${characterId}`),
+    validate:  (body: { characterId: string; novelId: string; recentChapterCount?: number }) =>
+                                   req<PowerLevelValidationResult>('/api/power-level/validate', { method: 'POST', body: j(body) }),
+    applySuggestion: (body: { characterId: string; novelId: string; suggestedCurrent: string; suggestedSystem?: string; note?: string }) =>
+                                   req<PowerLevelApplyResult>('/api/power-level/apply-suggestion', { method: 'POST', body: j(body) }),
   },
 
   // v2.0: 总索引（树形结构）

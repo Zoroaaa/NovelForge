@@ -16,6 +16,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -461,6 +462,9 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
                 <Wand2 className="h-5 w-5 text-primary" />
                 AI 生成下一章
               </DialogTitle>
+              <DialogDescription>
+                使用AI为所选卷生成下一章的标题和摘要
+              </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4">

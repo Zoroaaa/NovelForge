@@ -15,6 +15,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -292,6 +293,9 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingId ? '编辑卷' : '新增卷'}</DialogTitle>
+              <DialogDescription>
+                {editingId ? '修改卷信息' : '创建新的卷'}
+              </DialogDescription>
             </DialogHeader>
             
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -535,6 +539,9 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
               <Wand2 className="h-5 w-5 text-primary" />
               AI 批量生成章节规划
             </DialogTitle>
+            <DialogDescription>
+              批量生成章节大纲，包含标题、核心情节、关键冲突、伏笔安排等
+            </DialogDescription>
           </DialogHeader>
 
           {selectedVolumeForBatch && (
