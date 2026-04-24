@@ -452,13 +452,18 @@ novelforge/
 │   │   ├── setup.ts              # 系统初始化路由
 │   │   ├── system-settings.ts     # 系统设置路由
 │   │   ├── workshop.ts           # 创意工坊路由
-│   │   ├── novels.ts             # 小说管理
+│   │   ├── workshop-import.ts     # 工坊导入路由 (v1.7.0 新增)
+│   │   ├── workshop-format-import.ts # 格式化工坊导入路由 (v1.7.0 新增)
+│   │   ├── novels.ts             # 小说管理 (v1.7.0 增强)
 │   │   ├── chapters.ts           # 章节管理
 │   │   ├── characters.ts         # 角色管理
+│   │   ├── foreshadowing.ts      # 伏笔管理 (v1.7.0 增强)
+│   │   ├── master-outline.ts     # 总纲管理
+│   │   ├── power-level.ts        # 境界追踪路由
+│   │   ├── entity-index.ts       # 实体索引路由
 │   │   ├── generate.ts           # AI 生成
 │   │   ├── settings.ts           # 模型配置
-│   │   ├── vectorize.ts          # 向量化索引 (v1.6.0 增强)
-│   │   └── ...                   # 其他路由
+│   │   └── vectorize.ts          # 向量化索引 (v1.6.0 增强)
 │   ├── services/
 │   │   ├── llm.ts               # LLM 服务
 │   │   ├── agent/               # Agent 系统模块化 (v1.6.0 重构)
@@ -478,9 +483,11 @@ novelforge/
 │   │   ├── embedding.ts         # 向量化
 │   │   ├── vision.ts            # 视觉分析
 │   │   ├── export.ts            # 导出服务
-│   │   ├── foreshadowing.ts     # 伏笔追踪
+│   │   ├── foreshadowing.ts     # 伏笔追踪 (v1.7.0 增强)
 │   │   ├── powerLevel.ts        # 境界追踪
-│   │   └── entity-index.ts      # 实体索引
+│   │   ├── entity-index.ts      # 实体索引
+│   │   ├── formatImport.ts      # 格式导入服务 (v1.7.0 新增)
+│   │   └── workshop.ts          # 创意工坊服务 (v1.7.0 增强)
 │   ├── lib/
 │   │   ├── auth.ts              # 认证模块
 │   │   ├── queue.ts             # 队列操作库 (v1.6.0 新增)
@@ -489,7 +496,8 @@ novelforge/
 │       ├── schema.ts            # 数据库 Schema
 │       └── migrations/          # 数据库迁移
 │           ├── 0010_schema.sql  # v4.0 整合迁移
-│           └── 0011_check_logs.sql # 检查日志
+│           ├── 0011_check_logs.sql # 检查日志
+│           └── 0012_foreshadowing_progress.sql # 伏笔进度追踪 (v1.7.0)
 │
 ├── docs/                         # 文档
 │   ├── context-v4-execution-guide.md # v4上下文构建说明 (v1.6.0 新增)
@@ -565,6 +573,6 @@ novelforge/
 
 <div align="center">
 
-**Made with ❤️ by the NovelForge Team · Version 1.6.0**
+**Made with ❤️ by the NovelForge Team · Version 1.7.0**
 
 </div>

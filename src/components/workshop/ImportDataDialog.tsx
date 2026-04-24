@@ -104,7 +104,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
       }
       if (token) headers['Authorization'] = `Bearer ${token}`
 
-      const res = await fetch('/api/workshop/format-import', {
+      const res = await fetch('/api/workshop-format-import/format-import', {
         method: 'POST',
         headers,
         body: JSON.stringify({
