@@ -22,7 +22,10 @@ const router = new Hono<{ Bindings: Env }>()
 
 const importDataSchema = z.object({
   module: z.enum(['chapter', 'volume', 'setting', 'character', 'rule', 'foreshadowing']),
-  data: z.record(z.string(), z.unknown()),
+  data: z.union([
+    z.record(z.string(), z.unknown()),
+    z.array(z.record(z.string(), z.unknown()))
+  ]),
   novelId: z.string().min(1, 'novelId 不能为空'),
 })
 
