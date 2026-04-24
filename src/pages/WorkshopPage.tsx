@@ -5,7 +5,7 @@
  * @modified 2026-04-22 - 集成会话管理功能（借鉴OSSshelf-main ChatSidebar模式）
  */
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { getToken } from '@/lib/api'
@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/select'
 import { MainLayout } from '@/components/layout/MainLayout'
 import { WorkshopSidebar } from '@/components/workshop/WorkshopSidebar'
+import { ImportDataDialog, type FormattedImportData } from '@/components/workshop/ImportDataDialog'
 import {
   MessageSquare,
   Send,
@@ -44,6 +45,7 @@ import {
   Plus,
   PanelLeftClose,
   PanelLeft,
+  Upload,
 } from 'lucide-react'
 
 interface WorkshopMessage {
@@ -93,6 +95,7 @@ const STAGES = [
 export default function WorkshopPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [stage, setStage] = useState('concept')
@@ -101,6 +104,7 @@ export default function WorkshopPage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [extractedData, setExtractedData] = useState<ExtractedData>({})
   const [showCommitDialog, setShowCommitDialog] = useState(false)
+  const [showImportDialog, setShowImportDialog] = useState(false)
 
   // 会话管理状态（借鉴OSSshelf-main AIChat.tsx:216-219）
   const [showSidebar, setShowSidebar] = useState(() => window.innerWidth >= 1024)
@@ -163,6 +167,16 @@ export default function WorkshopPage() {
       setIsGenerating(false)
     }
   }, [])
+
+  // 从URL参数自动加载会话（小说列表"继续世界观构建"等操作跳转过来时）
+  useEffect(() => {
+    const sessionParam = searchParams.get('session')
+    if (sessionParam && !sessionId) {
+      loadSession(sessionParam)
+      queryClient.invalidateQueries({ queryKey: ['workshop-sessions'] })
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, sessionId, loadSession, queryClient, setSearchParams])
 
   // 创建新会话
   const createSessionMutation = useMutation({
@@ -286,6 +300,24 @@ export default function WorkshopPage() {
       setIsGenerating(false)
       queryClient.invalidateQueries({ queryKey: ['workshop-sessions'] })
       queryClient.invalidateQueries({ queryKey: ['workshop', sessionId] })
+
+      // AI对话完成后从服务端拉取最新预览数据，确保右侧预览同步
+      if (sessionId) {
+        try {
+          const token = getToken()
+          const headers: Record<string, string> = {}
+          if (token) headers['Authorization'] = `Bearer ${token}`
+          const refreshRes = await fetch(`/api/workshop/session/${sessionId}`, { headers })
+          if (refreshRes.ok) {
+            const refreshData = await refreshRes.json()
+            if (refreshData.session?.extractedData) {
+              setExtractedData(refreshData.session.extractedData)
+            }
+          }
+        } catch (e) {
+          console.warn('刷新预览数据失败:', e)
+        }
+      }
     } catch (error) {
       setIsGenerating(false)
       toast.error(`消息处理失败: ${(error as Error).message}`)
@@ -314,8 +346,6 @@ export default function WorkshopPage() {
       setShowCommitDialog(false)
     },
   })
-
-  // 切换阶段
   const handleStageChange = async (newStage: string) => {
     if (!sessionId) {
       setStage(newStage)
@@ -445,6 +475,12 @@ export default function WorkshopPage() {
           提交创建小说
         </Button>
       )}
+
+      {/* 导入数据按钮 */}
+      <Button size="sm" variant="outline" onClick={() => setShowImportDialog(true)} className="gap-2">
+        <Upload className="h-4 w-4" />
+        导入数据
+      </Button>
     </div>
   )
 
@@ -769,6 +805,19 @@ export default function WorkshopPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 导入数据对话框 */}
+      <ImportDataDialog
+        open={showImportDialog}
+        onOpenChange={setShowImportDialog}
+        onImportSuccess={(data) => {
+          setExtractedData((prev) => ({
+            ...prev,
+            ...(Array.isArray(data.data) ? { importedItems: data.data } : data.data),
+          }))
+          toast.success('数据已导入，请确认后提交')
+        }}
+      />
     </MainLayout>
   )
 }

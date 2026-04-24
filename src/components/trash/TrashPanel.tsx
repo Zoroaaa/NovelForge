@@ -45,7 +45,7 @@ export function TrashPanel({ novelId }: TrashPanelProps) {
 
   const { data: trashData, isLoading, refetch } = useQuery({
     queryKey: ['trash', novelId],
-    queryFn: () => api.novels.trash.get(novelId),
+    queryFn: () => api.novels.trash.list(novelId),
     refetchInterval: false,
   })
 

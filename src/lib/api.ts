@@ -171,9 +171,13 @@ export const api = {
                                    req<Novel>(`/api/novels/${id}`, { method: 'PATCH', body: j(body) }),
     /** 删除小说 */
     delete: (id: string)          => req(`/api/novels/${id}`, { method: 'DELETE' }),
+    /** 恢复已删除的小说 */
+    restore: (id: string)         => req<Novel>(`/api/novels/${id}/restore`, { method: 'PATCH' }),
     trash: {
-      get: (novelId: string)       => req<{ ok: boolean; tables: Array<{ key: string; label: string; icon: string; count: number; items: Record<string, unknown>[] }>; total: number }>(`/api/novels/${novelId}/trash`),
+      list: (novelId: string)       => req<{ ok: boolean; tables: Array<{ key: string; label: string; icon: string; count: number; items: Record<string, unknown>[] }>; total: number }>(`/api/novels/${novelId}/trash`),
+      all: () => req<{ ok: boolean; novels: Array<{ id: string; title: string; genre?: string; status: string; wordCount: number; chapterCount: number; deletedAt: number; createdAt: number; updatedAt: number }>; total: number }>('/api/novels/trash'),
       clean: (novelId: string, table?: string) => req<{ ok: boolean; deleted: number }>(`/api/novels/${novelId}/trash${table ? `?table=${table}` : ''}`, { method: 'DELETE' }),
+      destroy: (novelId: string) => req<{ ok: boolean; deleted: number }>(`/api/novels/trash?id=${novelId}`, { method: 'DELETE' }),
     },
   },
   

@@ -21,6 +21,7 @@ import { api } from '@/lib/api'
 import { NovelCard } from '@/components/novel/NovelCard'
 import { CreateNovelDialog } from '@/components/novel/CreateNovelDialog'
 import { EditNovelDialog } from '@/components/novel/EditNovelDialog'
+import { NovelTrashDialog } from '@/components/novel/NovelTrashDialog'
 import { MainLayout } from '@/components/layout/MainLayout'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -51,6 +52,7 @@ export default function NovelsPage() {
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Novel | null>(null)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [trashDialogOpen, setTrashDialogOpen] = useState(false)
 
   const { data: novelsData, isLoading } = useQuery({
     queryKey: ['novels'],
@@ -176,6 +178,17 @@ export default function NovelsPage() {
   // 顶部栏右侧操作按钮
   const headerActions = (
     <div className="flex items-center gap-2">
+      {/* 回收站入口 */}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-8 gap-1.5 text-muted-foreground hover:text-destructive"
+        onClick={() => setTrashDialogOpen(true)}
+      >
+        <Trash2 className="h-4 w-4" />
+        <span className="hidden sm:inline text-xs">回收站</span>
+      </Button>
+
       {/* 视图切换 */}
       <div className="hidden sm:flex items-center border rounded-md p-0.5">
         <Button
@@ -461,6 +474,9 @@ export default function NovelsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 全局小说回收站对话框 */}
+      <NovelTrashDialog open={trashDialogOpen} onOpenChange={setTrashDialogOpen} />
     </MainLayout>
   )
 }
