@@ -3,8 +3,8 @@
 <div align="center">
 
 ![NovelForge Logo](https://img.shields.io/badge/NovelForge-AI%20Writing%20Studio-blue?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-1.7.0-success?style=for-the-badge)
-![Phase](https://img.shields.io/badge/Phase-7%20Complete-success?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-1.8.0-success?style=for-the-badge)
+![Phase](https://img.shields.io/badge/Phase-8%20Complete-success?style=for-the-badge)
 ![Cloudflare](https://img.shields.io/badge/Cloudflare-Pages%2BWorkers-orange?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
@@ -240,6 +240,7 @@ Total: 12,000 tokens
 | **🗑️ 回收站** | 软删除数据查看 · 单条/批量永久删除 (v1.6.0 新增) |
 | **🛡️ 质量检查** | 角色一致性检查 · 章节连贯性检查 · 综合评分 (v1.6.0 新增) |
 | **⚡ 队列任务** | 异步索引重建 · 后台任务处理 · 任务日志追踪 (v1.6.0 新增) |
+| **🪄 数据导入** | AI智能格式识别 · JSON/TXT/MD支持 · 7种模块 · 3种导入模式 · 批量处理 (v1.8.0 新增) |
 | **📥 工坊导入** | 结构化数据导入 · 批量创建 · 数据验证 (v1.7.0 新增) |
 | **🪝 伏笔进度** | 伏笔收尾进度追踪 · 多章节分布 · 状态可视化 (v1.7.0 新增) |
 
@@ -415,6 +416,9 @@ novelforge/
 │   │   ├── outline/              # 大纲组件
 │   │   ├── chapter/              # 章节编辑器
 │   │   ├── generate/             # AI 生成面板 (v1.6.0 增强)
+│   │   ├── workshop/             # 创作工坊组件
+│   │   │   ├── WorkshopSidebar.tsx     # 工坊会话侧边栏
+│   │   │   └── ImportDataDialog.tsx    # 导入数据对话框 (v1.8.0 新增)
 │   │   ├── character/            # 角色管理
 │   │   ├── export/               # 导出对话框
 │   │   ├── entitytree/           # 实体树面板 (v1.6.0 新增)
@@ -452,8 +456,8 @@ novelforge/
 │   │   ├── setup.ts              # 系统初始化路由
 │   │   ├── system-settings.ts     # 系统设置路由
 │   │   ├── workshop.ts           # 创意工坊路由
-│   │   ├── workshop-import.ts     # 工坊导入路由 (v1.7.0 新增)
-│   │   ├── workshop-format-import.ts # 格式化工坊导入路由 (v1.7.0 新增)
+│   │   ├── workshop-import.ts     # 工坊导入路由 (v1.8.0 新增)
+│   │   ├── workshop-format-import.ts # 格式化工坊导入路由 (v1.8.0 新增)
 │   │   ├── novels.ts             # 小说管理 (v1.7.0 增强)
 │   │   ├── chapters.ts           # 章节管理
 │   │   ├── characters.ts         # 角色管理
@@ -486,8 +490,8 @@ novelforge/
 │   │   ├── foreshadowing.ts     # 伏笔追踪 (v1.7.0 增强)
 │   │   ├── powerLevel.ts        # 境界追踪
 │   │   ├── entity-index.ts      # 实体索引
-│   │   ├── formatImport.ts      # 格式导入服务 (v1.7.0 新增)
-│   │   └── workshop.ts          # 创意工坊服务 (v1.7.0 增强)
+│   │   ├── formatImport.ts      # 格式导入服务 (v1.8.0 新增)
+│   │   └── workshop.ts          # 创意工坊服务
 │   ├── lib/
 │   │   ├── auth.ts              # 认证模块
 │   │   ├── queue.ts             # 队列操作库 (v1.6.0 新增)
@@ -573,6 +577,6 @@ novelforge/
 
 <div align="center">
 
-**Made with ❤️ by the NovelForge Team · Version 1.7.0**
+**Made with ❤️ by the NovelForge Team · Version 1.8.0**
 
 </div>
