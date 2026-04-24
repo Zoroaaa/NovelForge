@@ -465,9 +465,9 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
                     {JSON.stringify(formattedPreview[0].data, null, 2)}
                   </pre>
                 ) : (
-                  <div className="p-4 space-y-4">
+                  <div className="p-4 space-y-4 overflow-y-auto flex-1">
                     {formattedPreview.map((preview, idx) => (
-                      <div key={idx} className="border rounded-lg p-3">
+                      <div key={idx} className="border rounded-lg p-3 shrink-0">
                         <div className="flex items-center gap-2 mb-2">
                           <span className="text-sm font-medium">文件 {idx + 1}</span>
                           {getParseStatusIcon(preview.parseStatus)}
@@ -475,7 +475,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
                             {MODULE_OPTIONS.find((m) => m.value === preview.module)?.label}
                           </Badge>
                         </div>
-                        <pre className="text-xs font-mono whitespace-pre-wrap break-all bg-muted/50 p-2 rounded max-h-40 overflow-y-auto">
+                        <pre className="text-xs font-mono whitespace-pre-wrap break-all bg-muted/50 p-2 rounded">
                           {JSON.stringify(preview.data, null, 2)}
                         </pre>
                         {preview.parseMessage && (
