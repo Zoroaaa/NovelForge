@@ -10,6 +10,7 @@ import { NovelSettingsPanel } from '@/components/novelsetting/NovelSettingsPanel
 import { RulesPanel } from '@/components/rules/RulesPanel'
 import { OutlinePanel } from '@/components/outline/OutlinePanel'
 import { ForeshadowingPanel } from '@/components/foreshadowing/ForeshadowingPanel'
+import { PowerLevelPanel } from '@/components/powerlevel/PowerLevelPanel'
 import { VolumePanel } from '@/components/volume/VolumePanel'
 import { EntityTreePanel } from '@/components/entitytree/EntityTreePanel'
 import { TrashPanel } from '@/components/trash/TrashPanel'
@@ -22,6 +23,7 @@ import {
   AlignLeft,
   Library,
   Bookmark,
+  Swords,
   TreePine,
   Trash2,
 } from 'lucide-react'
@@ -60,6 +62,7 @@ const TAB_GROUPS: TabGroup[] = [
       { value: 'volumes', label: '卷', icon: Library },
       { value: 'outline', label: '总纲', icon: AlignLeft },
       { value: 'foreshadowing', label: '伏笔', icon: Bookmark },
+      { value: 'power-level', label: '境界', icon: Swords },
       { value: 'rules', label: '规则', icon: ScrollText },
     ] as const,
   },
@@ -109,6 +112,8 @@ export function Sidebar({ novelId, onChapterSelect }: SidebarProps) {
         return <VolumePanel novelId={novelId} onChapterSelect={onChapterSelect} />
       case 'foreshadowing':
         return <ForeshadowingPanel novelId={novelId} onChapterSelect={onChapterSelect} />
+      case 'power-level':
+        return <PowerLevelPanel novelId={novelId} />
       case 'entity-tree':
         return <EntityTreePanel novelId={novelId} onChapterSelect={onChapterSelect} />
       case 'trash':

@@ -35,6 +35,7 @@ import { masterOutlineRouter } from './routes/master-outline'
 import { novelSettingsRouter } from './routes/novel-settings'
 import { writingRulesRouter } from './routes/writing-rules'
 import { foreshadowing } from './routes/foreshadowing'
+import { powerLevel } from './routes/power-level'
 import { entityIndexRouter } from './routes/entity-index'
 import { workshop } from './routes/workshop'
 
@@ -264,6 +265,7 @@ protectedApi.route('/rules', writingRulesRouter)
 protectedApi.route('/master-outline', masterOutlineRouter)
 protectedApi.route('/generate', generate)
 protectedApi.route('/foreshadowing', foreshadowing)
+protectedApi.route('/power-level', powerLevel)
 protectedApi.route('/entities', entityIndexRouter)
 protectedApi.route('/export', exportRouter)
 protectedApi.route('/search', search)

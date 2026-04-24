@@ -7,6 +7,7 @@ import { chapters, characters, foreshadowing } from '../../db/schema'
 import { eq, desc, sql, and } from 'drizzle-orm'
 import type { Env } from '../../lib/types'
 import type { CoherenceCheckResult } from './types'
+import { embedText, searchSimilar } from '../../services/embedding'
 
 export async function checkChapterCoherence(
   env: Env,
@@ -110,28 +111,34 @@ async function checkForeshadowingConsistency(
         title: foreshadowing.title,
         description: foreshadowing.description,
         importance: foreshadowing.importance,
-        chapterId: foreshadowing.chapterId,
+        deletedAt: foreshadowing.deletedAt,
       })
       .from(foreshadowing)
       .where(
         and(
           eq(foreshadowing.novelId, novelId),
           eq(foreshadowing.status, 'open'),
-          eq(foreshadowing.importance, 'high')
+          sql`${foreshadowing.deletedAt} IS NULL`
         )
       )
       .all()
 
     if (openForeshadowing.length === 0) return
 
-    for (const fs of openForeshadowing.slice(0, 5)) {
-      const keywords = [fs.title, ...(fs.description ? fs.description.split(/[，。、]/).slice(0, 3) : [])]
+    const hasVectorize = !!env.VECTORIZE
 
+    const keywordCheckedIds = new Set<string>()
+    const semanticConfirmedIds = new Set<string>()
+
+    for (const fs of openForeshadowing) {
+      const keywords = [fs.title, ...(fs.description ? fs.description.split(/[，。、]/).slice(0, 3) : [])]
       const hasMention = keywords.some((kw: string) =>
         kw.trim().length > 1 && (currentChapter.content || '').includes(kw.trim())
       )
 
-      if (!hasMention) {
+      if (hasMention) {
+        keywordCheckedIds.add(fs.id)
+      } else if (!hasVectorize && fs.importance === 'high') {
         issues.push({
           severity: 'warning',
           category: 'foreshadowing',
@@ -140,6 +147,61 @@ async function checkForeshadowingConsistency(
         })
       }
     }
+
+    if (hasVectorize && currentChapter.content) {
+      try {
+        const chapterVector = await embedText(env.AI, currentChapter.content.slice(0, 3000))
+
+        const semanticTargets = openForeshadowing.filter((fs: typeof openForeshadowing[number]) =>
+          !keywordCheckedIds.has(fs.id) && fs.description && fs.description.trim().length > 5
+        )
+
+        for (const fs of semanticTargets) {
+          const results = await searchSimilar(env.VECTORIZE, chapterVector, {
+            topK: 3,
+            filter: { sourceType: 'chapter' },
+          })
+
+          const hasSemanticMatch = results.length > 0 &&
+            results[0].score > 0.6 &&
+            results[0].metadata.sourceId === currentChapter.id
+
+          if (hasSemanticMatch) {
+            semanticConfirmedIds.add(fs.id)
+          } else if (fs.importance === 'high') {
+            issues.push({
+              severity: 'warning',
+              category: 'foreshadowing',
+              message: `重要伏笔《${fs.title}》本章未提及（语义检测确认）`,
+              suggestion: `建议在本章中适当提及或为该伏笔做铺垫（描述:${fs.description?.slice(0, 50)}）`,
+            })
+          }
+        }
+      } catch (semanticError) {
+        console.warn('Foreshadowing semantic check failed, falling back to keyword-only:', semanticError)
+
+        for (const fs of openForeshadowing) {
+          if (keywordCheckedIds.has(fs.id) || semanticConfirmedIds.has(fs.id)) continue
+          if (fs.importance !== 'high') continue
+
+          const keywords = [fs.title, ...(fs.description ? fs.description.split(/[，。、]/).slice(0, 3) : [])]
+          const hasMention = keywords.some((kw: string) =>
+            kw.trim().length > 1 && (currentChapter.content || '').includes(kw.trim())
+          )
+
+          if (!hasMention) {
+            issues.push({
+              severity: 'warning',
+              category: 'foreshadowing',
+              message: `重要伏笔《${fs.title}》本章未提及或推进`,
+              suggestion: `建议在本章中适当提及或为该伏笔做铺垫（描述:${fs.description?.slice(0, 50)}）`,
+            })
+          }
+        }
+      }
+    }
+
+    console.log(`📝 [Coherence] Foreshadowing check: ${keywordCheckedIds.size} keyword-match, ${semanticConfirmedIds.size} semantic-confirm, ${openForeshadowing.length - keywordCheckedIds.size - semanticConfirmedIds.size} unchecked`)
   } catch (error) {
     console.warn('Foreshadowing consistency check failed:', error)
   }

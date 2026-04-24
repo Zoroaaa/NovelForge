@@ -308,6 +308,122 @@ export interface ForeshadowingItem {
   deletedAt: number | null
 }
 
+export interface ForeshadowingProgress {
+  id: string
+  foreshadowingId: string
+  chapterId: string
+  progressType: 'hint' | 'advance' | 'partial_reveal'
+  summary: string | null
+  mentionedKeywords: string | null
+  createdAt: number
+}
+
+export interface ForeshadowingHealthReport {
+  totalOpen: number
+  staleItems: Array<{
+    id: string
+    title: string
+    importance: string
+    chaptersSinceLastProgress: number
+    lastProgressChapterTitle?: string
+    suggestion: string
+  }>
+  atRiskOfContradiction: Array<{
+    id: string
+    title: string
+    riskReason: string
+  }>
+  resolutionSuggestions: Array<{
+    id: string
+    title: string
+    suggestedResolution: string
+  }>
+}
+
+export interface ForeshadowingSuggestion {
+  foreshadowing: { id: string; title: string; description: string | null; importance: string }
+  relevanceScore: number
+  suggestAction: 'weave_in' | 'advance' | 'resolve' | 'hint'
+  reason: string
+}
+
+export interface ForeshadowingStats {
+  overview: {
+    total: number
+    open: number
+    resolved: number
+    abandoned: number
+    resolutionRate: number
+    avgLifespan: number
+  }
+  byImportance: Record<string, { total: number; open: number; resolved: number }>
+  byAge: Array<{ range: string; count: number; ids: string[] }>
+  hotChapters: Array<{
+    chapterId: string
+    chapterTitle: string
+    plantedCount: number
+    resolvedCount: number
+    progressedCount: number
+  }>
+}
+
+export interface PowerLevelData {
+  system: string
+  current: string
+  breakthroughs: Array<{
+    chapterId: string
+    from: string
+    to: string
+    note?: string
+    timestamp?: number
+  }>
+  nextMilestone?: string
+}
+
+export interface PowerLevelHistoryBreakthrough {
+  chapterId: string
+  chapterTitle: string
+  from: string
+  to: string
+  note?: string
+  timestamp: number
+}
+
+export interface PowerLevelHistoryItem {
+  characterId: string
+  characterName: string
+  system: string
+  currentLevel: string
+  nextMilestone?: string
+  breakthroughs: PowerLevelHistoryBreakthrough[]
+  totalBreakthroughs: number
+}
+
+export interface PowerLevelDetectionResult {
+  hasBreakthrough: boolean
+  updates: Array<{
+    characterId: string
+    characterName: string
+    previousPowerLevel?: PowerLevelData
+    newPowerLevel: PowerLevelData
+    breakthroughNote?: string
+  }>
+}
+
+export interface PowerLevelBatchResult {
+  ok: boolean
+  totalChapters: number
+  totalBreakthroughs: number
+  errorCount: number
+  results: Array<{
+    chapterId: string
+    chapterTitle: string
+    hasBreakthrough: boolean
+    updatesCount: number
+    error?: string
+  }>
+}
+
 /**
  * 总索引节点 (entity_index)
  * 用于构建前端树形结构

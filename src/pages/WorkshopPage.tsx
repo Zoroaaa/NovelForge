@@ -255,7 +255,15 @@ export default function WorkshopPage() {
 
             if (data.type === 'done') {
               if (data.extractedData) {
-                setExtractedData(prev => ({ ...prev, ...data.extractedData }))
+                setExtractedData(prev => {
+                  const merged: ExtractedData = { ...prev }
+                  for (const [key, value] of Object.entries(data.extractedData as Record<string, unknown>)) {
+                    if (value !== undefined && value !== null) {
+                      (merged as Record<string, unknown>)[key] = value
+                    }
+                  }
+                  return merged
+                })
               }
               setMessages(prev => prev.map(m => (m.id === assistantId ? m : m)))
             }
@@ -307,9 +315,30 @@ export default function WorkshopPage() {
   })
 
   // 切换阶段
-  const handleStageChange = (newStage: string) => {
+  const handleStageChange = async (newStage: string) => {
+    if (!sessionId) {
+      setStage(newStage)
+      return
+    }
+
+    if (newStage === stage) return
+
     setStage(newStage)
     toast.info(`已切换到 ${STAGES.find(s => s.id === newStage)?.label} 阶段`)
+
+    try {
+      const token = getToken()
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      await fetch(`/api/workshop/session/${sessionId}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ stage: newStage }),
+      })
+      queryClient.invalidateQueries({ queryKey: ['workshop-sessions'] })
+    } catch (e) {
+      console.error('Failed to update session stage:', e)
+    }
   }
 
   // ────────────────────────────────────────────────────────

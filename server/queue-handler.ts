@@ -70,8 +70,8 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
 
       try {
         const foreshadowingResult = await extractForeshadowingFromChapter(env, chapterId, novelId)
-        if (foreshadowingResult.newForeshadowing.length > 0 || foreshadowingResult.resolvedForeshadowingIds.length > 0) {
-          console.log(`📝 [Queue] Foreshadowing: ${foreshadowingResult.newForeshadowing.length} new, ${foreshadowingResult.resolvedForeshadowingIds.length} resolved`)
+        if (foreshadowingResult.newForeshadowing.length > 0 || foreshadowingResult.resolvedForeshadowingIds.length > 0 || foreshadowingResult.progresses?.length > 0) {
+        console.log(`📝 [Queue] Foreshadowing: ${foreshadowingResult.newForeshadowing.length} new, ${foreshadowingResult.resolvedForeshadowingIds.length} resolved, ${foreshadowingResult.progresses?.length || 0} progressed`)
         }
       } catch (foreshadowError) {
         console.warn('[Queue] Foreshadowing extraction failed (non-critical):', foreshadowError)

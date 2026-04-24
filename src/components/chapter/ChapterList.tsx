@@ -4,13 +4,13 @@
  * @version 2.0.0
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Chapter, ChapterInput, Volume } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Plus, BookOpen, Trash2, FileText, Sparkles, CheckCircle, RefreshCw, ChevronDown, ChevronRight, Library, Wand2, Loader2 } from 'lucide-react'
+import { Plus, BookOpen, Trash2, FileText, Sparkles, CheckCircle, RefreshCw, ChevronDown, ChevronRight, Library, Wand2, Loader2, Zap } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -71,6 +71,24 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
     queryKey: ['volumes', novelId],
     queryFn: () => api.volumes.list(novelId),
   })
+
+  const { data: plHistory } = useQuery({
+    queryKey: ['power-level-history', novelId],
+    queryFn: () => api.powerLevel.history(novelId),
+    enabled: !!novelId,
+  })
+
+  const chapterBreakthroughs = useMemo(() => {
+    const map = new Map<string, Array<{ characterName: string; from: string; to: string }>>()
+    if (!plHistory?.history) return map
+    for (const item of plHistory.history) {
+      for (const bt of item.breakthroughs) {
+        if (!map.has(bt.chapterId)) map.set(bt.chapterId, [])
+        map.get(bt.chapterId)!.push({ characterName: item.characterName, from: bt.from, to: bt.to })
+      }
+    }
+    return map
+  }, [plHistory])
 
   const chaptersByVolume = (chapters || []).reduce((acc, ch) => {
     const key = ch.volumeId || 'uncategorized'
@@ -251,6 +269,17 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
                   {chapter.wordCount.toLocaleString()} 字
                 </span>
               )}
+              {(() => {
+                const bts = chapterBreakthroughs.get(chapter.id)
+                if (!bts || bts.length === 0) return null
+                return (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-sm bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400 text-[10px] font-medium">
+                    <Zap className="h-2.5 w-2.5" />
+                    {bts[0].characterName}: {bts[0].from}→{bts[0].to}
+                    {bts.length > 1 && <span className="ml-0.5 opacity-60">+{bts.length - 1}</span>}
+                  </span>
+                )
+              })()}
             </div>
           </div>
           <div className="flex items-center opacity-0 group-hover:opacity-100 shrink-0 transition-opacity">

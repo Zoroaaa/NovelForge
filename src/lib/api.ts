@@ -7,7 +7,9 @@
 import type {
   Novel, Volume, Chapter, Character,
   NovelInput, ChapterInput, VolumeInput, CharacterInput, ModelConfig, GenerateOptions,
-  MasterOutline, WritingRule, NovelSetting, ForeshadowingItem
+  MasterOutline, WritingRule, NovelSetting, ForeshadowingItem,
+  ForeshadowingProgress, ForeshadowingHealthReport, ForeshadowingSuggestion, ForeshadowingStats,
+  PowerLevelDetectionResult, PowerLevelBatchResult, PowerLevelHistoryItem
 } from './types'
 
 const TOKEN_KEY = 'auth_token'
@@ -253,6 +255,29 @@ export const api = {
     update: (id: string, body: Partial<Pick<ForeshadowingItem, 'title' | 'description' | 'status' | 'importance' | 'resolvedChapterId'>>) =>
                                    req<ForeshadowingItem>(`/api/foreshadowing/${id}`, { method: 'PUT', body: j(body) }),
     delete: (id: string)          => req(`/api/foreshadowing/${id}`, { method: 'DELETE' }),
+    getProgress: (id: string)     => req<{ progresses: Array<ForeshadowingProgress & { chapterTitle: string }> }>(`/api/foreshadowing/${id}/progress`),
+    getStale: (novelId: string, threshold?: number) =>
+                                   req<{ foreshadowing: ForeshadowingItem[]; threshold: number }>(
+                                     `/api/foreshadowing/${novelId}/stale${threshold ? '?threshold=' + threshold : ''}`
+                                   ),
+    check: (novelId: string, params?: { recentChaptersCount?: number; staleThreshold?: number }) =>
+                                   req<ForeshadowingHealthReport>(`/api/foreshadowing/${novelId}/check`, {
+                                     method: 'POST', body: j(params || {})
+                                   }),
+    suggest: (novelId: string, body: { chapterContext: string; topK?: number }) =>
+                                   req<{ suggestions: ForeshadowingSuggestion[]; query: string }>(`/api/foreshadowing/${novelId}/suggest`, {
+                                     method: 'POST', body: j(body)
+                                   }),
+    getStats: (novelId: string)   => req<ForeshadowingStats>(`/api/foreshadowing/${novelId}/stats`),
+  },
+
+  powerLevel: {
+    detect:    (body: { chapterId: string; novelId: string }) =>
+                                   req<{ ok: boolean; hasBreakthrough: boolean; updates: PowerLevelDetectionResult['updates']; chapterTitle: string }>('/api/power-level/detect', { method: 'POST', body: j(body) }),
+    batchDetect:(body: { novelId: string; chapterIds?: string[] }) =>
+                                   req<PowerLevelBatchResult>('/api/power-level/batch-detect', { method: 'POST', body: j(body), timeout: 300000 }),
+    history:   (novelId: string)     => req<{ history: PowerLevelHistoryItem[] }>(`/api/power-level/history/${novelId}`),
+    character: (characterId: string) => req<{ characterId: string; characterName: string; hasData: boolean; data: PowerLevelHistoryItem | null }>(`/api/power-level/character/${characterId}`),
   },
 
   // v2.0: 总索引（树形结构）

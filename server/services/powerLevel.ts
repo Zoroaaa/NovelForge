@@ -169,13 +169,21 @@ ${chapter.content.slice(0, 3000)}
     const result = await resp.json() as any
     const content = result.choices?.[0]?.message?.content || '{}'
 
-    // 解析 JSON 结果
-    let parsed: { hasBreakthrough: boolean; updates: Array<any> }
-    try {
-      parsed = JSON.parse(content)
-    } catch (parseError) {
-      console.warn('Failed to parse power level detection result:', parseError)
-      return { hasBreakthrough: false, updates: [] }
+    let parsed: { hasBreakthrough: boolean; updates: Array<any> } = { hasBreakthrough: false, updates: [] }
+    const MAX_RETRY = 1
+    for (let attempt = 0; attempt <= MAX_RETRY; attempt++) {
+      try {
+        parsed = JSON.parse(content)
+        break
+      } catch (parseError) {
+        if (attempt < MAX_RETRY) {
+          console.warn(`[PowerLevel] JSON parse failed (attempt ${attempt + 1}/${MAX_RETRY + 1}), retrying...`)
+          await new Promise(r => setTimeout(r, 500))
+          continue
+        }
+        console.warn('[PowerLevel] JSON parse failed after retries, raw content:', content.slice(0, 500))
+        return { hasBreakthrough: false, updates: [] }
+      }
     }
 
     if (!parsed.hasBreakthrough || !parsed.updates || parsed.updates.length === 0) {

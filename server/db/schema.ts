@@ -199,6 +199,22 @@ export const foreshadowing = sqliteTable('foreshadowing', {
 ])
 
 // ============================================================
+// 8.1 伏笔推进记录表（追踪伏笔在章节中的渐进式推进）
+// ============================================================
+export const foreshadowingProgress = sqliteTable('foreshadowing_progress', {
+  id: id(),
+  foreshadowingId: text('foreshadowing_id').notNull(),
+  chapterId: text('chapter_id').notNull(),
+  progressType: text('progress_type').notNull(),
+  summary: text('summary'),
+  mentionedKeywords: text('mentioned_keywords'),
+  ...timestamps,
+}, (table) => [
+  index('idx_progress_foreshadowing').on(table.foreshadowingId),
+  index('idx_progress_chapter').on(table.chapterId),
+])
+
+// ============================================================
 // 9. 模型配置表
 // ============================================================
 export const modelConfigs = sqliteTable('model_configs', {
