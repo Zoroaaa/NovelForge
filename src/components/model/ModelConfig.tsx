@@ -123,7 +123,7 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
     if (!modelId) return
 
     const data = {
-      stage: stage as 'outline_gen' | 'chapter_gen' | 'summary_gen' | 'embedding' | 'vision' | 'analysis',
+      stage: stage as 'chapter_gen' | 'summary_gen' | 'embedding' | 'analysis' | 'workshop',
       provider,
       modelId,
       scope: (novelId ? 'novel' : 'global') as 'global' | 'novel',
@@ -182,12 +182,11 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
   }
 
   const stageLabels: Record<string, string> = {
-    'outline_gen': '大纲生成',
     'chapter_gen': '章节生成',
     'summary_gen': '摘要生成',
     'embedding': '文本嵌入',
-    'vision': '视觉理解',
     'analysis': '智能分析',
+    'workshop': '创作工坊',
   }
 
   // 小说工作台可用的用途列表（排除全局用途：workshop）
@@ -351,7 +350,7 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
       <div className="text-xs text-muted-foreground p-3 bg-muted/50 rounded-lg">
         <p className="font-medium mb-1">配置说明：</p>
         <ul className="list-disc list-inside space-y-0.5">
-          <li>每个用途（章节生成、大纲生成等）只能有一个激活的配置</li>
+          <li>每个用途（章节生成、创作工坊等）只能有一个激活的配置</li>
           <li>小说级配置优先于全局配置</li>
           <li>激活的配置会被用于对应的生成任务</li>
         </ul>
@@ -360,11 +359,10 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
             <p className="font-medium mt-2 mb-1">📖 小说工作台可用用途：</p>
             <ul className="list-disc list-inside space-y-0.5">
               <li><strong>章节生成(chapter_gen)</strong>：生成小说章节正文内容</li>
-              <li><strong>大纲生成(outline_gen)</strong>：生成卷纲、章节大纲</li>
               <li><strong>摘要生成(summary_gen)</strong>：生成章节摘要、总览</li>
               <li><strong>文本嵌入(embedding)</strong>：向量嵌入、语义搜索</li>
-              <li><strong>视觉理解(vision)</strong>：图片分析、OCR识别</li>
               <li><strong>智能分析(analysis)</strong>：一致性检查、伏笔检测等</li>
+              <li><strong>创作工坊(workshop)</strong>：对话式创作引擎</li>
             </ul>
           </>
         )}

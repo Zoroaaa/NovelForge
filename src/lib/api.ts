@@ -339,22 +339,6 @@ export const api = {
 
   generate: {
     chapter: (): (() => void) => { return () => {} },
-    outlineBatch: (body: { volumeId: string; novelId: string; chapterCount?: number; context?: string }) =>
-      req<{
-        ok: boolean
-        message?: string
-        outlines?: Array<{ index: number; chapterTitle: string; summary: string }>
-        totalRequested?: number
-        successCount?: number
-        error?: string
-      }>('/api/generate/outline-batch', { method: 'POST', body: j(body), timeout: 300000 }),
-    confirmBatchChapters: (body: { volumeId: string; novelId: string; chapterPlans: Array<{ chapterTitle: string; summary: string }> }) =>
-      req<{
-        ok: boolean
-        message?: string
-        createdChapters?: Array<{ id: string; title: string; sortOrder: number }>
-        error?: string
-      }>('/api/generate/confirm-batch-chapters', { method: 'POST', body: j(body) }),
     nextChapter: (body: { volumeId: string; novelId: string }) =>
       req<{
         ok: boolean
@@ -388,6 +372,32 @@ export const api = {
         }
         error?: string
       }>('/api/generate/preview-context', { method: 'POST', body: j({ novelId, chapterId }) }),
+    checkCoherence: (body: { chapterId: string; novelId: string }) =>
+      req<{
+        score: number
+        issues: Array<{ severity: 'error' | 'warning'; category?: string; message: string; suggestion?: string }>
+        error?: string
+      }>('/api/generate/coherence-check', { method: 'POST', body: j(body) }),
+    checkCharacterConsistency: (body: { characterIds: string[]; chapterId: string }) =>
+      req<{
+        conflicts: Array<{ characterName: string; conflict: string; excerpt: string }>
+        warnings: string[]
+        error?: string
+      }>('/api/generate/check-character-consistency', { method: 'POST', body: j(body) }),
+    checkVolumeProgress: (body: { chapterId: string; novelId: string }) =>
+      req<{
+        volumeId: string
+        currentChapter: number
+        targetChapter: number | null
+        currentWordCount: number
+        targetWordCount: number | null
+        chapterProgress: number
+        wordProgress: number
+        healthStatus: 'healthy' | 'ahead' | 'behind' | 'critical'
+        risk: 'early_ending' | 'late_ending' | null
+        suggestion: string
+        error?: string
+      }>('/api/generate/volume-progress-check', { method: 'POST', body: j(body) }),
   },
 
   // 认证系统API

@@ -1,6 +1,6 @@
 /**
  * @file generate.ts
- * @description 内容生成路由模块，提供章节生成、大纲生成、摘要生成、角色一致性检查等功能
+ * @description 内容生成路由模块，提供章节生成、摘要生成、角色一致性检查等功能
  * @version 1.0.0
  * @modified 2026-04-21 - 添加规范化注释
  */
@@ -15,17 +15,15 @@ import {
   logGeneration,
   getGenerationLogs,
   checkCharacterConsistency,
-  generateOutlineBatch,
   checkChapterCoherence,
   repairChapterByIssues,
   generateMasterOutlineSummary,
   generateVolumeSummary,
-  confirmBatchChapterCreation,
   generateNextChapter,
+  checkVolumeProgress,
 } from '../services/agent'
 import { saveCheckLog, getLatestCheckLog, getCheckLogHistory } from '../services/agent/checkLogService'
 import { buildChapterContext } from '../services/contextBuilder'
-import { generateOutline } from '../services/llm'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -277,72 +275,6 @@ router.post('/check', zValidator('json', z.object({
   }
 })
 
-/**
- * POST /outline - 生成单个大纲节点
- * @description 使用AI生成单个大纲节点内容
- * @param {string} novelId - 小说ID
- * @param {string} title - 大纲标题
- * @param {string} type - 大纲类型
- * @param {string} [parentTitle] - 父节点标题
- * @param {string} [context] - 上下文信息
- * @returns {Object} { content: string }
- * @throws {500} 生成异常
- */
-router.post('/outline', zValidator('json', z.object({
-  novelId: z.string().min(1),
-  title: z.string().min(1),
-  type: z.string(),
-  parentTitle: z.string().optional(),
-  context: z.string().optional(),
-})), async (c) => {
-  const { novelId, title, type, parentTitle, context } = c.req.valid('json')
-
-  try {
-    const content = await generateOutline(c.env, { novelId, title, type, parentTitle, context })
-    return c.json({ content })
-  } catch (error) {
-    return c.json(
-      { error: '生成异常', details: (error as Error).message },
-      500
-    )
-  }
-})
-
-/**
- * POST /outline-batch - 批量生成大纲
- * @description 批量生成卷下的章节大纲
- * @param {string} volumeId - 卷ID
- * @param {string} novelId - 小说ID
- * @param {number} [chapterCount] - 章节数量（1-30）
- * @param {string} [context] - 上下文信息
- * @returns {Object} 批量生成结果
- * @throws {500} 批量生成异常
- */
-router.post('/outline-batch', zValidator('json', z.object({
-  volumeId: z.string().min(1),
-  novelId: z.string().min(1),
-  chapterCount: z.number().min(1).max(30).optional(),
-  context: z.string().optional(),
-})), async (c) => {
-  const { volumeId, novelId, chapterCount, context } = c.req.valid('json')
-
-  try {
-    const result = await generateOutlineBatch(c.env, { volumeId, novelId, chapterCount, context })
-    
-    if (!result.ok) {
-      return c.json({ error: result.error, details: result.details }, 500)
-    }
-    
-    return c.json(result)
-  } catch (error) {
-    console.error('Batch outline generation failed:', error)
-    return c.json(
-      { error: '批量生成异常', details: (error as Error).message },
-      500
-    )
-  }
-})
-
 router.post('/master-outline-summary', zValidator('json', z.object({
   novelId: z.string().min(1),
 })), async (c) => {
@@ -368,24 +300,6 @@ router.post('/volume-summary', zValidator('json', z.object({
   }
   
   return c.json({ ok: true, summary: result.summary })
-})
-
-router.post('/confirm-batch-chapters', zValidator('json', z.object({
-  volumeId: z.string().min(1),
-  novelId: z.string().min(1),
-  chapterPlans: z.array(z.object({
-    chapterTitle: z.string(),
-    summary: z.string(),
-  })),
-})), async (c) => {
-  const { volumeId, novelId, chapterPlans } = c.req.valid('json')
-  const result = await confirmBatchChapterCreation(c.env, { volumeId, novelId, chapterPlans })
-  
-  if (!result.ok) {
-    return c.json({ error: result.error }, 500)
-  }
-  
-  return c.json(result)
 })
 
 router.post('/next-chapter', zValidator('json', z.object({
@@ -511,6 +425,50 @@ router.post('/coherence-check', zValidator('json', z.object({
 
     return c.json(
       { error: '一致性检查失败', details: (error as Error).message },
+      500
+    )
+  }
+})
+
+/**
+ * POST /volume-progress-check - 卷完成程度检查
+ * @description 使用AI评估当前卷的进度是否健康
+ * @param {string} chapterId - 章节ID
+ * @param {string} novelId - 小说ID
+ */
+router.post('/volume-progress-check', zValidator('json', z.object({
+  chapterId: z.string().min(1),
+  novelId: z.string().min(1),
+})), async (c) => {
+  const { chapterId, novelId } = c.req.valid('json')
+
+  try {
+    const result = await checkVolumeProgress(c.env, chapterId, novelId)
+
+    await saveCheckLog(c.env, {
+      novelId,
+      chapterId,
+      checkType: 'volume_progress',
+      status: 'success',
+      coherenceResult: result,
+      issuesCount: result.healthStatus === 'critical' ? 1 : 0,
+    })
+
+    return c.json(result)
+  } catch (error) {
+    console.error('Volume progress check failed:', error)
+
+    await saveCheckLog(c.env, {
+      novelId,
+      chapterId,
+      checkType: 'volume_progress',
+      status: 'error',
+      errorMessage: (error as Error).message,
+      issuesCount: 0,
+    })
+
+    return c.json(
+      { error: '卷完成度检查失败', details: (error as Error).message },
       500
     )
   }

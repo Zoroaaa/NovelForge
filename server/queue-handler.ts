@@ -5,6 +5,10 @@ import { rebuildEntityIndex } from './services/entity-index'
 import { triggerAutoSummary } from './services/agent'
 import { detectPowerLevelBreakthrough } from './services/powerLevel'
 import { extractForeshadowingFromChapter } from './services/foreshadowing'
+import { checkCharacterConsistency } from './services/agent/consistency'
+import { checkVolumeProgress } from './services/agent/volumeProgress'
+import { logGeneration } from './services/agent/logging'
+import { saveCheckLog } from './services/agent/checkLogService'
 import { drizzle } from 'drizzle-orm/d1'
 import { novelSettings, characters, foreshadowing, chapters, queueTaskLogs, vectorIndex } from './db/schema'
 import { eq, and, sql } from 'drizzle-orm'
@@ -56,7 +60,7 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
     }
 
     case 'post_process_chapter': {
-      // 架构优化: 异步执行章节后处理（摘要/伏笔/境界检测），避免阻塞SSE流
+      // 架构优化: 异步执行章节后处理（摘要/伏笔/境界检测/检查），避免阻塞SSE流
       const { chapterId, novelId, enableAutoSummary, usage } = msg.payload
 
       if (enableAutoSummary) {
@@ -70,20 +74,130 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
 
       try {
         const foreshadowingResult = await extractForeshadowingFromChapter(env, chapterId, novelId)
-        if (foreshadowingResult.newForeshadowing.length > 0 || foreshadowingResult.resolvedForeshadowingIds.length > 0 || foreshadowingResult.progresses?.length > 0) {
         console.log(`📝 [Queue] Foreshadowing: ${foreshadowingResult.newForeshadowing.length} new, ${foreshadowingResult.resolvedForeshadowingIds.length} resolved, ${foreshadowingResult.progresses?.length || 0} progressed`)
-        }
+
+        await logGeneration(env, {
+          novelId,
+          chapterId,
+          stage: 'foreshadowing_extraction',
+          modelId: 'N/A',
+          contextSnapshot: JSON.stringify({
+            newCount: foreshadowingResult.newForeshadowing.length,
+            resolvedCount: foreshadowingResult.resolvedForeshadowingIds.length,
+            progressedCount: foreshadowingResult.progresses?.length || 0,
+          }),
+          durationMs: 0,
+          status: 'success',
+        })
       } catch (foreshadowError) {
         console.warn('[Queue] Foreshadowing extraction failed (non-critical):', foreshadowError)
+
+        await logGeneration(env, {
+          novelId,
+          chapterId,
+          stage: 'foreshadowing_extraction',
+          modelId: 'N/A',
+          contextSnapshot: JSON.stringify({ error: (foreshadowError as Error).message }),
+          durationMs: 0,
+          status: 'error',
+          errorMsg: (foreshadowError as Error).message,
+        })
       }
 
       try {
         const powerLevelResult = await detectPowerLevelBreakthrough(env, chapterId, novelId)
-        if (powerLevelResult.hasBreakthrough) {
-          console.log(`⚡ [Queue] Power level: ${powerLevelResult.updates.length} breakthroughs detected`)
-        }
+        console.log(`⚡ [Queue] Power level: ${powerLevelResult.updates.length} breakthroughs detected`)
+
+        await logGeneration(env, {
+          novelId,
+          chapterId,
+          stage: 'power_level_detection',
+          modelId: 'N/A',
+          contextSnapshot: JSON.stringify({
+            hasBreakthrough: powerLevelResult.hasBreakthrough,
+            updatesCount: powerLevelResult.updates.length,
+            updates: powerLevelResult.updates.map(u => ({
+              characterName: u.characterName,
+              from: u.previousPowerLevel?.current,
+              to: u.newPowerLevel.current,
+            })),
+          }),
+          durationMs: 0,
+          status: 'success',
+        })
       } catch (powerLevelError) {
         console.warn('[Queue] Power level detection failed (non-critical):', powerLevelError)
+
+        await logGeneration(env, {
+          novelId,
+          chapterId,
+          stage: 'power_level_detection',
+          modelId: 'N/A',
+          contextSnapshot: JSON.stringify({ error: (powerLevelError as Error).message }),
+          durationMs: 0,
+          status: 'error',
+          errorMsg: (powerLevelError as Error).message,
+        })
+      }
+
+      try {
+        const db = drizzle(env.DB)
+        const chapterData = await db.select({ volumeId: chapters.volumeId }).from(chapters).where(eq(chapters.id, chapterId)).get()
+
+        if (chapterData?.volumeId) {
+          const charList = await db.select({ id: characters.id }).from(characters).where(eq(characters.novelId, novelId)).limit(10).all()
+          const characterIds = charList.map(c => c.id)
+
+          if (characterIds.length > 0) {
+            const consistencyResult = await checkCharacterConsistency(env, { chapterId, characterIds })
+            console.log(`🎭 [Queue] Character consistency: ${consistencyResult.conflicts.length} conflicts, ${consistencyResult.warnings.length} warnings`)
+
+            await saveCheckLog(env, {
+              novelId,
+              chapterId,
+              checkType: 'character_consistency',
+              status: 'success',
+              characterResult: consistencyResult,
+              issuesCount: consistencyResult.conflicts.length + consistencyResult.warnings.length,
+            })
+          }
+        }
+      } catch (consistencyError) {
+        console.warn('[Queue] Character consistency check failed (non-critical):', consistencyError)
+
+        await saveCheckLog(env, {
+          novelId,
+          chapterId,
+          checkType: 'character_consistency',
+          status: 'error',
+          errorMessage: (consistencyError as Error).message,
+          issuesCount: 0,
+        })
+      }
+
+      try {
+        const volumeProgressResult = await checkVolumeProgress(env, chapterId, novelId)
+        console.log(`📊 [Queue] Volume progress: status=${volumeProgressResult.healthStatus}, risk=${volumeProgressResult.risk}`)
+
+        await saveCheckLog(env, {
+          novelId,
+          chapterId,
+          checkType: 'volume_progress',
+          status: 'success',
+          coherenceResult: volumeProgressResult,
+          issuesCount: volumeProgressResult.healthStatus === 'critical' ? 1 : 0,
+        })
+      } catch (progressError) {
+        console.warn('[Queue] Volume progress check failed (non-critical):', progressError)
+
+        await saveCheckLog(env, {
+          novelId,
+          chapterId,
+          checkType: 'volume_progress',
+          status: 'error',
+          errorMessage: (progressError as Error).message,
+          issuesCount: 0,
+        })
       }
 
       console.log(`✅ [Queue] Post-processing completed for chapter ${chapterId}`)

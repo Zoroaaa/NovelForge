@@ -8,6 +8,7 @@ import { Hono } from 'hono'
 import { drizzle } from 'drizzle-orm/d1'
 import { sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
+import { logGeneration } from '../services/agent/logging'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -74,9 +75,25 @@ router.get('/', async (c) => {
       .bind(q, q, novelId || '', q, q, limit)
       .all()
 
+    const resultCount = results.results?.length || 0
+
+    try {
+      await logGeneration(c.env, {
+        novelId: novelId || '',
+        chapterId: null,
+        stage: 'semantic_search',
+        modelId: 'N/A',
+        contextSnapshot: JSON.stringify({ query: q, resultsCount: resultCount }),
+        durationMs: 0,
+        status: 'success',
+      })
+    } catch (logError) {
+      console.warn('[search] Failed to write log:', logError)
+    }
+
     return c.json({
       query: q,
-      total: results.results?.length || 0,
+      total: resultCount,
       results: (results.results || []).map((r: any) => ({
         id: r.id,
         novelId: r.novelId,

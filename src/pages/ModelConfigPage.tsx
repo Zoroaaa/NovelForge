@@ -43,10 +43,8 @@ import {
 
 const STAGE_CONFIG = [
   { id: 'chapter_gen', label: '章节生成', icon: FileText, description: '小说章节内容生成' },
-  { id: 'outline_gen', label: '大纲生成', icon: Layers, description: '卷纲、章节大纲生成' },
   { id: 'summary_gen', label: '摘要生成', icon: FileText, description: '章节摘要、总览生成' },
   { id: 'embedding', label: '文本嵌入', icon: Brain, description: '向量嵌入、语义搜索' },
-  { id: 'vision', label: '视觉理解', icon: Eye, description: '图片分析、OCR识别' },
   { id: 'analysis', label: '智能分析', icon: Cpu, description: '一致性检查、伏笔检测等' },
   { id: 'workshop', label: '创作工坊', icon: MessageSquare, description: 'AI创作助手对话' },
 ]
@@ -147,7 +145,7 @@ export default function ModelConfigPage() {
     if (!modelId) return
 
     const data = {
-      stage: stage as 'outline_gen' | 'chapter_gen' | 'summary_gen' | 'embedding' | 'vision' | 'analysis' | 'workshop',
+      stage: stage as 'chapter_gen' | 'summary_gen' | 'embedding' | 'analysis' | 'workshop',
       provider,
       modelId,
       scope: 'global' as const,
@@ -576,15 +574,6 @@ export default function ModelConfigPage() {
 
               <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-blue-100 dark:border-blue-900">
                 <div className="flex items-center gap-2 mb-1">
-                  <Layers className="w-4 h-4 text-blue-500" />
-                  <span className="font-semibold">大纲生成 (outline_gen)</span>
-                </div>
-                <p className="text-xs text-muted-foreground">生成卷纲、章节大纲</p>
-                <p className="text-xs text-muted-foreground mt-1">📍 小说工作台 → 大纲管理</p>
-              </div>
-
-              <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-blue-100 dark:border-blue-900">
-                <div className="flex items-center gap-2 mb-1">
                   <FileText className="w-4 h-4 text-blue-500" />
                   <span className="font-semibold">摘要生成 (summary_gen)</span>
                 </div>
@@ -599,15 +588,6 @@ export default function ModelConfigPage() {
                 </div>
                 <p className="text-xs text-muted-foreground">向量嵌入、语义搜索</p>
                 <p className="text-xs text-muted-foreground mt-1">📍 全局搜索、知识库</p>
-              </div>
-
-              <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-blue-100 dark:border-blue-900">
-                <div className="flex items-center gap-2 mb-1">
-                  <Eye className="w-4 h-4 text-blue-500" />
-                  <span className="font-semibold">视觉理解 (vision)</span>
-                </div>
-                <p className="text-xs text-muted-foreground">图片分析、OCR识别</p>
-                <p className="text-xs text-muted-foreground mt-1">📍 图片上传处理</p>
               </div>
 
               <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-blue-100 dark:border-blue-900">

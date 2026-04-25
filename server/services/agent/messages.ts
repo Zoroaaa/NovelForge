@@ -94,7 +94,7 @@ export function buildMessages(
   chapterTitle: string,
   contextBundle: ContextBundle | null,
   options: GenerationOptions = {},
-  systemPromptOverride?: string
+  systemPromptOverride?: string,
 ): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
   const { mode = 'generate', existingContent, targetWords, issuesContext } = options
 

@@ -211,6 +211,9 @@ export function NovelCard({ novel, onEdit, onDelete, onStatusChange, onWorkshopO
               <FileText className="h-3.5 w-3.5" />
               <span className="font-medium">{(novel.wordCount / 1000).toFixed(1)}k</span>
               <span>字</span>
+              {novel.targetWordCount && (
+                <span className="text-primary/70">/ {(novel.targetWordCount / 10000).toFixed(0)}万</span>
+              )}
             </span>
             <span className="flex items-center gap-1.5">
               <BookOpen className="h-3.5 w-3.5" />
@@ -218,7 +221,16 @@ export function NovelCard({ novel, onEdit, onDelete, onStatusChange, onWorkshopO
               <span>章</span>
             </span>
           </div>
-          
+
+          {novel.targetWordCount && (
+            <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all"
+                style={{ width: `${Math.min((novel.wordCount / novel.targetWordCount) * 100, 100)}%` }}
+              />
+            </div>
+          )}
+
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Clock className="h-3 w-3" />
             <span>{formatDate(novel.updatedAt)}</span>

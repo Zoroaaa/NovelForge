@@ -29,7 +29,7 @@
 import { drizzle, type DrizzleD1Database } from 'drizzle-orm/d1'
 import {
   chapters, volumes, characters, modelConfigs, foreshadowing,
-  novelSettings, masterOutline, writingRules
+  novelSettings, masterOutline, writingRules, novels
 } from '../db/schema'
 import { eq, and, sql, desc, inArray } from 'drizzle-orm'
 import type { Env } from '../lib/types'
@@ -58,6 +58,7 @@ export interface ContextBundle {
     prevChapterContent: string
     protagonistStateCards: string[]
     allActiveRules: string[]
+    rhythmStats: RhythmStats | null
   }
   dynamic: {
     summaryChain: string[]
@@ -83,6 +84,16 @@ export interface SlottedSettings {
   factions: string[]
   artifacts: string[]
   misc: string[]
+}
+
+export interface RhythmStats {
+  novelWordCount: number
+  novelTargetWordCount: number | null
+  volumeWordCount: number
+  volumeTargetWordCount: number | null
+  volumeChapterCount: number
+  volumeTargetChapterCount: number | null
+  currentChapterInVolume: number
 }
 
 export interface BudgetTier {
@@ -151,6 +162,7 @@ export async function buildChapterContext(
     powerLevelInfo,
     allActiveRules,
     recentSummaries,
+    rhythmStats,
   ] = await Promise.all([
     fetchMasterOutlineContent(db, novelId),
     fetchVolumeInfo(db, currentChapter.volumeId),
@@ -159,6 +171,7 @@ export async function buildChapterContext(
     fetchProtagonistPowerLevel(db, novelId),
     fetchAllActiveRules(db, novelId),
     fetchRecentSummaries(db, currentChapter.novelId, currentChapter.sortOrder, summaryChainLength),
+    fetchRhythmStats(db, novelId, currentChapter.volumeId, currentChapter.sortOrder),
   ])
 
   const protagonistStateCards = mergeProtagonistAndPower(protagonistData, powerLevelInfo)
@@ -268,6 +281,7 @@ export async function buildChapterContext(
       prevChapterContent: prevContent,
       protagonistStateCards,
       allActiveRules: mutableRules,
+      rhythmStats,
     },
     dynamic: {
       summaryChain: recentSummaries,
@@ -577,6 +591,54 @@ async function fetchVolumeInfo(db: AppDb, volumeId: string | null): Promise<{
   }
 }
 
+async function fetchRhythmStats(
+  db: AppDb,
+  novelId: string,
+  volumeId: string | null,
+  currentSortOrder: number
+): Promise<RhythmStats | null> {
+  try {
+    const [novelData, volumeData, currentChapterInVolumeResult] = await Promise.all([
+      db.select({
+        wordCount: novels.wordCount,
+        targetWordCount: novels.targetWordCount,
+      }).from(novels).where(eq(novels.id, novelId)).get(),
+      volumeId
+        ? db.select({
+            wordCount: volumes.wordCount,
+            targetWordCount: volumes.targetWordCount,
+            chapterCount: volumes.chapterCount,
+            targetChapterCount: volumes.targetChapterCount,
+          }).from(volumes).where(eq(volumes.id, volumeId)).get()
+        : Promise.resolve(null),
+      volumeId
+        ? db.select({ count: sql`count(*)` })
+            .from(chapters)
+            .where(and(
+              eq(chapters.volumeId, volumeId),
+              sql`${chapters.sortOrder} <= ${currentSortOrder}`
+            ))
+            .get()
+        : Promise.resolve(null),
+    ])
+
+    if (!novelData) return null
+
+    return {
+      novelWordCount: novelData.wordCount || 0,
+      novelTargetWordCount: novelData.targetWordCount || null,
+      volumeWordCount: volumeData?.wordCount || 0,
+      volumeTargetWordCount: volumeData?.targetWordCount || null,
+      volumeChapterCount: volumeData?.chapterCount || 0,
+      volumeTargetChapterCount: volumeData?.targetChapterCount || null,
+      currentChapterInVolume: Number(currentChapterInVolumeResult?.count ?? 0),
+    }
+  } catch (error) {
+    console.error('[contextBuilder] fetchRhythmStats failed:', error)
+    return null
+  }
+}
+
 async function fetchPrevChapterContent(
   db: AppDb, novelId: string, currentSortOrder: number
 ): Promise<string> {
@@ -813,6 +875,31 @@ export function assemblePromptContext(bundle: ContextBundle): string {
     if (bundle.core.volumeBlueprint) parts.push(`【卷蓝图】\n${bundle.core.volumeBlueprint}`)
     if (bundle.core.volumeEventLine) parts.push(`【事件线】\n${bundle.core.volumeEventLine}`)
     sections.push(`## 当前卷规划\n${parts.join('\n\n')}`)
+  }
+
+  if (bundle.core.rhythmStats) {
+    const r = bundle.core.rhythmStats
+    const volumeProgress = r.volumeTargetWordCount
+      ? `（已写 ${r.volumeWordCount} / ${r.volumeTargetWordCount} 字）`
+      : `（已写 ${r.volumeWordCount} 字）`
+    const novelProgress = r.novelTargetWordCount
+      ? `已写 ${r.novelWordCount} / ${r.novelTargetWordCount} 字`
+      : `已写 ${r.novelWordCount} 字`
+
+    const rhythmParts: string[] = []
+    rhythmParts.push(`- 小说进度：${novelProgress}`)
+    rhythmParts.push(`- 本卷进度：第 ${r.currentChapterInVolume} / ${r.volumeTargetChapterCount || r.volumeChapterCount} 章 ${volumeProgress}`)
+    if (r.volumeTargetWordCount) {
+      const wordPct = Math.round((r.volumeWordCount / r.volumeTargetWordCount) * 100)
+      rhythmParts.push(`- 字数进度：${wordPct}%`)
+    }
+    if (r.volumeTargetChapterCount && r.volumeTargetChapterCount > 0) {
+      const chapterPct = Math.round((r.currentChapterInVolume / r.volumeTargetChapterCount) * 100)
+      rhythmParts.push(`- 章节进度：${chapterPct}%`)
+    }
+    rhythmParts.push(`- 注意：保持节奏均衡，避免前期过于拖沓或后期赶工`)
+
+    sections.push(`## 创作节奏把控\n${rhythmParts.join('\n')}`)
   }
 
   if (bundle.core.prevChapterContent) sections.push(`## 上一章正文\n${bundle.core.prevChapterContent}`)

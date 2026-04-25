@@ -9,35 +9,145 @@
 - [基础信息](#基础信息)
 - [认证方式](#认证方式)
 - [通用响应格式](#通用响应格式)
-- **v1.5.0 新增**
-  - [用户认证 (Auth)](#用户认证-auth)
-  - [系统初始化 (Setup)](#系统初始化-setup)
-  - [邀请码管理 (Invite Codes)](#邀请码管理-invite-codes)
-  - [系统设置 (System Settings)](#系统设置-system-settings)
-  - [创意工坊 (Workshop)](#创意工坊-workshop)
-- **v1.6.0 新增**
-  - [AI 监控中心 (AI Monitor)](#ai-监控中心-ai-monitor)
-  - [向量索引增强 (Vectorize)](#向量化索引-vectorize)
-  - [上下文诊断 (Context)](#上下文诊断-context)
-  - [综合检查 (Check)](#综合检查-check)
-- **v1.7.0 新增**
-  - [伏笔进度追踪 (Foreshadowing Progress)](#伏笔进度追踪-foreshadowing-progress)
-  - [工坊导入 (Workshop Import)](#工坊导入-workshop-import)
-  - [小说管理增强 (Novels Enhanced)](#小说管理增强-novels-enhanced)
-- [小说管理 (Novels)](#小说管理-novels)
-- [总纲管理 (Master Outline)](#总纲管理-master-outline)
-- [创作规则 (Writing Rules)](#创作规则-writing-rules)
-- [小说设定 (Novel Settings)](#小说设定-novel-settings)
-- [卷管理 (Volumes)](#卷管理-volumes)
-- [章节管理 (Chapters)](#章节管理-chapters)
-- [角色管理 (Characters)](#角色管理-characters)
-- [伏笔管理 (Foreshadowing)](#伏笔管理-foreshadowing)
-- [AI 生成 (Generate)](#ai-生成-generate)
-- [导出服务 (Export)](#导出服务-export)
-- [内容搜索 (Search)](#内容搜索-search)
-- [向量化索引 (Vectorize)](#向量化索引-vectorize)
-- [设置服务 (Settings)](#设置服务-settings)
-- [MCP 服务 (MCP)](#mcp-服务-mcp)
+- [公开接口](#公开接口)
+- **用户认证 (Auth)**
+  - [用户登录](#用户登录)
+  - [用户注册](#用户注册)
+  - [获取当前用户信息](#获取当前用户信息)
+  - [修改密码](#修改密码)
+  - [删除账号](#删除账号)
+- **系统初始化 (Setup)**
+  - [检查初始化状态](#检查初始化状态)
+  - [创建管理员账号](#创建管理员账号)
+- **邀请码管理 (Invite Codes)**
+  - [获取邀请码列表](#获取邀请码列表)
+  - [创建邀请码](#创建邀请码)
+  - [更新邀请码状态](#更新邀请码状态)
+  - [删除邀请码](#删除邀请码)
+- **系统设置 (System Settings)**
+  - [获取系统设置](#获取系统设置)
+  - [更新注册开关](#更新注册开关)
+- **小说管理 (Novels)**
+  - [获取小说列表](#获取小说列表)
+  - [获取小说详情](#获取小说详情)
+  - [创建小说](#创建小说)
+  - [更新小说](#更新小说)
+  - [删除小说](#删除小说)
+  - [恢复已删除小说](#恢复已删除小说)
+  - [上传小说封面](#上传小说封面)
+  - [获取回收站列表](#获取回收站列表)
+  - [永久删除小说](#永久删除小说)
+  - [获取小说回收站](#获取小说回收站)
+  - [清空小说回收站](#清空小说回收站)
+- **总纲管理 (Master Outline)**
+  - [获取总纲](#获取总纲)
+  - [获取总纲历史版本](#获取总纲历史版本)
+  - [创建总纲](#创建总纲)
+  - [更新总纲](#更新总纲)
+  - [删除总纲](#删除总纲)
+- **创作规则 (Writing Rules)**
+  - [获取创作规则](#获取创作规则)
+  - [创建创作规则](#创建创作规则)
+  - [更新创作规则](#更新创作规则)
+  - [删除创作规则](#删除创作规则)
+  - [启用/禁用规则](#启用禁用规则)
+- **小说设定 (Novel Settings)**
+  - [获取设定树形结构](#获取设定树形结构)
+  - [获取小说设定列表](#获取小说设定列表)
+  - [获取单个设定](#获取单个设定)
+  - [创建小说设定](#创建小说设定)
+  - [AI生成设定摘要](#ai生成设定摘要)
+  - [更新小说设定](#更新小说设定)
+  - [删除小说设定](#删除小说设定)
+- **卷管理 (Volumes)**
+  - [获取卷列表](#获取卷列表)
+  - [获取卷详情](#获取卷详情)
+  - [创建卷](#创建卷)
+  - [更新卷](#更新卷)
+  - [删除卷](#删除卷)
+- **章节管理 (Chapters)**
+  - [获取章节列表](#获取章节列表)
+  - [获取章节详情](#获取章节详情)
+  - [创建章节](#创建章节)
+  - [更新章节](#更新章节)
+  - [删除章节](#删除章节)
+  - [获取章节快照列表](#获取章节快照列表)
+  - [恢复章节快照](#恢复章节快照)
+- **角色管理 (Characters)**
+  - [获取角色列表](#获取角色列表)
+  - [获取角色详情](#获取角色详情)
+  - [创建角色](#创建角色)
+  - [更新角色](#更新角色)
+  - [删除角色](#删除角色)
+  - [上传角色图片](#上传角色图片)
+- **伏笔管理 (Foreshadowing)**
+  - [获取伏笔列表](#获取伏笔列表)
+  - [创建伏笔](#创建伏笔)
+  - [更新伏笔](#更新伏笔)
+  - [删除伏笔](#删除伏笔)
+  - [获取伏笔进度](#获取伏笔进度)
+  - [获取沉寂伏笔](#获取沉寂伏笔)
+  - [伏笔健康检查](#伏笔健康检查)
+  - [伏笔推荐](#伏笔推荐)
+  - [伏笔统计](#伏笔统计)
+- **AI 生成 (Generate)**
+  - [生成章节](#生成章节)
+  - [生成章节摘要](#生成章节摘要)
+  - [获取生成日志](#获取生成日志)
+  - [角色一致性检查](#角色一致性检查)
+  - [连贯性检查](#连贯性检查)
+  - [组合检查](#组合检查)
+  - [卷进度检查](#卷进度检查)
+  - [预览上下文](#预览上下文)
+  - [总纲摘要生成](#总纲摘要生成)
+  - [卷摘要生成](#卷摘要生成)
+  - [批量确认章节](#批量确认章节)
+  - [生成下一章](#生成下一章)
+  - [获取最新检查日志](#获取最新检查日志)
+  - [获取检查日志历史](#获取检查日志历史)
+- **境界管理 (Power Level)**
+  - [检测境界突破](#检测境界突破)
+  - [批量检测境界](#批量检测境界)
+  - [获取境界历史](#获取境界历史)
+  - [获取角色境界](#获取角色境界)
+  - [验证境界一致性](#验证境界一致性)
+  - [应用境界建议](#应用境界建议)
+- **导出服务 (Export)**
+  - [获取可用格式](#获取可用格式)
+  - [导出小说](#导出小说)
+- **内容搜索 (Search)**
+  - [搜索章节内容](#搜索章节内容)
+- **向量化索引 (Vectorize)**
+  - [创建向量化索引](#创建向量化索引)
+  - [删除向量化索引](#删除向量化索引)
+  - [相似度搜索](#相似度搜索)
+  - [获取向量统计](#获取向量统计)
+  - [全量重建索引](#全量重建索引)
+  - [增量索引未索引项](#增量索引未索引项)
+- **实体索引 (Entity Index)**
+  - [重建实体索引](#重建实体索引)
+  - [获取子实体](#获取子实体)
+  - [获取实体树](#获取实体树)
+- **创意工坊 (Workshop)**
+  - [创建会话](#创建会话)
+  - [获取会话列表](#获取会话列表)
+  - [获取会话详情](#获取会话详情)
+  - [更新会话](#更新会话)
+  - [发送消息](#发送消息)
+  - [提交确认](#提交确认)
+  - [删除会话](#删除会话)
+- **工坊导入 (Workshop Import)**
+  - [获取导入列表](#获取导入列表)
+  - [导入数据](#导入数据)
+  - [格式化导入](#格式化导入)
+- **模型配置 (Model Config)**
+  - [获取模型配置列表](#获取模型配置列表)
+  - [创建模型配置](#创建模型配置)
+  - [更新模型配置](#更新模型配置)
+  - [启用/停用配置](#启用停用配置)
+  - [删除模型配置](#删除模型配置)
+- **MCP 服务 (MCP)**
+  - [MCP 端点](#mcp-端点)
 - [错误码参考](#错误码参考)
 
 ---
@@ -70,12 +180,8 @@ Authorization: Bearer <token>  # 如需认证
 
 ```json
 {
-  "data": { ... },      // 响应数据（对象或数组）
-  "meta": {             // 分页元数据（列表接口）
-    "page": 1,
-    "perPage": 20,
-    "total": 100
-  }
+  "success": true,
+  "data": { ... }
 }
 ```
 
@@ -85,9 +191,7 @@ Authorization: Bearer <token>  # 如需认证
 {
   "error": "错误消息",
   "code": "ERROR_CODE",
-  "details": {          // 可选的详细信息
-    "field": "问题字段"
-  }
+  "message": "详细错误信息"
 }
 ```
 
@@ -107,13 +211,46 @@ Authorization: Bearer <token>  # 如需认证
 
 ---
 
-## v1.5.0 新增 API
+## 公开接口
 
-### 用户认证 (Auth)
+> 以下接口**不需要认证**
 
-> **注意**: 以下端点**不需要 JWT 认证**
+### 用户登录
 
-#### 用户注册
+**POST** `/api/auth/login`
+
+**请求体**:
+```json
+{
+  "username": "noveluser",
+  "password": "MySecurePass123"
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| username | string | ✅ | 用户名或邮箱 |
+| password | string | ✅ | 密码 |
+
+**成功响应 (200)**:
+```json
+{
+  "success": true,
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIs...",
+    "user": {
+      "id": "usr_abc123",
+      "username": "noveluser",
+      "email": "user@example.com",
+      "role": "admin"
+    }
+  }
+}
+```
+
+---
+
+### 用户注册
 
 **POST** `/api/auth/register`
 
@@ -129,80 +266,104 @@ Authorization: Bearer <token>  # 如需认证
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| username | string | ✅ | 用户名（3-32字符，字母数字下划线） |
+| username | string | ✅ | 用户名（3-20字符，字母数字下划线） |
 | email | string | ✅ | 邮箱地址 |
-| password | string | ✅ | 密码（8-64位，需包含大小写字母和数字） |
-| inviteCode | string | 否 | 邀请码（如果注册需要） |
+| password | string | ✅ | 密码（至少8位，需包含大小写字母和数字） |
+| inviteCode | string | 否 | 邀请码 |
 
 **成功响应 (201)**:
 ```json
 {
-  "message": "注册成功",
-  "token": "eyJhbGciOiJIUzI1NiIs...",
-  "user": {
-    "id": "usr_abc123",
-    "username": "noveluser",
-    "email": "user@example.com",
-    "role": "user"
+  "success": true,
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIs...",
+    "user": {
+      "id": "usr_abc123",
+      "username": "noveluser",
+      "email": "user@example.com",
+      "role": "user"
+    }
   }
 }
 ```
 
-#### 用户登录
+---
 
-**POST** `/api/auth/login`
+### 获取注册状态
 
-**请求体**:
-```json
-{
-  "login": "noveluser",  // 或邮箱
-  "password": "MySecurePass123"
-}
-```
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| login | string | ✅ | 用户名或邮箱 |
-| password | string | ✅ | 密码 |
-
-**成功响应 (200)**:
-```json
-{
-  "message": "登录成功",
-  "token": "eyJhbGciOiJIUzI1NiIs...",
-  "user": {
-    "id": "usr_abc123",
-    "username": "noveluser",
-    "email": "user@example.com",
-    "role": "admin"
-  }
-}
-```
-
-#### 获取当前用户信息
-
-**GET** `/api/auth/me`
-
-> **需要认证**: `Authorization: Bearer <token>`
+**GET** `/api/system-settings/registration`
 
 **响应示例**:
 ```json
 {
-  "id": "usr_abc123",
-  "username": "noveluser",
-  "email": "user@example.com",
-  "role": "admin",
-  "createdAt": 1713571200,
-  "updatedAt": 1713657600,
-  "deletedAt": null
+  "success": true,
+  "data": {
+    "registrationEnabled": true
+  }
 }
 ```
 
-#### 修改密码
+---
+
+### 向量服务状态
+
+**GET** `/api/vectorize/status`
+
+**响应示例**:
+```json
+{
+  "status": "ok",
+  "message": "所有服务正常运行",
+  "embeddingModel": "@cf/baai/bge-m3",
+  "dimensions": 1024
+}
+```
+
+---
+
+### 健康检查
+
+**GET** `/api/health`
+
+**响应示例**:
+```json
+{
+  "status": "ok",
+  "version": "3.1"
+}
+```
+
+---
+
+## 用户认证 (Auth)
+
+> 以下端点**需要 JWT 认证**（除登录和注册外）
+
+### 获取当前用户信息
+
+**GET** `/api/auth/me`
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "usr_abc123",
+    "username": "noveluser",
+    "email": "user@example.com",
+    "role": "admin",
+    "status": "active",
+    "created_at": 1713571200,
+    "last_login_at": 1713657600
+  }
+}
+```
+
+---
+
+### 修改密码
 
 **PUT** `/api/auth/password`
-
-> **需要认证**
 
 **请求体**:
 ```json
@@ -215,61 +376,49 @@ Authorization: Bearer <token>  # 如需认证
 **成功响应 (200)**:
 ```json
 {
+  "success": true,
   "message": "密码修改成功"
-}
-```
-
-#### 删除账号
-
-**DELETE** `/api/auth/account`
-
-> **需要认证**
-
-**请求体**:
-```json
-{
-  "password": "ConfirmPassword123"
-}
-```
-
-**成功响应 (200)**:
-```json
-{
-  "message": "账号已删除"
-}
-```
-
-#### 登出
-
-**POST** `/api/auth/logout`
-
-> **需要认证**
-
-**成功响应 (200)**:
-```json
-{
-  "message": "登出成功"
 }
 ```
 
 ---
 
-### 系统初始化 (Setup)
+### 删除账号
 
-> **注意**: 以下端点**不需要 JWT 认证**
+**DELETE** `/api/auth/account`
 
-#### 检查初始化状态
+**成功响应 (200)**:
+```json
+{
+  "success": true,
+  "message": "账号已成功删除"
+}
+```
+
+---
+
+## 系统初始化 (Setup)
+
+> 需要 API Key 认证
+
+### 检查初始化状态
 
 **GET** `/api/setup/status`
 
 **响应示例**:
 ```json
 {
-  "initialized": false
+  "success": true,
+  "data": {
+    "initialized": true,
+    "adminExists": true
+  }
 }
 ```
 
-#### 创建管理员账号
+---
+
+### 创建管理员账号
 
 **POST** `/api/setup`
 
@@ -285,32 +434,27 @@ Authorization: Bearer <token>  # 如需认证
 **成功响应 (201)**:
 ```json
 {
-  "message": "初始化成功",
-  "token": "eyJhbGciOiJIUzI1NiIs...",
-  "user": {
-    "id": "usr_admin1",
-    "username": "admin",
-    "email": "admin@example.com",
-    "role": "admin"
-  }
-}
-```
-
-**错误响应 (409)**:
-```json
-{
-  "error": "系统已经初始化，无法重复创建管理员",
-  "code": "ALREADY_INITIALIZED"
+  "success": true,
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIs...",
+    "user": {
+      "id": "usr_admin1",
+      "username": "admin",
+      "email": "admin@example.com",
+      "role": "admin"
+    }
+  },
+  "message": "管理员账号创建成功！欢迎来到 NovelForge"
 }
 ```
 
 ---
 
-### 邀请码管理 (Invite Codes)
+## 邀请码管理 (Invite Codes)
 
 > **需要认证**: 所有端点都需要 `Admin` 权限
 
-#### 获取邀请码列表
+### 获取邀请码列表
 
 **GET** `/api/invite-codes`
 
@@ -319,33 +463,45 @@ Authorization: Bearer <token>  # 如需认证
 |------|------|--------|------|
 | status | string | - | 过滤状态：active/used/expired/disabled |
 | page | number | 1 | 页码 |
-| perPage | number | 20 | 每页数量 |
+| pageSize | number | 20 | 每页数量（最大100） |
 
 **响应示例**:
 ```json
-[
-  {
-    "id": "ic_abc123",
-    "code": "INVITE2024",
-    "maxUses": 10,
-    "usedCount": 3,
-    "status": "active",
-    "expiresAt": null,
-    "createdBy": "usr_admin1",
-    "createdAt": 1713571200,
-    "updatedAt": 1713571300
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": "ic_abc123",
+        "code": "ABCD1234",
+        "maxUses": 10,
+        "usedCount": 3,
+        "status": "active",
+        "expiresAt": null,
+        "createdBy": "usr_admin1",
+        "created_at": 1713571200,
+        "updated_at": 1713571300
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "pageSize": 20,
+      "total": 50,
+      "totalPages": 3
+    }
   }
-]
+}
 ```
 
-#### 创建邀请码
+---
+
+### 创建邀请码
 
 **POST** `/api/invite-codes`
 
 **请求体**:
 ```json
 {
-  "code": "INVITE2024",
   "maxUses": 10,
   "expiresInDays": 30
 }
@@ -353,552 +509,110 @@ Authorization: Bearer <token>  # 如需认证
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| code | string | 否 | 自定义代码（留空自动生成） |
 | maxUses | number | 否 | 最大使用次数（默认 1） |
 | expiresInDays | number | 否 | 有效期天数（默认 null，永不过期） |
 
 **成功响应 (201)**:
 ```json
 {
-  "id": "ic_abc123",
-  "code": "INVITE2024",
-  "maxUses": 10,
-  "usedCount": 0,
-  "status": "active",
-  "expiresAt": 1741147200,
-  "createdBy": "usr_admin1",
-  "createdAt": 1713571200,
-  "updatedAt": 1713571200
+  "success": true,
+  "data": {
+    "id": "ic_abc123",
+    "code": "ABCD1234",
+    "maxUses": 10,
+    "usedCount": 0,
+    "status": "active",
+    "expiresAt": 1741147200,
+    "createdBy": "usr_admin1",
+    "created_at": 1713571200,
+    "updated_at": 1713571200
+  }
 }
 ```
-
-#### 更新邀请码
-
-**PUT** `/api/invite-codes/:id`
-
-**请求体**:
-```json
-{
-  "maxUses": 20,
-  "status": "disabled"
-}
-```
-
-#### 删除邀请码
-
-**DELETE** `/api/invite-codes/:id`
 
 ---
 
-### 系统设置 (System Settings)
+### 更新邀请码状态
 
-> **需要认证**: `GET` 需要普通用户权限，`PUT` 需要 `Admin` 权限
-
-#### 获取系统设置
-
-**GET** `/api/system-settings`
-
-**响应示例**:
-```json
-[
-  {
-    "key": "registration_enabled",
-    "value": "true",
-    "description": "是否允许公开注册",
-    "updatedAt": 1713571200
-  },
-  {
-    "key": "admin_initialized",
-    "value": "true",
-    "description": "系统是否已完成管理员初始化",
-    "updatedAt": 1713571200
-  },
-  {
-    "key": "site_name",
-    "value": "NovelForge",
-    "description": "站点名称",
-    "updatedAt": 1713571200
-  }
-]
-```
-
-#### 更新系统设置
-
-**PUT** `/api/system-settings`
-
-> **需要 Admin 权限**
+**PATCH** `/api/invite-codes/:id/status`
 
 **请求体**:
 ```json
 {
-  "settings": [
-    {
-      "key": "registration_enabled",
-      "value": "false"
-    }
-  ]
+  "status": "disabled"
 }
 ```
 
 **成功响应 (200)**:
 ```json
 {
-  "message": "更新成功",
-  "updated": [
-    { "key": "registration_enabled", "value": "false" }
-  ]
+  "success": true,
+  "message": "邀请码已禁用"
 }
 ```
 
 ---
 
-### 创意工坊 (Workshop)
+### 删除邀请码
 
-> **需要认证**
+**DELETE** `/api/invite-codes/:id`
 
-#### 创建会话
-
-**POST** `/api/workshop/sessions`
-
-**请求体**:
+**成功响应 (200)**:
 ```json
 {
-  "title": "我的玄幻小说创意"
-}
-```
-
-**成功响应 (201)**:
-```json
-{
-  "id": "ws_abc123",
-  "title": "我的玄幻小说创意",
-  "stage": "concept",
-  "data": {},
-  "userId": "usr_abc123",
-  "createdAt": 1713571200,
-  "updatedAt": 1713571200
-}
-```
-
-#### 获取会话列表
-
-**GET** `/api/workshop/sessions`
-
-**响应示例**:
-```json
-[
-  {
-    "id": "ws_abc123",
-    "title": "我的玄幻小说创意",
-    "stage": "concept",
-    "data": {},
-    "createdAt": 1713571200,
-    "updatedAt": 1713571500
-  }
-]
-```
-
-#### 获取会话详情
-
-**GET** `/api/workshop/sessions/:id`
-
-#### 更新会话数据
-
-**PUT** `/api/workshop/sessions/:id`
-
-**请求体**:
-```json
-{
-  "stage": "worldbuilding",
-  "data": {
-    "genre": "玄幻",
-    "coreConcepts": ["修炼体系", "宗门争霸"]
-  }
-}
-```
-
-#### 删除会话
-
-**DELETE** `/api/workshop/sessions/:id`
-
-#### SSE 对话流
-
-**GET** `/api/workshop/sessions/:id/chat?message=你好&stage=concept`
-
-> 返回 SSE (Server-Sent Events) 流
-
-**查询参数**:
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| message | string | ✅ | 用户消息内容 |
-| stage | string | ✅ | 当前阶段：concept/worldbuilding/character/volume |
-
-**SSE 事件格式**:
-```
-event: message
-data: {"type":"text","content":"你好！我是你的AI创作助手..."}
-
-event: extracted_data
-data: {"genre":"玄幻","title":"混沌元尊","...":"..."}
-
-event: done
-data: {}
-```
-
-#### 提交确认（生成小说框架）
-
-**POST** `/api/workshop/sessions/:id/submit`
-
-**请求体**:
-```json
-{
-  "confirmedData": {
-    "title": "混沌元尊",
-    "genre": "玄幻",
-    "synopsis": "...",
-    "worldSettings": [...],
-    "characters": [...],
-    "volumes": [...]
-  }
-}
-```
-
-**成功响应 (201)**:
-```json
-{
-  "message": "小说创建成功",
-  "novelId": "nov_abc123",
-  "masterOutlineId": "mo_def456",
-  "characterIds": ["char_789"],
-  "volumeIds": ["vol_012"]
+  "success": true,
+  "message": "邀请码已删除"
 }
 ```
 
 ---
 
-## v1.6.0 新增 API
+## 系统设置 (System Settings)
 
-### AI 监控中心 (AI Monitor)
+### 获取系统设置
 
-> **需要认证**
-
-#### 获取向量统计
-
-**GET** `/api/vectorize/stats?novelId=:novelId`
-
-**响应示例**:
-```json
-{
-  "total": 156,
-  "byType": {
-    "setting": 45,
-    "character": 89,
-    "foreshadowing": 22
-  },
-  "lastIndexedAt": 1713763200,
-  "unindexedCounts": {
-    "settings": 3,
-    "characters": 0,
-    "foreshadowing": 1
-  }
-}
-```
-
-#### 获取向量状态
-
-**GET** `/api/vectorize/status`
-
-**响应示例**:
-```json
-{
-  "status": "ok",
-  "message": "Vectorize service is operational",
-  "embeddingModel": "@cf/baai/bge-base-zh-v1.5",
-  "dimensions": 768
-}
-```
-
-#### 全量重建索引
-
-**POST** `/api/vectorize/reindex-all`
-
-> 后台异步执行，通过队列处理
-
-**请求体**:
-```json
-{
-  "novelId": "novel456",
-  "clearExisting": true
-}
-```
-
-**响应示例**:
-```json
-{
-  "ok": true,
-  "message": "索引重建任务已提交到后台队列"
-}
-```
-
-#### 增量索引未索引项
-
-**POST** `/api/vectorize/index-missing`
-
-**请求体**:
-```json
-{
-  "novelId": "novel456"
-}
-```
-
-**响应示例**:
-```json
-{
-  "ok": true,
-  "message": "已提交 4 条内容到索引队列"
-}
-```
-
----
-
-### 上下文诊断 (Context)
+**GET** `/api/system-settings`
 
 > **需要认证**
 
-#### 预览章节上下文
-
-**GET** `/api/generate/preview-context?novelId=:novelId&chapterId=:chapterId`
-
 **响应示例**:
 ```json
 {
-  "summary": {
-    "totalLayers": 12,
-    "coreLayerCount": 6,
-    "dynamicLayerCount": 6,
-    "ragResultCount": 8,
-    "buildTimeMs": 234,
-    "totalTokenEstimate": 45230
-  },
-  "slotBreakdown": {
-    "masterOutlineContent": 8500,
-    "volumeBlueprint": 1200,
-    "volumeEventLine": 800,
-    "prevChapterSummary": 450,
-    "protagonistCards": 2800,
-    "activeRules": 3200,
-    "summaryChain": 12500,
-    "characterCards": 6800,
-    "foreshadowing": 2100,
-    "settings": 4500,
-    "chapterTypeRules": 1500
-  },
-  "chapterTypeHint": "combat"
-}
-```
-
----
-
-### 综合检查 (Check)
-
-> **需要认证**
-
-#### 组合质量检查
-
-**POST** `/api/generate/combined-check`
-
-**请求体**:
-```json
-{
-  "chapterId": "chap123",
-  "novelId": "novel456",
-  "characterIds": ["char1", "char2", "char3"]
-}
-```
-
-**响应示例**:
-```json
-{
-  "score": 78,
-  "characterCheck": {
-    "conflicts": [
-      {
-        "characterName": "林风",
-        "conflict": "前后性格表现不一致",
-        "excerpt": "林风性格坚毅，但在第15章突然变得胆小怕事"
-      }
-    ],
-    "warnings": []
-  },
-  "coherenceCheck": {
-    "score": 85,
-    "issues": [
-      {
-        "severity": "warning",
-        "category": "foreshadowing",
-        "message": "伏笔'天雷珠之谜'尚未收尾",
-        "suggestion": "建议在后续章节中揭示天雷珠的来历"
-      }
-    ]
-  },
-  "hasIssues": true
-}
-```
-
----
-
-## v1.7.0 新增 API
-
-### 伏笔进度追踪 (Foreshadowing Progress)
-
-> **需要认证**
-
-#### 获取伏笔进度列表
-
-**GET** `/api/foreshadowing/:novelId/progress`
-
-**响应示例**:
-```json
-{
-  "progress": [
+  "success": true,
+  "data": [
     {
-      "id": "fp123",
-      "foreshadowingId": "fs456",
-      "chapterId": "chap789",
-      "progress": 30,
-      "status": "in_progress",
-      "notes": "林风开始怀疑天雷珠的来历",
-      "createdAt": 1713763200,
-      "updatedAt": 1713763200
+      "key": "registration_enabled",
+      "value": "true",
+      "description": "是否允许公开注册",
+      "updated_at": 1713571200
     }
   ]
 }
 ```
 
-#### 更新伏笔进度
-
-**PUT** `/api/foreshadowing-progress/:id`
-
-**请求体**:
-```json
-{
-  "progress": 60,
-  "status": "in_progress",
-  "notes": "天雷珠之谜逐渐揭开"
-}
-```
-
 ---
 
-### 工坊导入 (Workshop Import)
+### 更新注册开关
 
-> **需要认证**
+**PUT** `/api/system-settings/registration`
 
-#### 导入工坊数据
-
-**POST** `/api/workshop-import`
+> **需要 Admin 权限**
 
 **请求体**:
 ```json
 {
-  "novelId": "novel456",
+  "enabled": true
+}
+```
+
+**成功响应 (200)**:
+```json
+{
+  "success": true,
   "data": {
-    "title": "小说标题",
-    "genre": "玄幻",
-    "worldSettings": [...],
-    "characters": [...],
-    "volumes": [...]
-  }
-}
-```
-
-**响应示例**:
-```json
-{
-  "ok": true,
-  "message": "导入成功",
-  "novelId": "novel456",
-  "imported": {
-    "settings": 5,
-    "characters": 8,
-    "volumes": 3
-  }
-}
-```
-
-#### 格式化工坊导入
-
-**POST** `/api/workshop-format-import`
-
-**请求体**:
-```json
-{
-  "format": "json",
-  "data": {
-    "novel": {
-      "title": "混沌元尊",
-      "genre": "玄幻"
-    },
-    "characters": [...],
-    "settings": [...],
-    "outline": {...}
-  }
-}
-```
-
-**响应示例**:
-```json
-{
-  "ok": true,
-  "novelId": "new123",
-  "created": {
-    "novel": true,
-    "characters": 5,
-    "settings": 10
-  }
-}
-```
-
----
-
-### 小说管理增强 (Novels Enhanced)
-
-> **需要认证**
-
-#### 获取小说统计
-
-**GET** `/api/novels/:id/stats`
-
-**响应示例**:
-```json
-{
-  "totalWordCount": 125000,
-  "totalChapterCount": 42,
-  "generatedChapterCount": 38,
-  "revisedChapterCount": 4,
-  "foreshadowingCount": 15,
-  "resolvedForeshadowingCount": 3,
-  "characterCount": 12
-}
-```
-
-#### 批量操作小说
-
-**POST** `/api/novels/batch`
-
-**请求体**:
-```json
-{
-  "action": "delete",
-  "novelIds": ["novel1", "novel2"]
-}
-```
-
-**响应示例**:
-```json
-{
-  "ok": true,
-  "affected": 2
+    "registrationEnabled": true
+  },
+  "message": "注册功能已开启"
 }
 ```
 
@@ -910,31 +624,37 @@ data: {}
 
 **GET** `/api/novels`
 
+> **需要认证**
+
 **查询参数**:
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| status | string | 否 | 按状态过滤：draft/writing/completed |
-| genre | string | 否 | 按类型过滤：玄幻/仙侠/都市... |
-| page | number | 否 | 页码，默认 1 |
-| perPage | number | 否 | 每页数量，默认 20 |
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| page | number | 1 | 页码 |
+| perPage | number | 20 | 每页数量（1-100） |
+| status | string | - | 状态过滤：draft/writing/completed/archived |
+| genre | string | - | 类型过滤 |
 
 **响应示例**:
 ```json
-[
-  {
-    "id": "abc123def456",
-    "title": "混沌元尊",
-    "description": "一个关于修炼与成神的故事...",
-    "genre": "玄幻",
-    "status": "writing",
-    "coverR2Key": null,
-    "wordCount": 125000,
-    "chapterCount": 42,
-    "createdAt": 1713571200,
-    "updatedAt": 1713657600,
-    "deletedAt": null
-  }
-]
+{
+  "data": [
+    {
+      "id": "abc123def456",
+      "title": "混沌元尊",
+      "description": "一个关于修炼与成神的故事...",
+      "genre": "玄幻",
+      "status": "writing",
+      "coverR2Key": null,
+      "wordCount": 125000,
+      "chapterCount": 42,
+      "createdAt": 1713571200,
+      "updatedAt": 1713657600
+    }
+  ],
+  "total": 10,
+  "page": 1,
+  "perPage": 20
+}
 ```
 
 ---
@@ -943,27 +663,9 @@ data: {}
 
 **GET** `/api/novels/:id`
 
-**路径参数**:
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| id | string | 小说 ID |
+> **需要认证**
 
-**响应示例**:
-```json
-{
-  "id": "abc123def456",
-  "title": "混沌元尊",
-  "description": "一个关于修炼与成神的故事...",
-  "genre": "玄幻",
-  "status": "writing",
-  "coverR2Key": null,
-  "wordCount": 125000,
-  "chapterCount": 42,
-  "createdAt": 1713571200,
-  "updatedAt": 1713657600,
-  "deletedAt": null
-}
-```
+**响应**: 同小说列表中的单个对象
 
 ---
 
@@ -971,16 +673,28 @@ data: {}
 
 **POST** `/api/novels`
 
+> **需要认证**
+
 **请求体**:
 ```json
 {
-  "title": "小说标题",           // 必填，1-200 字符
-  "description": "简介",         // 可选
-  "genre": "玄幻"               // 可选：玄幻/仙侠/都市/科幻/其他
+  "title": "小说标题",
+  "description": "简介",
+  "genre": "玄幻",
+  "status": "draft",
+  "targetWordCount": 100000
 }
 ```
 
-**响应示例**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| title | string | ✅ | 小说标题（1-200字符） |
+| description | string | 否 | 小说简介 |
+| genre | string | 否 | 小说类型 |
+| status | string | 否 | 状态：draft/writing/completed/archived |
+| targetWordCount | number | 否 | 目标字数 |
+
+**成功响应 (201)**:
 ```json
 {
   "id": "new123novel456",
@@ -991,7 +705,7 @@ data: {}
   "wordCount": 0,
   "chapterCount": 0,
   "createdAt": 1713571200,
-  "updatedAt": 1713571200
+  "updatedAt": 1713657600
 }
 ```
 
@@ -1001,12 +715,9 @@ data: {}
 
 **PATCH** `/api/novels/:id`
 
-**路径参数**:
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| id | string | 小说 ID |
+> **需要认证**
 
-**请求体**（所有字段可选）:
+**请求体**:
 ```json
 {
   "title": "新标题",
@@ -1022,6 +733,8 @@ data: {}
 
 **DELETE** `/api/novels/:id`
 
+> **需要认证**
+
 **说明**: 软删除，数据不会真正删除
 
 **响应**:
@@ -1033,11 +746,143 @@ data: {}
 
 ---
 
+### 恢复已删除小说
+
+**PATCH** `/api/novels/:id/restore`
+
+> **需要认证**
+
+**响应**:
+```json
+{
+  "id": "abc123def456",
+  "title": "混沌元尊",
+  "status": "writing",
+  "deletedAt": null,
+  "updatedAt": 1713657600
+}
+```
+
+---
+
+### 上传小说封面
+
+**POST** `/api/novels/:id/cover`
+
+> **需要认证**
+
+**Content-Type**: `multipart/form-data`
+
+**表单字段**:
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| file | File | ✅ | 图片文件 |
+
+**响应示例**:
+```json
+{
+  "ok": true,
+  "coverUrl": "/api/novels/abc123def456/cover"
+}
+```
+
+---
+
+### 获取回收站列表
+
+**GET** `/api/novels/trash`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "ok": true,
+  "novels": [
+    {
+      "id": "deleted123",
+      "title": "已删除的小说",
+      "genre": "玄幻",
+      "status": "writing",
+      "wordCount": 50000,
+      "chapterCount": 20,
+      "deletedAt": 1713657600,
+      "createdAt": 1713571200,
+      "updatedAt": 1713657600
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+### 永久删除小说
+
+**DELETE** `/api/novels/trash?id=novelId`
+
+> **需要认证**
+
+**说明**: 彻底删除小说本身，并级联清理所有关联数据
+
+**响应**:
+```json
+{
+  "ok": true,
+  "deleted": 1
+}
+```
+
+---
+
+### 获取小说回收站
+
+**GET** `/api/novels/:id/trash`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "ok": true,
+  "tables": [
+    { "key": "chapters", "label": "章节", "icon": "BookOpen", "count": 5, "items": [...] },
+    { "key": "characters", "label": "角色", "icon": "Users", "count": 3, "items": [...] }
+  ],
+  "total": 8
+}
+```
+
+---
+
+### 清空小说回收站
+
+**DELETE** `/api/novels/:id/trash`
+
+> **需要认证**
+
+**查询参数**:
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| table | string | 可选，指定表名（chapters/characters/settings/outlines/volumes/foreshadowing/rules） |
+
+**响应**:
+```json
+{
+  "ok": true,
+  "deleted": 8
+}
+```
+
+---
+
 ## 总纲管理 (Master Outline)
 
 ### 获取总纲
 
-**GET** `/api/v1/master-outline/:novelId`
+**GET** `/api/master-outline/:novelId`
+
+> **需要认证**
 
 **响应示例**:
 ```json
@@ -1047,12 +892,10 @@ data: {}
     "id": "mo123",
     "novelId": "novel456",
     "title": "混沌元尊总纲",
-    "content": "# 故事概述\n\n主角林风从一个偏僻小村庄走出...",
+    "content": "# 故事概述\n\n主角林风...",
     "version": 3,
     "summary": "一个少年从凡人成长为元尊的故事",
     "wordCount": 5000,
-    "vectorId": "vec789",
-    "indexedAt": 1713571200,
     "createdAt": 1713571200,
     "updatedAt": 1713657600
   }
@@ -1063,7 +906,9 @@ data: {}
 
 ### 获取总纲历史版本
 
-**GET** `/api/v1/master-outline/:novelId/history`
+**GET** `/api/master-outline/:novelId/history`
+
+> **需要认证**
 
 **响应示例**:
 ```json
@@ -1076,14 +921,6 @@ data: {}
       "summary": "一个少年从凡人成长为元尊的故事",
       "wordCount": 5000,
       "createdAt": 1713657600
-    },
-    {
-      "id": "mo122",
-      "version": 2,
-      "title": "混沌元尊总纲",
-      "summary": "修订版总纲",
-      "wordCount": 4500,
-      "createdAt": 1713571200
     }
   ]
 }
@@ -1091,44 +928,86 @@ data: {}
 
 ---
 
-### 创建/更新总纲
+### 创建总纲
 
-**POST** `/api/v1/master-outline`
+**POST** `/api/master-outline`
+
+> **需要认证**
 
 **请求体**:
 ```json
 {
-  "novelId": "novel456",        // 必填
-  "title": "混沌元尊总纲",       // 必填
-  "content": "# 故事概述\n\n...", // 必填，至少10字符
-  "summary": "简短摘要"          // 可选，最多500字符
+  "novelId": "novel456",
+  "title": "混沌元尊总纲",
+  "content": "# 故事概述\n\n...",
+  "summary": "简短摘要"
 }
 ```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| novelId | string | ✅ | 小说ID |
+| title | string | ✅ | 总纲标题（1-200字符） |
+| content | string | ✅ | 总纲内容（至少10字符） |
+| summary | string | 否 | 总纲摘要（最多500字符） |
 
 **说明**: 每次创建会自动递增版本号
 
----
-
-### 更新总纲内容
-
-**PUT** `/api/v1/master-outline/:id`
-
-**请求体**:
+**成功响应 (201)**:
 ```json
 {
-  "title": "新标题",            // 可选
-  "content": "新内容...",       // 可选
-  "summary": "新摘要"           // 可选
+  "ok": true,
+  "outline": {
+    "id": "mo123",
+    "novelId": "novel456",
+    "title": "混沌元尊总纲",
+    "version": 1,
+    "createdAt": 1713571200
+  }
 }
 ```
 
 ---
 
-### 删除总纲版本
+### 更新总纲
 
-**DELETE** `/api/v1/master-outline/:id`
+**PUT** `/api/master-outline/:id`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "title": "新标题",
+  "content": "新内容...",
+  "summary": "新摘要"
+}
+```
+
+**成功响应 (200)**:
+```json
+{
+  "ok": true,
+  "outline": { ... }
+}
+```
+
+---
+
+### 删除总纲
+
+**DELETE** `/api/master-outline/:id`
+
+> **需要认证**
 
 **说明**: 软删除
+
+**响应**:
+```json
+{
+  "ok": true
+}
+```
 
 ---
 
@@ -1136,7 +1015,9 @@ data: {}
 
 ### 获取创作规则
 
-**GET** `/api/v1/rules/:novelId`
+**GET** `/api/rules/:novelId`
+
+> **需要认证**
 
 **查询参数**:
 | 参数 | 类型 | 必填 | 说明 |
@@ -1168,17 +1049,36 @@ data: {}
 
 ### 创建创作规则
 
-**POST** `/api/v1/rules`
+**POST** `/api/rules`
+
+> **需要认证**
 
 **请求体**:
 ```json
 {
-  "novelId": "novel456",                              // 必填
-  "category": "style",                                // 必填：style/pacing/character/plot/world/taboo/custom
-  "title": "文风要求",                                 // 必填，最多100字符
-  "content": "使用古风语言，避免现代词汇...",           // 必填
-  "priority": 1,                                      // 可选，1-5，默认3
-  "sortOrder": 0                                      // 可选，默认0
+  "novelId": "novel456",
+  "category": "style",
+  "title": "文风要求",
+  "content": "使用古风语言，避免现代词汇...",
+  "priority": 1,
+  "sortOrder": 0
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| novelId | string | ✅ | 小说ID |
+| category | string | ✅ | 类别：style/pacing/character/plot/world/taboo/custom |
+| title | string | ✅ | 规则标题（1-100字符） |
+| content | string | ✅ | 规则内容 |
+| priority | number | 否 | 优先级（1-5，默认3） |
+| sortOrder | number | 否 | 排序顺序（默认0） |
+
+**成功响应 (201)**:
+```json
+{
+  "ok": true,
+  "rule": { ... }
 }
 ```
 
@@ -1186,7 +1086,9 @@ data: {}
 
 ### 更新创作规则
 
-**PUT** `/api/v1/rules/:id`
+**PUT** `/api/rules/:id`
+
+> **需要认证**
 
 **请求体**:
 ```json
@@ -1199,19 +1101,38 @@ data: {}
 }
 ```
 
+**成功响应 (200)**:
+```json
+{
+  "ok": true,
+  "rule": { ... }
+}
+```
+
 ---
 
 ### 删除创作规则
 
-**DELETE** `/api/v1/rules/:id`
+**DELETE** `/api/rules/:id`
+
+> **需要认证**
 
 **说明**: 软删除
+
+**响应**:
+```json
+{
+  "ok": true
+}
+```
 
 ---
 
 ### 启用/禁用规则
 
-**PATCH** `/api/v1/rules/:id/toggle`
+**PATCH** `/api/rules/:id/toggle`
+
+> **需要认证**
 
 **响应示例**:
 ```json
@@ -1225,14 +1146,54 @@ data: {}
 
 ## 小说设定 (Novel Settings)
 
-### 获取小说设定
+### 获取设定树形结构
 
-**GET** `/api/v1/settings/:novelId`
+**GET** `/api/settings/tree/:novelId`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "tree": [
+    {
+      "id": "set123",
+      "novelId": "novel456",
+      "type": "power_system",
+      "name": "境界体系",
+      "children": [
+        {
+          "id": "set124",
+          "name": "炼气期",
+          "children": []
+        }
+      ]
+    }
+  ],
+  "stats": {
+    "power_system": 5,
+    "worldview": 2
+  },
+  "total": 10
+}
+```
+
+---
+
+### 获取小说设定列表
+
+**GET** `/api/settings/:novelId`
+
+> **需要认证**
 
 **查询参数**:
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| type | string | 否 | 按类型过滤：worldview/power_system/faction/geography/item_skill/misc |
+| type | string | 否 | 设定类型：worldview/power_system/faction/geography/item_skill/misc |
+| category | string | 否 | 分类过滤 |
+| importance | string | 否 | 重要程度：high/normal/low |
+| limit | number | 否 | 返回数量限制（默认50） |
+| offset | number | 否 | 偏移量（默认0） |
 
 **响应示例**:
 ```json
@@ -1245,16 +1206,38 @@ data: {}
       "category": "修仙境界",
       "name": "境界体系",
       "content": "炼气期 → 筑基期 → 金丹期 → 元婴期...",
-      "attributes": "{\"levels\": 9}",
-      "parentId": null,
+      "summary": "炼气期 → 筑基期 →...",
       "importance": "high",
-      "relatedIds": null,
-      "vectorId": "vec789",
       "sortOrder": 0,
       "createdAt": 1713571200,
       "updatedAt": 1713657600
     }
-  ]
+  ],
+  "total": 10,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+---
+
+### 获取单个设定
+
+**GET** `/api/settings/:novelId/:id`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "setting": {
+    "id": "set123",
+    "novelId": "novel456",
+    "type": "power_system",
+    "name": "境界体系",
+    "content": "炼气期 → 筑基期 → ...",
+    ...
+  }
 }
 ```
 
@@ -1262,21 +1245,59 @@ data: {}
 
 ### 创建小说设定
 
-**POST** `/api/v1/settings`
+**POST** `/api/settings`
+
+> **需要认证**
 
 **请求体**:
 ```json
 {
-  "novelId": "novel456",                              // 必填
-  "type": "power_system",                             // 必填：worldview/power_system/faction/geography/item_skill/misc
-  "category": "修仙境界",                              // 可选
-  "name": "境界体系",                                  // 必填
-  "content": "炼气期 → 筑基期 → 金丹期...",            // 必填
-  "attributes": {"levels": 9},                        // 可选，JSON对象
-  "parentId": null,                                   // 可选，父设定ID
-  "importance": "high",                               // 可选：high/normal/low
-  "relatedIds": ["set124", "set125"],                 // 可选，关联设定ID
-  "sortOrder": 0                                      // 可选
+  "novelId": "novel456",
+  "type": "power_system",
+  "category": "修仙境界",
+  "name": "境界体系",
+  "content": "炼气期 → 筑基期 → 金丹期...",
+  "summary": "炼气期 → 筑基期 → ...",
+  "attributes": "{\"levels\": 9}",
+  "parentId": null,
+  "importance": "high",
+  "relatedIds": "[\"set124\", \"set125\"]"
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| novelId | string | ✅ | 小说ID |
+| type | string | ✅ | 设定类型 |
+| name | string | ✅ | 设定名称（1-100字符） |
+| content | string | ✅ | 设定内容 |
+| category | string | 否 | 分类 |
+| attributes | string | 否 | 属性JSON |
+| parentId | string | 否 | 父设定ID |
+| importance | string | 否 | 重要程度：high/normal/low |
+| relatedIds | string | 否 | 关联ID列表JSON |
+
+**成功响应 (201)**:
+```json
+{
+  "ok": true,
+  "setting": { ... }
+}
+```
+
+---
+
+### AI生成设定摘要
+
+**POST** `/api/settings/:id/generate-summary`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "ok": true,
+  "summary": "这是一个关于修仙境界的设定，包含从炼气期到元婴期的完整修炼体系..."
 }
 ```
 
@@ -1284,15 +1305,45 @@ data: {}
 
 ### 更新小说设定
 
-**PUT** `/api/v1/settings/:id`
+**PUT** `/api/settings/:id`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "type": "power_system",
+  "category": "修仙境界",
+  "name": "新名称",
+  "content": "新内容...",
+  "importance": "normal"
+}
+```
+
+**成功响应 (200)**:
+```json
+{
+  "ok": true,
+  "setting": { ... }
+}
+```
 
 ---
 
 ### 删除小说设定
 
-**DELETE** `/api/v1/settings/:id`
+**DELETE** `/api/settings/:id`
+
+> **需要认证**
 
 **说明**: 软删除
+
+**响应**:
+```json
+{
+  "ok": true
+}
+```
 
 ---
 
@@ -1301,6 +1352,8 @@ data: {}
 ### 获取卷列表
 
 **GET** `/api/volumes?novelId=:novelId`
+
+> **需要认证**
 
 **响应示例**:
 ```json
@@ -1326,17 +1379,32 @@ data: {}
 
 ---
 
+### 获取卷详情
+
+**GET** `/api/volumes/:id`
+
+> **需要认证**
+
+---
+
 ### 创建卷
 
 **POST** `/api/volumes`
 
+> **需要认证**
+
 **请求体**:
 ```json
 {
-  "novelId": "novel456",        // 必填
-  "outlineId": "outline789",    // 可选
-  "title": "第一卷：初出茅庐",   // 必填
-  "sortOrder": 1                // 可选
+  "novelId": "novel456",
+  "title": "第一卷：初出茅庐",
+  "sortOrder": 1,
+  "eventLine": "[\"主角出生\", \"发现天赋\", \"拜入宗门\"]",
+  "blueprint": "{\"chapters\": 20, \"targetWords\": 50000}",
+  "summary": "本章讲述了主角的出身...",
+  "notes": "作者笔记",
+  "status": "draft",
+  "targetWordCount": 60000
 }
 ```
 
@@ -1345,6 +1413,8 @@ data: {}
 ### 更新卷
 
 **PATCH** `/api/volumes/:id`
+
+> **需要认证**
 
 **请求体**:
 ```json
@@ -1361,7 +1431,16 @@ data: {}
 
 **DELETE** `/api/volumes/:id`
 
+> **需要认证**
+
 **说明**: 软删除，关联章节不会被删除但会解除关联
+
+**响应**:
+```json
+{
+  "ok": true
+}
+```
 
 ---
 
@@ -1371,12 +1450,7 @@ data: {}
 
 **GET** `/api/chapters?novelId=:novelId`
 
-**查询参数**:
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| novelId | string | 是 | 小说 ID |
-| volumeId | string | 否 | 卷 ID 过滤 |
-| status | string | 否 | 状态过滤 |
+> **需要认证**
 
 **响应示例**:
 ```json
@@ -1385,23 +1459,15 @@ data: {}
     "id": "chap123",
     "novelId": "novel456",
     "volumeId": "vol789",
-    "outlineId": "outline101",
     "title": "第一章：少年林风",
     "sortOrder": 1,
     "content": "<p>这里是章节内容...</p>",
     "wordCount": 3500,
     "status": "generated",
     "modelUsed": "doubao-seed-2-pro",
-    "promptTokens": 2500,
-    "completionTokens": 3200,
-    "generationTime": 8500,
     "summary": "本章介绍了主角林风的背景...",
-    "summaryAt": 1713657600,
-    "vectorId": "vec202",
-    "indexedAt": 1713657600,
     "createdAt": 1713571200,
-    "updatedAt": 1713657600,
-    "deletedAt": null
+    "updatedAt": 1713657600
   }
 ]
 ```
@@ -1412,7 +1478,7 @@ data: {}
 
 **GET** `/api/chapters/:id`
 
-**响应**: 同章节列表中的单个对象
+> **需要认证**
 
 ---
 
@@ -1420,15 +1486,33 @@ data: {}
 
 **POST** `/api/chapters`
 
+> **需要认证**
+
 **请求体**:
 ```json
 {
-  "novelId": "novel456",        // 必填
-  "volumeId": "vol789",         // 可选
-  "outlineId": "outline101",    // 可选
-  "title": "第一章：少年林风",   // 必填
-  "sortOrder": 1,               // 可选
-  "content": null               // 可选，初始可为空
+  "novelId": "novel456",
+  "volumeId": "vol789",
+  "title": "第一章：少年林风",
+  "sortOrder": 1,
+  "content": null
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| novelId | string | ✅ | 所属小说ID |
+| volumeId | string | 否 | 所属卷ID |
+| title | string | ✅ | 章节标题 |
+| sortOrder | number | 否 | 排序顺序 |
+| content | string | 否 | 章节内容（初始可为空） |
+
+**成功响应 (201)**:
+```json
+{
+  "id": "chap123",
+  "novelId": "novel456",
+  ...
 }
 ```
 
@@ -1438,12 +1522,15 @@ data: {}
 
 **PATCH** `/api/chapters/:id`
 
+> **需要认证**
+
 **请求体**:
 ```json
 {
   "title": "新的标题",
   "content": "<p>新的内容...</p>",
-  "status": "revised"
+  "status": "revised",
+  "summary": "章节摘要..."
 }
 ```
 
@@ -1453,6 +1540,59 @@ data: {}
 
 **DELETE** `/api/chapters/:id`
 
+> **需要认证**
+
+**响应**:
+```json
+{
+  "ok": true
+}
+```
+
+---
+
+### 获取章节快照列表
+
+**GET** `/api/chapters/:id/snapshots`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "snapshots": [
+    {
+      "key": "snapshots/novel456/chap123/1713571200000.txt",
+      "timestamp": 1713571200000,
+      "preview": "这里是章节内容的前200个字符..."
+    }
+  ]
+}
+```
+
+---
+
+### 恢复章节快照
+
+**POST** `/api/chapters/:id/restore`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "key": "snapshots/novel456/chap123/1713571200000.txt"
+}
+```
+
+**响应**:
+```json
+{
+  "ok": true,
+  "content": "恢复的章节内容..."
+}
+```
+
 ---
 
 ## 角色管理 (Characters)
@@ -1460,6 +1600,8 @@ data: {}
 ### 获取角色列表
 
 **GET** `/api/characters?novelId=:novelId`
+
+> **需要认证**
 
 **响应示例**:
 ```json
@@ -1471,15 +1613,22 @@ data: {}
     "aliases": "['小风', '风少']",
     "role": "protagonist",
     "description": "一位天赋异禀的少年...",
-    "imageR2Key": "characters/novel456/1713571200.jpg",
+    "imageR2Key": "characters/novel456/char123/1713571200.jpg",
     "attributes": "{\"age\": 16, \"height\": 175, \"cultivation\": \"筑基初期\"}",
-    "vectorId": "vec301",
+    "powerLevel": null,
     "createdAt": 1713571200,
-    "updatedAt": 1713657600,
-    "deletedAt": null
+    "updatedAt": 1713657600
   }
 ]
 ```
+
+---
+
+### 获取角色详情
+
+**GET** `/api/characters/:id`
+
+> **需要认证**
 
 ---
 
@@ -1487,64 +1636,30 @@ data: {}
 
 **POST** `/api/characters`
 
+> **需要认证**
+
 **请求体**:
 ```json
 {
-  "novelId": "novel456",        // 必填
-  "name": "林风",               // 必填
-  "aliases": ["小风", "风少"],   // 可选
-  "role": "protagonist",        // 可选：protagonist/antagonist/supporting
-  "description": "角色描述",     // 可选
-  "attributes": {               // 可选，JSON 对象
-    "age": 16,
-    "height": 175
-  }
+  "novelId": "novel456",
+  "name": "林风",
+  "aliases": "['小风', '风少']",
+  "role": "protagonist",
+  "description": "角色描述",
+  "attributes": "{\"age\": 16, \"height\": 175}",
+  "powerLevel": "{\"system\":\"修仙\",\"current\":\"筑基初期\"}"
 }
 ```
 
----
-
-### 上传角色图片
-
-**POST** `/api/characters/:id/image`
-
-**Content-Type**: `multipart/form-data`
-
-**表单字段**:
-| 字段 | 类型 | 必填 | 说明 |
+| 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| image | File | 是 | 图片文件 |
-| analyze | boolean | 否 | 是否进行 AI 分析 |
-
-**响应示例**:
-```json
-{
-  "url": "https://pub-xxx.r2.dev/characters/novel456/1713571200.jpg",
-  "key": "characters/novel456/1713571200.jpg",
-  "analysis": {
-    "description": "一位黑发少年，眼神坚毅...",
-    "appearance": "黑发，剑眉星目，身穿青色长衫",
-    "traits": ["坚毅", "勇敢", "正直"],
-    "tags": ["热血少年", "古风", "主角"],
-    "confidence": 0.85
-  }
-}
-```
-
----
-
-### 重新分析角色图片
-
-**POST** `/api/characters/:id/analyze-image`
-
-**请求体**:
-```json
-{
-  "imageUrl": "https://pub-xxx.r2.dev/characters/novel456/1713571200.jpg"
-}
-```
-
-**响应**: 同上传图片的 `analysis` 字段
+| novelId | string | ✅ | 小说ID |
+| name | string | ✅ | 角色名称 |
+| aliases | string | 否 | 角色别名（JSON数组字符串） |
+| role | string | 否 | 角色定位 |
+| description | string | 否 | 角色描述 |
+| attributes | string | 否 | 角色属性（JSON对象字符串） |
+| powerLevel | string | 否 | 境界信息（JSON对象字符串） |
 
 ---
 
@@ -1552,15 +1667,15 @@ data: {}
 
 **PATCH** `/api/characters/:id`
 
+> **需要认证**
+
 **请求体**:
 ```json
 {
   "name": "新名字",
   "description": "新的描述",
   "role": "antagonist",
-  "attributes": {
-    "age": 20
-  }
+  "powerLevel": "{\"system\":\"修仙\",\"current\":\"金丹初期\"}"
 }
 ```
 
@@ -1570,260 +1685,38 @@ data: {}
 
 **DELETE** `/api/characters/:id`
 
----
+> **需要认证**
 
-## AI 生成 (Generate)
-
-### 生成章节
-
-**POST** `/api/generate/chapter`
-
-**Content-Type**: `application/json`
-
-**请求体**:
+**响应**:
 ```json
 {
-  "chapterId": "chap123",       // 必填
-  "novelId": "novel456",        // 必填
-  "config": {                   // 可选
-    "maxIterations": 3,
-    "enableRAG": true,
-    "enableAutoSummary": true
-  }
-}
-```
-
-**响应类型**: `text/event-stream` (SSE 流)
-
-**SSE 数据格式**:
-```
-data: 林风深吸一口气...
-
-data: 体内的灵力开始运转...
-
-data: [DONE]
-```
-
-**客户端示例**:
-```javascript
-const response = await fetch('/api/generate/chapter', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ chapterId: 'chap123', novelId: 'novel456' })
-})
-
-const reader = response.body.getReader()
-const decoder = new TextDecoder()
-
-while (true) {
-  const { done, value } = await reader.read()
-  if (done) break
-  
-  const text = decoder.decode(value)
-  for (const line of text.split('\n')) {
-    if (line.startsWith('data: ') && line !== 'data: [DONE]') {
-      const content = line.slice(6)
-      console.log('Received:', content)
-    }
-  }
+  "ok": true
 }
 ```
 
 ---
 
-### 取消生成
+### 上传角色图片
 
-**POST** `/api/generate/cancel`
+**POST** `/api/characters/:id/image`
 
-**说明**: 当前版本不支持服务端取消，客户端应使用 `AbortController`
+> **需要认证**
 
-**客户端取消示例**:
-```javascript
-const controller = new AbortController()
+**Content-Type**: `multipart/form-data`
 
-const response = await fetch('/api/generate/chapter', {
-  method: 'POST',
-  signal: controller.signal,
-  // ...
-})
-
-// 需要取消时
-controller.abort()
-```
-
----
-
-## 导出服务 (Export)
-
-### 获取可用格式
-
-**GET** `/api/export/formats`
-
-**响应示例**:
-```json
-{
-  "formats": [
-    {
-      "id": "md",
-      "name": "Markdown",
-      "extension": ".md",
-      "mimeType": "text/markdown",
-      "supportsTOC": true,
-      "supportsMeta": true
-    },
-    {
-      "id": "txt",
-      "name": "纯文本",
-      "extension": ".txt",
-      "mimeType": "text/plain",
-      "supportsTOC": true,
-      "supportsMeta": true
-    },
-    {
-      "id": "epub",
-      "name": "EPUB 电子书",
-      "extension": ".epub",
-      "mimeType": "application/epub+zip",
-      "supportsTOC": true,
-      "supportsMeta": true
-    },
-    {
-      "id": "zip",
-      "name": "ZIP 打包",
-      "extension": ".zip",
-      "mimeType": "application/zip",
-      "supportsTOC": false,
-      "supportsMeta": false
-    }
-  ]
-}
-```
-
----
-
-### 导出小说
-
-**POST** `/api/export`
-
-**请求体**:
-```json
-{
-  "novelId": "novel456",        // 必填
-  "format": "epub",             // 必填：md/txt/epub/zip
-  "options": {                  // 可选
-    "includeTOC": true,         // 包含目录
-    "includeMeta": true,        // 包含元数据
-    "volumeRange": [1, 3]       // 卷范围，不传则导出全部
-  }
-}
-```
-
-**响应**: 文件下载（二进制流）
-
-**响应头**:
-```http
-Content-Type: application/octet-stream
-Content-Disposition: attachment; filename="小说标题.epub"
-X-Export-Meta: {"wordCount":125000,"chapterCount":42}
-```
-
----
-
-### 获取导出进度
-
-**GET** `/api/export/progress/:taskId`
-
-**说明**: 对于大型导出任务，可以轮询进度
-
-**响应示例**:
-```json
-{
-  "taskId": "task123",
-  "status": "processing",       // pending/processing/completed/failed
-  "progress": 0.6,              // 0-1
-  "estimatedTimeRemaining": 30  // 秒
-}
-```
-
----
-
-## 设置服务 (Settings)
-
-### 获取模型配置列表
-
-**GET** `/api/settings/model-configs`
-
-**查询参数**:
-| 参数 | 类型 | 必填 | 说明 |
+**表单字段**:
+| 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| novelId | string | 否 | 小说 ID，不传则返回全局配置 |
+| image | File | ✅ | 图片文件（最大5MB，支持 jpeg/png/gif/webp） |
 
 **响应示例**:
 ```json
-[
-  {
-    "id": "config123",
-    "novelId": null,            // null 表示全局配置
-    "scope": "global",
-    "stage": "chapter_gen",
-    "provider": "volcengine",
-    "modelId": "doubao-seed-2-pro",
-    "apiBase": "https://ark.cn-beijing.volces.com/api/v3",
-    "apiKeyEnv": "VOLCENGINE_API_KEY",
-    "params": "{\"temperature\":0.85,\"max_tokens\":4096}",
-    "isActive": 1,
-    "createdAt": 1713571200,
-    "updatedAt": 1713657600
-  }
-]
-```
-
----
-
-### 创建模型配置
-
-**POST** `/api/settings/model-configs`
-
-**请求体**:
-```json
 {
-  "novelId": "novel456",        // 可选，不传则为全局
-  "scope": "novel",             // global/novel
-  "stage": "chapter_gen",       // outline_gen/chapter_gen/summary_gen/vision
-  "provider": "volcengine",     // volcengine/anthropic/openai/custom
-  "modelId": "doubao-seed-2-pro",
-  "apiBase": "https://ark.cn-beijing.volces.com/api/v3",
-  "apiKeyEnv": "VOLCENGINE_API_KEY",
-  "params": {
-    "temperature": 0.85,
-    "max_tokens": 4096,
-    "top_p": 0.9
-  }
+  "ok": true,
+  "imageUrl": "https://pub-xxx.r2.dev/characters/novel456/char123/1713571200.jpg",
+  "imageKey": "characters/novel456/char123/1713571200.jpg"
 }
 ```
-
----
-
-### 更新模型配置
-
-**PATCH** `/api/settings/model-configs/:id`
-
-**请求体**:
-```json
-{
-  "modelId": "doubao-pro-32k",
-  "params": {
-    "temperature": 0.7
-  },
-  "isActive": false
-}
-```
-
----
-
-### 删除模型配置
-
-**DELETE** `/api/settings/model-configs/:id`
 
 ---
 
@@ -1833,11 +1726,13 @@ X-Export-Meta: {"wordCount":125000,"chapterCount":42}
 
 **GET** `/api/foreshadowing/:novelId`
 
+> **需要认证**
+
 **查询参数**:
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | status | string | 否 | 按状态过滤：open/resolved/abandoned |
-| limit | number | 否 | 返回数量限制，默认50 |
+| limit | number | 否 | 返回数量限制（默认50） |
 
 **响应示例**:
 ```json
@@ -1850,7 +1745,6 @@ X-Export-Meta: {"wordCount":125000,"chapterCount":42}
       "title": "神秘玉佩的来历",
       "description": "主角捡到的玉佩似乎隐藏着重大秘密",
       "status": "open",
-      "resolvedChapterId": null,
       "importance": "high",
       "createdAt": 1713571200,
       "updatedAt": 1713657600
@@ -1865,22 +1759,34 @@ X-Export-Meta: {"wordCount":125000,"chapterCount":42}
 
 **POST** `/api/foreshadowing`
 
+> **需要认证**
+
 **请求体**:
 ```json
 {
-  "novelId": "novel456",                              // 必填
-  "chapterId": "chap789",                             // 可选，埋下伏笔的章节
-  "title": "神秘玉佩的来历",                           // 必填，最多100字符
-  "description": "主角捡到的玉佩似乎隐藏着重大秘密",    // 可选，最多1000字符
-  "importance": "high"                                // 可选：high/normal/low，默认normal
+  "novelId": "novel456",
+  "chapterId": "chap789",
+  "title": "神秘玉佩的来历",
+  "description": "主角捡到的玉佩似乎隐藏着重大秘密",
+  "importance": "high"
 }
 ```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| novelId | string | ✅ | 小说ID |
+| chapterId | string | 否 | 埋下伏笔的章节 |
+| title | string | ✅ | 伏笔标题（1-100字符） |
+| description | string | 否 | 伏笔描述（最多1000字符） |
+| importance | string | 否 | 重要程度：high/normal/low（默认normal） |
 
 ---
 
 ### 更新伏笔
 
 **PUT** `/api/foreshadowing/:id`
+
+> **需要认证**
 
 **请求体**:
 ```json
@@ -1899,7 +1805,862 @@ X-Export-Meta: {"wordCount":125000,"chapterCount":42}
 
 **DELETE** `/api/foreshadowing/:id`
 
+> **需要认证**
+
 **说明**: 软删除
+
+**响应**:
+```json
+{
+  "ok": true
+}
+```
+
+---
+
+### 获取伏笔进度
+
+**GET** `/api/foreshadowing/:id/progress`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "progresses": [
+    {
+      "id": "fp123",
+      "chapterId": "chap789",
+      "chapterTitle": "第三章：突破筑基",
+      "progressType": "mention",
+      "summary": "林风开始怀疑天雷珠的来历",
+      "createdAt": 1713763200
+    }
+  ]
+}
+```
+
+---
+
+### 获取沉寂伏笔
+
+**GET** `/api/foreshadowing/:novelId/stale`
+
+> **需要认证**
+
+**查询参数**:
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| threshold | number | 10 | N章无推进被视为沉寂 |
+
+**响应示例**:
+```json
+{
+  "foreshadowing": [
+    {
+      "id": "fs123",
+      "title": "神秘玉佩的来历",
+      "description": "...",
+      "importance": "high",
+      "status": "open",
+      "chapterId": "chap100",
+      "createdAt": 1713571200
+    }
+  ],
+  "threshold": 10
+}
+```
+
+---
+
+### 伏笔健康检查
+
+**POST** `/api/foreshadowing/:novelId/check`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "recentChaptersCount": 5,
+  "staleThreshold": 10
+}
+```
+
+**响应示例**:
+```json
+{
+  "total": 15,
+  "open": 10,
+  "resolved": 3,
+  "abandoned": 2,
+  "resolutionRate": 60,
+  "staleCount": 2,
+  "healthScore": 85
+}
+```
+
+---
+
+### 伏笔推荐
+
+**POST** `/api/foreshadowing/:novelId/suggest`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "chapterContext": "林风与师妹在山谷中遭遇妖兽袭击...",
+  "topK": 5
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| chapterContext | string | ✅ | 当前章节场景描述（至少5字符） |
+| topK | number | 否 | 返回推荐数量（默认5） |
+
+**响应示例**:
+```json
+{
+  "suggestions": [
+    {
+      "id": "fs123",
+      "title": "神秘玉佩的来历",
+      "importance": "high",
+      "score": 0.85
+    }
+  ],
+  "query": "林风与师妹在山谷中..."
+}
+```
+
+---
+
+### 伏笔统计
+
+**GET** `/api/foreshadowing/:novelId/stats`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "overview": {
+    "total": 15,
+    "open": 10,
+    "resolved": 3,
+    "abandoned": 2,
+    "resolutionRate": 60,
+    "avgLifespan": 8
+  },
+  "byImportance": {
+    "high": { "total": 5, "open": 3, "resolved": 2 },
+    "normal": { "total": 8, "open": 6, "resolved": 1 },
+    "low": { "total": 2, "open": 1, "resolved": 0 }
+  },
+  "byAge": [
+    { "range": "1-3章", "count": 5, "ids": ["fs1", "fs2"] },
+    { "range": "4-10章", "count": 4, "ids": ["fs3"] },
+    { "range": "11-20章", "count": 3, "ids": [] },
+    { "range": "20章+", "count": 3, "ids": [] }
+  ],
+  "hotChapters": [
+    {
+      "chapterId": "chap50",
+      "chapterTitle": "决战前夕",
+      "plantedCount": 3,
+      "resolvedCount": 1,
+      "progressedCount": 2
+    }
+  ]
+}
+```
+
+---
+
+## AI 生成 (Generate)
+
+### 生成章节
+
+**POST** `/api/generate/chapter`
+
+> **需要认证**
+
+**Content-Type**: `application/json`
+
+**请求体**:
+```json
+{
+  "chapterId": "chap123",
+  "novelId": "novel456",
+  "mode": "generate",
+  "existingContent": "",
+  "targetWords": 3000,
+  "issuesContext": [],
+  "options": {
+    "enableRAG": true,
+    "enableAutoSummary": true
+  }
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| chapterId | string | ✅ | 章节ID |
+| novelId | string | ✅ | 小说ID |
+| mode | string | 否 | 生成模式：generate/continue/rewrite（默认generate） |
+| existingContent | string | 否 | 现有内容（续写/重写模式需要） |
+| targetWords | number | 否 | 目标字数（500-8000） |
+| issuesContext | string[] | 否 | 问题上下文 |
+| options.enableRAG | boolean | 否 | 是否启用RAG（默认true） |
+| options.enableAutoSummary | boolean | 否 | 是否自动生成摘要（默认true） |
+
+**响应类型**: `text/event-stream` (SSE 流)
+
+**SSE 数据格式**:
+```
+data: {"content": "林风深吸一口气..."}
+
+data: {"type":"tool_call","name":"search_context","args":{...},"result":"..."}
+
+data: {"type":"done","usage":{"prompt_tokens":2500,"completion_tokens":3200}}
+
+data: [DONE]
+```
+
+---
+
+### 生成章节摘要
+
+**POST** `/api/generate/summary`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "chapterId": "chap123",
+  "novelId": "novel456"
+}
+```
+
+**响应**:
+```json
+{
+  "ok": true,
+  "message": "Summary generation triggered"
+}
+```
+
+---
+
+### 获取生成日志
+
+**GET** `/api/generate/logs`
+
+> **需要认证**
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| novelId | string | 否 | 小说ID过滤 |
+| limit | number | 否 | 返回条数限制（默认50） |
+
+**响应示例**:
+```json
+{
+  "logs": [
+    {
+      "id": "log123",
+      "novelId": "novel456",
+      "chapterId": "chap123",
+      "stage": "chapter_gen",
+      "modelId": "doubao-seed-2-pro",
+      "promptTokens": 2500,
+      "completionTokens": 3200,
+      "durationMs": 8500,
+      "status": "success",
+      "createdAt": 1713657600
+    }
+  ]
+}
+```
+
+---
+
+### 角色一致性检查
+
+**POST** `/api/generate/check`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "chapterId": "chap123",
+  "characterIds": ["char1", "char2"],
+  "novelId": "novel456"
+}
+```
+
+**响应示例**:
+```json
+{
+  "conflicts": [],
+  "warnings": [
+    {
+      "characterName": "林风",
+      "warning": "性格表现略有前后不一致",
+      "excerpt": "林风性格坚毅，但在第15章..."
+    }
+  ]
+}
+```
+
+---
+
+### 连贯性检查
+
+**POST** `/api/generate/coherence-check`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "chapterId": "chap123",
+  "novelId": "novel456"
+}
+```
+
+**响应示例**:
+```json
+{
+  "score": 85,
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "foreshadowing",
+      "message": "伏笔'天雷珠之谜'尚未收尾",
+      "suggestion": "建议在后续章节中揭示天雷珠的来历"
+    }
+  ]
+}
+```
+
+---
+
+### 组合检查
+
+**POST** `/api/generate/combined-check`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "chapterId": "chap123",
+  "novelId": "novel456",
+  "characterIds": ["char1", "char2", "char3"]
+}
+```
+
+**响应示例**:
+```json
+{
+  "score": 78,
+  "characterCheck": {
+    "conflicts": [],
+    "warnings": []
+  },
+  "coherenceCheck": {
+    "score": 85,
+    "issues": [...]
+  },
+  "hasIssues": true
+}
+```
+
+---
+
+### 卷进度检查
+
+**POST** `/api/generate/volume-progress-check`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "chapterId": "chap123",
+  "novelId": "novel456"
+}
+```
+
+**响应示例**:
+```json
+{
+  "healthStatus": "warning",
+  "currentChapter": 15,
+  "targetChapters": 20,
+  "currentWords": 45000,
+  "targetWords": 50000,
+  "issues": [
+    {
+      "type": " pacing",
+      "message": "当前卷节奏偏慢，建议加快剧情推进"
+    }
+  ]
+}
+```
+
+---
+
+### 预览上下文
+
+**POST** `/api/generate/preview-context`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "novelId": "novel456",
+  "chapterId": "chap123"
+}
+```
+
+**响应示例**:
+```json
+{
+  "ok": true,
+  "buildTimeMs": 234,
+  "summary": {
+    "totalLayers": 12,
+    "coreLayerCount": 6,
+    "dynamicLayerCount": 6,
+    "ragResultCount": 8
+  }
+}
+```
+
+---
+
+### 总纲摘要生成
+
+**POST** `/api/generate/master-outline-summary`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "novelId": "novel456"
+}
+```
+
+**响应**:
+```json
+{
+  "ok": true,
+  "summary": "一个少年从凡人成长为元尊的故事..."
+}
+```
+
+---
+
+### 卷摘要生成
+
+**POST** `/api/generate/volume-summary`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "volumeId": "vol123",
+  "novelId": "novel456"
+}
+```
+
+**响应**:
+```json
+{
+  "ok": true,
+  "summary": "本卷讲述了主角从炼气期突破到筑基期的过程..."
+}
+```
+
+---
+
+### 批量确认章节
+
+**POST** `/api/generate/confirm-batch-chapters`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "volumeId": "vol123",
+  "novelId": "novel456",
+  "chapterPlans": [
+    { "chapterTitle": "第一章：少年林风", "summary": "介绍主角背景" },
+    { "chapterTitle": "第二章：拜入宗门", "summary": "主角踏上修仙路" }
+  ]
+}
+```
+
+**响应示例**:
+```json
+{
+  "ok": true,
+  "created": [
+    { "id": "chap_new_1", "title": "第一章：少年林风" },
+    { "id": "chap_new_2", "title": "第二章：拜入宗门" }
+  ]
+}
+```
+
+---
+
+### 生成下一章
+
+**POST** `/api/generate/next-chapter`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "volumeId": "vol123",
+  "novelId": "novel456"
+}
+```
+
+**响应示例**:
+```json
+{
+  "ok": true,
+  "chapterId": "chap_new_3",
+  "title": "第三章：初试锋芒"
+}
+```
+
+---
+
+### 获取最新检查日志
+
+**GET** `/api/generate/check-logs/latest`
+
+> **需要认证**
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| chapterId | string | ✅ | 章节ID |
+| checkType | string | 否 | 检查类型过滤 |
+
+**响应**:
+```json
+{
+  "log": {
+    "id": "log123",
+    "chapterId": "chap123",
+    "checkType": "combined",
+    "score": 78,
+    "status": "success",
+    "createdAt": 1713657600
+  }
+}
+```
+
+---
+
+### 获取检查日志历史
+
+**GET** `/api/generate/check-logs/history`
+
+> **需要认证**
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| chapterId | string | ✅ | 章节ID |
+| checkType | string | 否 | 检查类型过滤 |
+| limit | number | 否 | 返回条数限制（默认20） |
+
+**响应**:
+```json
+{
+  "logs": [...]
+}
+```
+
+---
+
+## 境界管理 (Power Level)
+
+### 检测境界突破
+
+**POST** `/api/power-level/detect`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "chapterId": "chap123",
+  "novelId": "novel456"
+}
+```
+
+**响应示例**:
+```json
+{
+  "ok": true,
+  "hasBreakthrough": true,
+  "updates": [
+    {
+      "characterId": "char123",
+      "characterName": "林风",
+      "from": "炼气初期",
+      "to": "炼气中期"
+    }
+  ],
+  "chapterTitle": "第三章：突破"
+}
+```
+
+---
+
+### 批量检测境界
+
+**POST** `/api/power-level/batch-detect`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "novelId": "novel456",
+  "chapterIds": ["chap1", "chap2", "chap3"]
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| novelId | string | ✅ | 小说ID |
+| chapterIds | string[] | 否 | 指定章节ID列表，不传则检测所有有内容的章节 |
+
+**响应示例**:
+```json
+{
+  "ok": true,
+  "totalChapters": 10,
+  "totalBreakthroughs": 3,
+  "errorCount": 0,
+  "results": [
+    {
+      "chapterId": "chap3",
+      "chapterTitle": "第三章：突破",
+      "hasBreakthrough": true,
+      "updatesCount": 1
+    }
+  ]
+}
+```
+
+---
+
+### 获取境界历史
+
+**GET** `/api/power-level/history/:novelId`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "history": [
+    {
+      "characterId": "char123",
+      "characterName": "林风",
+      "system": "修仙体系",
+      "currentLevel": "金丹中期",
+      "nextMilestone": "金丹后期",
+      "breakthroughs": [
+        {
+          "chapterId": "chap10",
+          "chapterTitle": "第十章",
+          "from": "筑基初期",
+          "to": "筑基中期",
+          "note": "服用筑基丹后突破",
+          "timestamp": 1713657600
+        }
+      ],
+      "totalBreakthroughs": 5
+    }
+  ]
+}
+```
+
+---
+
+### 获取角色境界
+
+**GET** `/api/power-level/character/:id`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "characterId": "char123",
+  "characterName": "林风",
+  "hasData": true,
+  "data": {
+    "system": "修仙体系",
+    "current": "金丹中期",
+    "breakthroughs": [...],
+    "nextMilestone": "金丹后期"
+  }
+}
+```
+
+---
+
+### 验证境界一致性
+
+**POST** `/api/power-level/validate`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "characterId": "char123",
+  "novelId": "novel456",
+  "recentChapterCount": 3
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| characterId | string | ✅ | 角色ID |
+| novelId | string | ✅ | 小说ID |
+| recentChapterCount | number | 否 | 分析最近章节数（1-10，默认3） |
+
+**响应示例**:
+```json
+{
+  "ok": true,
+  "characterId": "char123",
+  "characterName": "林风",
+  "isConsistent": true,
+  "dbLevel": {
+    "system": "修仙体系",
+    "current": "金丹中期"
+  },
+  "assessedLevel": {
+    "system": "修仙体系",
+    "current": "金丹中期"
+  },
+  "confidence": "high",
+  "reasoning": "最近章节多次明确提及角色处于金丹中期修为"
+}
+```
+
+---
+
+### 应用境界建议
+
+**POST** `/api/power-level/apply-suggestion`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "characterId": "char123",
+  "novelId": "novel456",
+  "suggestedCurrent": "金丹后期",
+  "suggestedSystem": "修仙体系",
+  "note": "根据第20章剧情更新"
+}
+```
+
+**响应示例**:
+```json
+{
+  "ok": true,
+  "characterId": "char123",
+  "characterName": "林风",
+  "previousLevel": "金丹中期",
+  "newLevel": "金丹后期"
+}
+```
+
+---
+
+## 导出服务 (Export)
+
+### 获取可用格式
+
+**GET** `/api/export/formats`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "formats": [
+    { "id": "md", "name": "Markdown", "extension": ".md", "mimeType": "text/markdown" },
+    { "id": "txt", "name": "纯文本", "extension": ".txt", "mimeType": "text/plain" },
+    { "id": "epub", "name": "EPUB 电子书", "extension": ".epub", "mimeType": "application/epub+zip" },
+    { "id": "html", "name": "可打印 HTML", "extension": ".html", "mimeType": "text/html" },
+    { "id": "zip", "name": "ZIP 打包", "extension": ".zip", "mimeType": "application/zip" }
+  ]
+}
+```
+
+---
+
+### 导出小说
+
+**POST** `/api/export`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "novelId": "novel456",
+  "format": "epub",
+  "volumeIds": ["vol1", "vol2"],
+  "includeTOC": true,
+  "includeMeta": true
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| novelId | string | ✅ | 小说ID |
+| format | string | ✅ | 导出格式：md/txt/epub/html/zip |
+| volumeIds | string[] | 否 | 卷ID列表，不传则导出全部 |
+| includeTOC | boolean | 否 | 是否包含目录（默认true） |
+| includeMeta | boolean | 否 | 是否包含元信息（默认true） |
+
+**响应**: 文件下载（二进制流）
+
+**响应头**:
+```http
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="小说标题.epub"
+X-Export-Id: export_abc123
+```
 
 ---
 
@@ -1909,12 +2670,14 @@ X-Export-Meta: {"wordCount":125000,"chapterCount":42}
 
 **GET** `/api/search`
 
+> **需要认证**
+
 **查询参数**:
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| q | string | 是 | 搜索关键词，至少2字符 |
+| q | string | ✅ | 搜索关键词（至少2字符） |
 | novelId | string | 否 | 限定小说范围 |
-| limit | number | 否 | 返回数量限制，默认20 |
+| limit | number | 否 | 返回结果数量限制（默认20） |
 
 **响应示例**:
 ```json
@@ -1942,16 +2705,30 @@ X-Export-Meta: {"wordCount":125000,"chapterCount":42}
 
 **POST** `/api/vectorize/index`
 
+> **需要认证**
+
 **请求体**:
 ```json
 {
-  "sourceType": "chapter",         // 必填：outline/chapter/character/summary
-  "sourceId": "chap123",           // 必填
-  "novelId": "novel456",           // 必填
-  "title": "第一章：少年林风",      // 必填
-  "content": "章节内容..."          // 可选，不提供时自动从数据库获取
+  "sourceType": "chapter",
+  "sourceId": "chap123",
+  "novelId": "novel456",
+  "title": "第一章：少年林风",
+  "content": "章节内容...",
+  "settingType": "power_system",
+  "importance": "high"
 }
 ```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| sourceType | string | ✅ | 来源类型：outline/chapter/character/summary/setting/foreshadowing |
+| sourceId | string | ✅ | 来源ID |
+| novelId | string | ✅ | 小说ID |
+| title | string | ✅ | 标题 |
+| content | string | 否 | 内容（不提供时自动从数据库获取） |
+| settingType | string | 否 | 设定类型（当sourceType为setting时） |
+| importance | string | 否 | 重要程度 |
 
 **响应示例**:
 ```json
@@ -1968,7 +2745,17 @@ X-Export-Meta: {"wordCount":125000,"chapterCount":42}
 
 **DELETE** `/api/vectorize/:type/:id`
 
+> **需要认证**
+
 **说明**: 删除指定内容的向量索引
+
+**响应**:
+```json
+{
+  "ok": true,
+  "message": "Deleted vectors for chapter:chap123"
+}
+```
 
 ---
 
@@ -1976,11 +2763,14 @@ X-Export-Meta: {"wordCount":125000,"chapterCount":42}
 
 **GET** `/api/vectorize/search`
 
+> **需要认证**
+
 **查询参数**:
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| q | string | 是 | 搜索文本 |
+| q | string | ✅ | 搜索文本 |
 | novelId | string | 否 | 限定小说范围 |
+| sourceTypes | string | 否 | 来源类型过滤（逗号分隔） |
 
 **响应示例**:
 ```json
@@ -2002,17 +2792,553 @@ X-Export-Meta: {"wordCount":125000,"chapterCount":42}
 
 ---
 
-### 检查向量化状态
+### 获取向量统计
 
-**GET** `/api/vectorize/status`
+**GET** `/api/vectorize/stats/:novelId`
+
+> **需要认证**
 
 **响应示例**:
 ```json
 {
-  "status": "ok",
-  "message": "Vectorize service is operational",
-  "embeddingModel": "@cf/baai/bge-base-zh-v1.5",
-  "dimensions": 768
+  "total": 156,
+  "byType": {
+    "setting": 45,
+    "character": 89,
+    "foreshadowing": 22
+  },
+  "lastIndexedAt": 1713763200,
+  "unindexedCounts": {
+    "settings": 3,
+    "characters": 0,
+    "foreshadowing": 1
+  }
+}
+```
+
+---
+
+### 全量重建索引
+
+**POST** `/api/vectorize/reindex-all`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "novelId": "novel456",
+  "types": ["setting", "character", "outline", "foreshadowing"],
+  "clearExisting": true
+}
+```
+
+**响应**:
+```json
+{
+  "ok": true,
+  "message": "全量索引重建任务已提交到后台队列，请稍后查看索引统计",
+  "novelId": "novel456"
+}
+```
+
+---
+
+### 增量索引未索引项
+
+**POST** `/api/vectorize/index-missing`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "novelId": "novel456",
+  "types": ["setting", "character", "foreshadowing"]
+}
+```
+
+**响应**:
+```json
+{
+  "ok": true,
+  "message": "发现 4 条未索引记录，已提交增量索引任务",
+  "novelId": "novel456",
+  "stats": {
+    "settings": 2,
+    "characters": 1,
+    "foreshadowing": 1
+  }
+}
+```
+
+---
+
+## 实体索引 (Entity Index)
+
+### 重建实体索引
+
+**POST** `/api/entities/rebuild`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "novelId": "novel456"
+}
+```
+
+**响应**:
+```json
+{
+  "ok": true,
+  "message": "实体索引重建任务已提交"
+}
+```
+
+---
+
+### 获取子实体
+
+**GET** `/api/entities/:novelId/children/:parentId`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "children": [
+    {
+      "id": "set124",
+      "name": "炼气期",
+      "type": "power_system",
+      "childCount": 0
+    }
+  ]
+}
+```
+
+---
+
+### 获取实体树
+
+**GET** `/api/entities/:novelId`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "tree": [...],
+  "stats": {...}
+}
+```
+
+---
+
+## 创意工坊 (Workshop)
+
+### 创建会话
+
+**POST** `/api/workshop/session`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "novelId": "novel456",
+  "stage": "concept"
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| novelId | string | 否 | 小说ID |
+| stage | string | 否 | 阶段：concept/worldbuilding/character/volume（默认concept） |
+
+**响应**:
+```json
+{
+  "ok": true,
+  "session": {
+    "id": "ws_abc123",
+    "stage": "concept",
+    "status": "active",
+    "createdAt": 1713571200
+  }
+}
+```
+
+---
+
+### 获取会话列表
+
+**GET** `/api/workshop/sessions`
+
+> **需要认证**
+
+**响应**:
+```json
+{
+  "ok": true,
+  "sessions": [
+    {
+      "id": "ws_abc123",
+      "title": "我的玄幻小说创意",
+      "stage": "concept",
+      "status": "active",
+      "updatedAt": 1713571200
+    }
+  ]
+}
+```
+
+---
+
+### 获取会话详情
+
+**GET** `/api/workshop/session/:id`
+
+> **需要认证**
+
+**响应**:
+```json
+{
+  "ok": true,
+  "session": {
+    "id": "ws_abc123",
+    "novelId": "novel456",
+    "stage": "concept",
+    "status": "active",
+    "messages": [...],
+    "extractedData": {...},
+    "createdAt": 1713571200,
+    "updatedAt": 1713571500
+  }
+}
+```
+
+---
+
+### 更新会话
+
+**PATCH** `/api/workshop/session/:id`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "title": "新的会话标题",
+  "stage": "worldbuilding"
+}
+```
+
+**响应**:
+```json
+{
+  "ok": true,
+  "message": "会话已更新"
+}
+```
+
+---
+
+### 发送消息
+
+**POST** `/api/workshop/session/:id/message`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "message": "我想写一个关于修仙的故事",
+  "stage": "concept"
+}
+```
+
+**响应类型**: `text/event-stream` (SSE 流)
+
+---
+
+### 提交确认
+
+**POST** `/api/workshop/session/:id/commit`
+
+> **需要认证**
+
+**响应**:
+```json
+{
+  "ok": true,
+  "novelId": "novel456",
+  "message": "创作数据已成功提交到数据库！"
+}
+```
+
+---
+
+### 删除会话
+
+**DELETE** `/api/workshop/session/:id`
+
+> **需要认证**
+
+**响应**:
+```json
+{
+  "ok": true,
+  "message": "会话已删除"
+}
+```
+
+---
+
+## 工坊导入 (Workshop Import)
+
+### 获取导入列表
+
+**GET** `/api/workshop-import/list/:module`
+
+> **需要认证**
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| novelId | string | ✅ | 小说ID |
+
+**路径参数**: module - 可选值为 chapter/volume/setting/character/rule/foreshadowing/master_outline
+
+**响应**:
+```json
+{
+  "ok": true,
+  "items": [
+    { "id": "char123", "name": "林风", "role": "protagonist" }
+  ]
+}
+```
+
+---
+
+### 导入数据
+
+**POST** `/api/workshop-import/import`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "module": "character",
+  "data": {
+    "name": "林风",
+    "role": "protagonist",
+    "description": "一位天赋异禀的少年"
+  },
+  "novelId": "novel456",
+  "importMode": "upsert"
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| module | string | ✅ | 模块类型 |
+| data | object/array | ✅ | 导入数据 |
+| novelId | string | ✅ | 小说ID |
+| importMode | string | 否 | 导入模式：create/update/upsert（默认upsert） |
+
+**响应**:
+```json
+{
+  "ok": true,
+  "results": [
+    { "action": "created", "id": "char123", "name": "林风", "existed": false }
+  ],
+  "summary": { "created": 1, "updated": 0, "skipped": 0, "total": 1 },
+  "message": "导入完成：新建 1，更新 0，跳过 0"
+}
+```
+
+---
+
+### 格式化导入
+
+**POST** `/api/workshop-format-import/format-import`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "content": "第一章 少年林风\n\n林风深吸一口气...",
+  "module": "chapter",
+  "novelId": "novel456"
+}
+```
+
+**响应**:
+```json
+{
+  "ok": true,
+  "parseStatus": "success",
+  "data": {
+    "title": "第一章 少年林风",
+    "content": "林风深吸一口气..."
+  },
+  "rawContent": "第一章 少年林风\n\n林风深吸一口气..."
+}
+```
+
+---
+
+## 模型配置 (Model Config)
+
+### 获取模型配置列表
+
+**GET** `/api/config`
+
+> **需要认证**
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| novelId | string | 否 | 小说ID（不传则返回全局配置） |
+| stage | string | 否 | 生成阶段 |
+
+**响应示例**:
+```json
+[
+  {
+    "id": "config123",
+    "novelId": null,
+    "scope": "global",
+    "stage": "chapter_gen",
+    "provider": "volcengine",
+    "modelId": "doubao-seed-2-pro",
+    "apiBase": "https://ark.cn-beijing.volces.com/api/v3",
+    "apiKey": "env:VOLCENGINE_API_KEY",
+    "params": "{\"temperature\":0.85,\"max_tokens\":4096}",
+    "isActive": 1,
+    "createdAt": 1713571200,
+    "updatedAt": 1713657600
+  }
+]
+```
+
+---
+
+### 创建模型配置
+
+**POST** `/api/config`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "novelId": "novel456",
+  "scope": "novel",
+  "stage": "chapter_gen",
+  "provider": "volcengine",
+  "modelId": "doubao-seed-2-pro",
+  "apiBase": "https://ark.cn-beijing.volces.com/api/v3",
+  "apiKey": "env:VOLCENGINE_API_KEY",
+  "params": {
+    "temperature": 0.85,
+    "max_tokens": 4096
+  }
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| novelId | string | 否 | 小说ID（不填则为全局配置） |
+| scope | string | ✅ | 配置范围：global/novel |
+| stage | string | ✅ | 生成阶段 |
+| provider | string | ✅ | 模型提供商 |
+| modelId | string | ✅ | 模型ID |
+| apiBase | string | 否 | API基础URL |
+| apiKey | string | 否 | API密钥 |
+| params | object | 否 | 模型参数 |
+
+**成功响应 (201)**:
+```json
+{
+  "id": "config_new",
+  "novelId": "novel456",
+  "scope": "novel",
+  "stage": "chapter_gen",
+  ...
+}
+```
+
+---
+
+### 更新模型配置
+
+**PATCH** `/api/config/:id`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "modelId": "doubao-pro-32k",
+  "params": {
+    "temperature": 0.7
+  },
+  "isActive": false
+}
+```
+
+**响应**:
+```json
+{
+  "id": "config123",
+  ...
+}
+```
+
+---
+
+### 启用/停用配置
+
+**PATCH** `/api/config/:id/toggle`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "isActive": true
+}
+```
+
+**响应**:
+```json
+{
+  "id": "config123",
+  "isActive": 1,
+  ...
+}
+```
+
+---
+
+### 删除模型配置
+
+**DELETE** `/api/config/:id`
+
+> **需要认证**
+
+**响应**:
+```json
+{
+  "ok": true
 }
 ```
 
@@ -2024,20 +3350,13 @@ X-Export-Meta: {"wordCount":125000,"chapterCount":42}
 
 **POST** `/api/mcp`
 
+> **需要认证**
+
 **Content-Type**: `application/json`
 
 **支持的 MCP 方法**:
 - `tools/list` - 列出可用工具
 - `tools/call` - 调用工具
-
-**可用工具**:
-| 工具名 | 描述 |
-|--------|------|
-| `queryNovels` | 查询小说列表 |
-| `queryOutlines` | 查询指定小说的大纲结构 |
-| `queryChapters` | 查询指定小说的章节列表 |
-| `getChapterContent` | 获取指定章节的完整内容 |
-| `searchSemantic` | 语义搜索相关大纲、章节或角色 |
 
 **请求示例 - 列出工具**:
 ```json
@@ -2081,27 +3400,20 @@ X-Export-Meta: {"wordCount":125000,"chapterCount":42}
 
 ---
 
-## 健康检查
+### MCP 服务状态
 
-### 检查服务状态
-
-**GET** `/api/health`
+**GET** `/api/mcp`
 
 **响应示例**:
 ```json
 {
   "ok": true,
-  "ts": 1713571234567,
-  "phase": 4
+  "service": "NovelForge MCP",
+  "version": "1.1.0",
+  "protocolVersion": "2024-11-05",
+  "tools": 14
 }
 ```
-
-**字段说明**:
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| ok | boolean | 服务是否正常 |
-| ts | number | Unix 时间戳（毫秒） |
-| phase | number | 当前功能阶段 |
 
 ---
 
@@ -2111,12 +3423,12 @@ X-Export-Meta: {"wordCount":125000,"chapterCount":42}
 
 | 错误码 | HTTP 状态码 | 说明 |
 |--------|------------|------|
-| `INVALID_REQUEST` | 400 | 请求格式错误或缺少必填字段 |
-| `VALIDATION_ERROR` | 400 | 字段验证失败 |
-| `UNAUTHORIZED` | 401 | 未提供认证令牌 |
-| `FORBIDDEN` | 403 | 无权限访问 |
+| `VALIDATION_ERROR` | 400 | 请求格式错误或缺少必填字段 |
+| `INVALID_CREDENTIALS` | 401 | 用户名或密码错误 |
+| `ACCOUNT_DISABLED` | 403 | 账号已被禁用 |
+| `REGISTRATION_DISABLED` | 403 | 注册功能已关闭 |
 | `NOT_FOUND` | 404 | 资源不存在 |
-| `CONFLICT` | 409 | 资源冲突（如重名） |
+| `USER_EXISTS` | 409 | 用户名或邮箱已被使用 |
 | `INTERNAL_ERROR` | 500 | 服务器内部错误 |
 
 ### 业务错误码
@@ -2124,160 +3436,18 @@ X-Export-Meta: {"wordCount":125000,"chapterCount":42}
 | 错误码 | HTTP 状态码 | 说明 |
 |--------|------------|------|
 | `NOVEL_NOT_FOUND` | 404 | 小说不存在 |
-| `MASTER_OUTLINE_NOT_FOUND` | 404 | 总纲不存在 |
 | `CHAPTER_NOT_FOUND` | 404 | 章节不存在 |
 | `CHARACTER_NOT_FOUND` | 404 | 角色不存在 |
 | `FORESHADOWING_NOT_FOUND` | 404 | 伏笔不存在 |
-| `MODEL_CONFIG_MISSING` | 400 | 未配置模型 |
-| `AI_GENERATION_FAILED` | 500 | AI 生成失败 |
+| `SETUP_FAILED` | 500 | 初始化失败 |
 | `EXPORT_FAILED` | 500 | 导出失败 |
-| `UPLOAD_FAILED` | 500 | 文件上传失败 |
 | `VECTORIZE_ERROR` | 500 | 向量数据库错误 |
-| `VECTORIZE_NOT_CONFIGURED` | 503 | Vectorize 服务未配置 |
-
-### 错误响应示例
-
-```json
-{
-  "error": "章节不存在",
-  "code": "CHAPTER_NOT_FOUND",
-  "details": {
-    "chapterId": "invalid_id"
-  }
-}
-```
-
----
-
-## 速率限制
-
-### 免费额度
-
-| 接口类别 | 限制 |
-|----------|------|
-| 常规 API | 100 次/分钟 |
-| 文件上传 | 10 次/分钟 |
-| AI 生成 | 10 次/小时 |
-| 导出 | 5 次/小时 |
-
-### 限流响应
-
-```json
-{
-  "error": "请求过于频繁，请稍后再试",
-  "code": "RATE_LIMIT_EXCEEDED",
-  "retryAfter": 60
-}
-```
-
-**HTTP 状态码**: 429 Too Many Requests
-
-**响应头**:
-```http
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 0
-X-RateLimit-Reset: 1713571290
-Retry-After: 60
-```
-
----
-
-## WebSocket 接口（未来版本）
-
-### 实时生成通知
-
-**待实现**: 用于长任务的状态推送
-
-```javascript
-const ws = new WebSocket('wss://your-domain.pages.dev/ws/generate')
-
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data)
-  switch (data.type) {
-    case 'progress':
-      console.log('生成进度:', data.progress)
-      break
-    case 'complete':
-      console.log('生成完成:', data.chapterId)
-      break
-    case 'error':
-      console.error('生成失败:', data.error)
-      break
-  }
-}
-```
-
----
-
-## SDK 示例
-
-### JavaScript/TypeScript
-
-```typescript
-import { NovelforgeClient } from '@novelforge/client'
-
-const client = new NovelforgeClient({
-  baseUrl: 'https://your-domain.pages.dev/api',
-  apiKey: 'your-api-key' // 如需认证
-})
-
-// 获取小说列表
-const novels = await client.novels.list()
-
-// 创建小说
-const novel = await client.novels.create({
-  title: '我的小说',
-  genre: '玄幻'
-})
-
-// 生成章节
-const stream = await client.generate.chapter({
-  chapterId: 'chap123',
-  novelId: 'novel456'
-})
-
-for await (const chunk of stream) {
-  console.log(chunk.text)
-}
-```
-
-### Python（未来版本）
-
-```python
-from novelforge import NovelforgeClient
-
-client = NovelforgeClient(api_key="your-api-key")
-
-# 获取小说列表
-novels = client.novels.list()
-
-# 创建小说
-novel = client.novels.create(
-    title="我的小说",
-    genre="玄幻"
-)
-```
-
----
-
-## 附录
-
-### A. 完整的数据类型定义
-
-详见 [src/lib/types.ts](../src/lib/types.ts)
-
-### B. OpenAPI 规范
-
-完整的 OpenAPI 3.0 规范文件可在 `/openapi.yaml` 获取（开发中）。
-
-### C. Postman 集合
-
-导入 Postman 集合：[NovelForge API.postman_collection.json](https://example.com/NovelForge_API.postman_collection.json)（待提供）
+| `VECTORIZE_UNAVAILABLE` | 503 | Vectorize 服务不可用 |
 
 ---
 
 <div align="center">
 
-**API Version: 1.7.0**
+**API Version: 3.1.0**
 
 </div>

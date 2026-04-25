@@ -11,7 +11,7 @@ export async function logGeneration(
   env: Env,
   data: {
     novelId: string
-    chapterId: string
+    chapterId: string | null
     stage: string
     modelId: string
     promptTokens?: number
@@ -19,6 +19,7 @@ export async function logGeneration(
     durationMs: number
     status: 'success' | 'error'
     errorMsg?: string
+    contextSnapshot?: string
   }
 ): Promise<void> {
   const db = drizzle(env.DB)
@@ -33,6 +34,7 @@ export async function logGeneration(
       durationMs: data.durationMs,
       status: data.status,
       errorMsg: data.errorMsg,
+      contextSnapshot: data.contextSnapshot || null,
     })
   } catch (logError) {
     console.error('Failed to write generation log:', logError)

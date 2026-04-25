@@ -13,6 +13,7 @@ export interface Novel {
   status: 'draft' | 'writing' | 'completed' | 'archived'
   wordCount: number
   chapterCount: number
+  targetWordCount: number | null
   createdAt: number
   updatedAt: number
   deletedAt: number | null
@@ -31,6 +32,7 @@ export interface Volume {
   eventLine: string | null
   blueprint: string | null
   targetWordCount: number | null
+  targetChapterCount: number | null
   notes: string | null
   chapterCount: number
   createdAt: number
@@ -79,7 +81,7 @@ export interface ModelConfig {
   id: string
   novelId: string | null
   scope: 'global' | 'novel'
-  stage: 'outline_gen' | 'chapter_gen' | 'summary_gen' | 'embedding' | 'vision' | 'analysis' | 'workshop'
+  stage: 'chapter_gen' | 'summary_gen' | 'embedding' | 'analysis' | 'workshop'
   provider: string
   modelId: string
   apiBase: string | null
@@ -130,7 +132,7 @@ export interface VectorIndexRecord {
 }
 
 // Input types
-export type NovelInput = Pick<Novel, 'title'> & Partial<Pick<Novel, 'description' | 'genre' | 'status'>>
+export type NovelInput = Pick<Novel, 'title'> & Partial<Pick<Novel, 'description' | 'genre' | 'status' | 'targetWordCount'>>
 
 // v2.0: OutlineInput 已废弃，使用 MasterOutline / NovelSetting / VolumeInput 替代
 
@@ -479,4 +481,18 @@ export interface EntityTreeResponse {
   }>
   stats: Record<string, number>
   totalNodes: number
+}
+
+export interface VolumeProgressResult {
+  volumeId: string
+  currentChapter: number
+  targetChapter: number | null
+  currentWordCount: number
+  targetWordCount: number | null
+  chapterProgress: number
+  wordProgress: number
+  healthStatus: 'healthy' | 'ahead' | 'behind' | 'critical'
+  risk: 'early_ending' | 'late_ending' | null
+  suggestion: string
+  raw?: string
 }

@@ -176,7 +176,7 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
 
 你的任务：
 1. 识别输入的格式
-2. 提取关键信息：卷标题(title)、卷概要(summary)、详细蓝图(blueprint)、事件线(eventLine)、备注(notes)、预计章节数(chapterCount)
+2. 提取关键信息：卷标题(title)、卷概要(summary)、详细蓝图(blueprint)、事件线(eventLine)、备注(notes)、预计章节数(chapterCount)、目标字数(targetWordCount)
 3. 返回标准化的 JSON 格式：
 
 \`\`\`json
@@ -186,12 +186,14 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
   "blueprint": "详细的卷情节蓝图，包含起承转合",
   "eventLine": ["关键事件1", "关键事件2", "重要转折点"],
   "notes": ["伏笔1：神秘玉佩的出现", "伏笔2：反派势力的铺垫"],
-  "chapterCount": 10
+  "chapterCount": 10,
+  "targetWordCount": 300000
 }
 \`\`\`
 
 注意事项：
 - chapterCount 为可选参考字段（5-30之间），不强制存储
+- targetWordCount 为可选的目标字数（单位：字），根据章节数和平均每章3000-5000字推算
 - 如果是卷列表格式（如 "第一卷... 第二卷..."），请解析成数组
 - 只返回 JSON，不要有其他解释文字`,
 

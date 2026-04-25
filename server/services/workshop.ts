@@ -64,6 +64,8 @@ export interface WorkshopExtractedData {
     keyEvents?: string[]
     foreshadowingSetup?: string[]
     foreshadowingResolve?: string[]
+    targetWordCount?: number | null
+    targetChapterCount?: number | null
   }>
   chapters?: Array<{
     title: string
@@ -589,6 +591,8 @@ export async function commitWorkshopSession(
           eventLine: eventLineValue,
           notes: notesValue,
           chapterCount: vol.chapterCount || 0,
+          targetWordCount: vol.targetWordCount || null,
+          targetChapterCount: vol.targetChapterCount || null,
           sortOrder: createdVolumes.length,
           status: 'draft',
         }).returning()

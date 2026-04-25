@@ -1,8 +1,8 @@
 /**
  * @file characters.ts
- * @description 角色管理路由模块，提供角色CRUD、图片上传、AI视觉分析等功能
+ * @description 角色管理路由模块，提供角色CRUD、图片上传等功能
  * @version 1.0.0
- * @modified 2026-04-21 - 添加规范化注释
+ * @modified 2026-04-24 - 移除视觉分析功能，仅保留基础图片上传
  */
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
@@ -13,10 +13,6 @@ import { eq, and, isNull } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { enqueue } from '../lib/queue'
 import { deindexContent } from '../services/embedding'
-import {
-  uploadAndAnalyzeImage,
-  analyzeCharacterImage,
-} from '../services/vision'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -149,24 +145,21 @@ router.delete('/:id', async (c) => {
 /**
  * POST /api/characters/:id/image
  *
- * 上传角色图片并可选进行 AI 视觉分析
+ * 上传角色图片到 R2 存储
  *
  * Content-Type: multipart/form-data
  * - image: 图片文件（必填）
- * - analyze: 是否进行AI分析（可选，默认true）
  */
 router.post('/:id/image', async (c) => {
   try {
     const characterId = c.req.param('id')
     const db = drizzle(c.env.DB)
 
-    // 验证角色存在
     const character = await db.select().from(t).where(eq(t.id, characterId)).get()
     if (!character || character.deletedAt) {
       return c.json({ error: 'Character not found' }, 404)
     }
 
-    // 解析 multipart 表单数据
     const formData = await c.req.formData()
     const imageFile = formData.get('image') as File | null
 
@@ -174,7 +167,6 @@ router.post('/:id/image', async (c) => {
       return c.json({ error: 'Image file is required' }, 400)
     }
 
-    // 验证文件类型
     const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
     if (!allowedTypes.includes(imageFile.type)) {
       return c.json(
@@ -186,7 +178,6 @@ router.post('/:id/image', async (c) => {
       )
     }
 
-    // 验证文件大小（最大 5MB）
     const maxSize = 5 * 1024 * 1024
     if (imageFile.size > maxSize) {
       return c.json(
@@ -195,102 +186,31 @@ router.post('/:id/image', async (c) => {
       )
     }
 
-    const shouldAnalyze = formData.get('analyze') !== 'false'
+    const imageBuffer = await imageFile.arrayBuffer()
+    const key = `characters/${character.novelId}/${characterId}/${Date.now()}.${imageFile.type.split('/')[1]}`
 
-    // 上传并可选分析
-    const result = await uploadAndAnalyzeImage(
-      c.env,
-      imageFile,
-      character.novelId,
-      characterId,
-      {
-        characterName: character.name,
-        role: character.role ?? undefined,
-        skipAnalysis: !shouldAnalyze,
-      }
-    )
+    await c.env.STORAGE.put(key, imageBuffer, {
+      httpMetadata: { contentType: imageFile.type },
+    })
 
-    // 更新数据库中的图片 key
     await db
       .update(t)
-      .set({ imageR2Key: result.key })
+      .set({ imageR2Key: key })
       .where(eq(t.id, characterId))
 
-    // 如果有分析结果，返回建议的描述更新
-    let suggestedUpdate = null
-    if (result.analysis && shouldAnalyze) {
-      suggestedUpdate = {
-        description: result.analysis.description,
-        appearance: result.analysis.appearance,
-        traits: result.analysis.traits,
-        tags: result.analysis.tags,
-      }
-    }
+    const storageConfig = c.env.STORAGE as any
+    const url = `https://pub-${storageConfig.bucketName}.${storageConfig.accountId}.r2.dev/${key}`
 
     return c.json({
       ok: true,
-      imageUrl: result.url,
-      imageKey: result.key,
-      analysis: result.analysis,
-      suggestedUpdate,
+      imageUrl: url,
+      imageKey: key,
     })
   } catch (error) {
     console.error('Character image upload failed:', error)
     return c.json(
       {
         error: 'Upload failed',
-        details: (error as Error).message,
-      },
-      500
-    )
-  }
-})
-
-/**
- * POST /api/characters/:id/analyze-image
- *
- * 对已有图片进行视觉分析（或重新分析）
- */
-router.post('/:id/analyze-image', zValidator('json', z.object({
-  imageUrl: z.string().url().optional(),
-})), async (c) => {
-  try {
-    const characterId = c.req.param('id')
-    const db = drizzle(c.env.DB)
-
-    const character = await db.select().from(t).where(eq(t.id, characterId)).get()
-    if (!character || character.deletedAt) {
-      return c.json({ error: 'Character not found' }, 404)
-    }
-
-    const imageUrl = c.req.valid('json').imageUrl || (character.imageR2Key ? `https://pub-${(c.env.STORAGE as any).bucketName}.${(c.env.STORAGE as any).accountId}.r2.dev/${character.imageR2Key}` : null)
-    if (!imageUrl) {
-      return c.json({ error: 'No image available for analysis' }, 400)
-    }
-
-    // 从 URL 获取图片
-    const response = await fetch(imageUrl)
-    if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.status}`)
-    }
-
-    const imageBuffer = await response.arrayBuffer()
-
-    // 进行视觉分析
-    const analysis = await analyzeCharacterImage(c.env, imageBuffer, {
-      characterName: character.name,
-      role: character.role ?? undefined,
-    })
-
-    return c.json({
-      ok: true,
-      analysis,
-    })
-  } catch (error) {
-    console.error('Image analysis failed:', error)
-    return c.json(
-      {
-        error: 'Analysis failed',
         details: (error as Error).message,
       },
       500

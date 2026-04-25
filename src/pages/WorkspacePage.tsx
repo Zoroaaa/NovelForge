@@ -13,9 +13,10 @@ import { WorkspaceHeader } from '@/components/layout/WorkspaceHeader'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { ChapterEditor } from '@/components/chapter/ChapterEditor'
 import { GeneratePanel } from '@/components/generate/GeneratePanel'
+import { ChapterHealthCheck } from '@/components/chapter-health'
 import { ExportDialog } from '@/components/export/ExportDialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { PenLine, Sparkles, FileDown, AlertTriangle, Settings2 } from 'lucide-react'
+import { PenLine, Sparkles, FileDown, AlertTriangle, Settings2, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 /**
@@ -136,10 +137,14 @@ export default function WorkspacePage() {
                 </div>
 
                 <Tabs defaultValue="generate" className="flex-1 flex flex-col">
-                  <TabsList className="grid w-full grid-cols-2 rounded-none border-b bg-transparent h-10">
+                  <TabsList className="grid w-full grid-cols-3 rounded-none border-b bg-transparent h-10">
                     <TabsTrigger value="generate" className="gap-1.5 text-xs rounded-none data-[state=active]:bg-background">
                       <PenLine className="h-3.5 w-3.5" />
                       AI 生成
+                    </TabsTrigger>
+                    <TabsTrigger value="check" className="gap-1.5 text-xs rounded-none data-[state=active]:bg-background">
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      章节检查
                     </TabsTrigger>
                     <TabsTrigger value="export" className="gap-1.5 text-xs rounded-none data-[state=active]:bg-background">
                       <FileDown className="h-3.5 w-3.5" />
@@ -158,6 +163,10 @@ export default function WorkspacePage() {
                         setInjectedInsertMode(insertMode ?? 'replace')
                       }}
                     />
+                  </TabsContent>
+
+                  <TabsContent value="check" className="flex-1 overflow-y-auto mt-0 p-4">
+                    <ChapterHealthCheck novelId={id!} chapterId={activeChapter.id} />
                   </TabsContent>
 
                   <TabsContent value="export" className="flex-1 overflow-y-auto mt-0 p-3">

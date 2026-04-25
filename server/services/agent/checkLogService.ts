@@ -10,11 +10,11 @@ import type { Env } from '../../lib/types'
 export interface CheckLogData {
   novelId: string
   chapterId: string
-  checkType: 'character_consistency' | 'chapter_coherence' | 'combined'
+  checkType: 'character_consistency' | 'chapter_coherence' | 'combined' | 'volume_progress'
   score?: number
   status: 'success' | 'failed' | 'error'
   characterResult?: any // 角色一致性检查结果
-  coherenceResult?: any // 连贯性检查结果
+  coherenceResult?: any // 连贯性检查结果 / 卷完成程度检查结果
   issuesCount?: number
   errorMessage?: string
 }

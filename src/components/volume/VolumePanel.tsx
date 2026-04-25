@@ -54,20 +54,8 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
     notes: '',
     status: 'draft',
     targetWordCount: '',
+    targetChapterCount: '',
   })
-
-  const [batchDialogOpen, setBatchDialogOpen] = useState(false)
-  const [selectedVolumeForBatch, setSelectedVolumeForBatch] = useState<Volume | null>(null)
-  const [batchChapterCount, setBatchChapterCount] = useState('10')
-  const [batchContext, setBatchContext] = useState('')
-  const [isBatchGenerating, setIsBatchGenerating] = useState(false)
-  const [isConfirming, setIsConfirming] = useState(false)
-  const [batchResult, setBatchResult] = useState<{
-    ok?: boolean
-    successCount?: number
-    message?: string
-    outlines?: Array<{ chapterTitle: string; summary: string }>
-  } | null>(null)
 
   const { data: volumes, isLoading: volumesLoading } = useQuery({
     queryKey: ['volumes', novelId],
@@ -87,7 +75,7 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
   }, {} as Record<string, Chapter[]>)
 
   const createMutation = useMutation({
-    mutationFn: (data: { title: string; summary?: string; eventLine?: string; blueprint?: string; notes?: string; status?: string; targetWordCount?: number }) =>
+    mutationFn: (data: { title: string; summary?: string; eventLine?: string; blueprint?: string; notes?: string; status?: string; targetWordCount?: number; targetChapterCount?: number }) =>
       api.volumes.create({
         novelId,
         title: data.title,
@@ -95,6 +83,7 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
         eventLine: data.eventLine || null,
         blueprint: data.blueprint || null,
         targetWordCount: data.targetWordCount || null,
+        targetChapterCount: data.targetChapterCount || null,
         notes: data.notes || null,
         status: data.status || 'draft',
         summary: data.summary || null,
@@ -131,23 +120,6 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
     onError: (err) => toast.error(`删除失败: ${(err as Error).message}`),
   })
 
-  const confirmBatchMutation = useMutation({
-    mutationFn: (chapterPlans: Array<{ chapterTitle: string; summary: string }>) =>
-      api.generate.confirmBatchChapters({
-        volumeId: selectedVolumeForBatch?.id || '',
-        novelId,
-        chapterPlans,
-      }),
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['volumes', novelId] })
-      queryClient.invalidateQueries({ queryKey: ['chapters', novelId] })
-      toast.success(`✅ 成功创建 ${result.createdChapters?.length || 0} 个章节`)
-      setBatchDialogOpen(false)
-      setBatchResult(null)
-    },
-    onError: (err) => toast.error(`❌ 创建章节失败: ${(err as Error).message}`),
-  })
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.title.trim()) {
@@ -163,6 +135,7 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
       notes: formData.notes.trim() || undefined,
       status: formData.status || 'draft',
       targetWordCount: formData.targetWordCount ? Number(formData.targetWordCount) : undefined,
+      targetChapterCount: formData.targetChapterCount ? Number(formData.targetChapterCount) : undefined,
     }
 
     if (editingId) {
@@ -182,6 +155,7 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
       notes: volume.notes || '',
       status: volume.status || 'draft',
       targetWordCount: volume.targetWordCount?.toString() || '',
+      targetChapterCount: volume.targetChapterCount?.toString() || '',
     })
     setDialogOpen(true)
   }
@@ -208,7 +182,7 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
 
   const resetForm = () => {
     setEditingId(null)
-    setFormData({ title: '', summary: '', eventLine: '', blueprint: '', notes: '', status: 'draft', targetWordCount: '' })
+    setFormData({ title: '', summary: '', eventLine: '', blueprint: '', notes: '', status: 'draft', targetWordCount: '', targetChapterCount: '' })
   }
 
   const generateSummaryMutation = useMutation({
@@ -221,49 +195,6 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
     },
     onError: (err) => toast.error(`❌ 生成摘要失败: ${(err as Error).message}`),
   })
-
-  const handleBatchGenerate = async () => {
-    if (!selectedVolumeForBatch) return
-
-    setIsBatchGenerating(true)
-    setBatchResult(null)
-
-    try {
-      const result = await api.generate.outlineBatch({
-        volumeId: selectedVolumeForBatch.id,
-        novelId,
-        chapterCount: parseInt(batchChapterCount) || 10,
-        context: batchContext.trim() || undefined,
-      })
-
-      setBatchResult(result)
-
-      if (result.ok) {
-        toast.success(`成功生成 ${result.successCount} 个章节大纲`)
-        queryClient.invalidateQueries({ queryKey: ['chapters', novelId] })
-      } else {
-        toast.error(result.error || '批量生成失败')
-      }
-    } catch (err) {
-      toast.error(`批量生成失败: ${(err as Error).message}`)
-    } finally {
-      setIsBatchGenerating(false)
-    }
-  }
-
-  const openBatchDialog = (volume: Volume) => {
-    setSelectedVolumeForBatch(volume)
-    setBatchChapterCount('10')
-    setBatchContext('')
-    setBatchResult(null)
-    setBatchDialogOpen(true)
-  }
-
-  const closeBatchDialog = () => {
-    setBatchDialogOpen(false)
-    setSelectedVolumeForBatch(null)
-    setBatchResult(null)
-  }
 
   if (volumesLoading) {
     return (
@@ -316,6 +247,16 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
                   placeholder="如：200000"
                   value={formData.targetWordCount}
                   onChange={(e) => setFormData(prev => ({ ...prev, targetWordCount: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>目标章节数（可选）</Label>
+                <Input
+                  type="number"
+                  placeholder="如：70"
+                  value={formData.targetChapterCount}
+                  onChange={(e) => setFormData(prev => ({ ...prev, targetChapterCount: e.target.value }))}
                 />
               </div>
 
@@ -444,6 +385,9 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
                     </div>
                     <div className="flex items-center gap-3 text-[11px] text-muted-foreground/70">
                       <span>{volumeChapters.length} 章</span>
+                      {volume.targetChapterCount && (
+                        <span>目标 {volume.targetChapterCount} 章</span>
+                      )}
                       {volume.wordCount > 0 && (
                         <span>{(volume.wordCount / 1000).toFixed(1)}k字</span>
                       )}
@@ -456,9 +400,6 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
                   </div>
 
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={(e) => e.stopPropagation()}>
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openBatchDialog(volume)}>
-                      <Wand2 className="h-3.5 w-3.5" />
-                    </Button>
                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleEdit(volume)}>
                       <Edit2 className="h-3.5 w-3.5" />
                     </Button>
@@ -531,129 +472,6 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
           </div>
         )}
       </div>
-
-      <Dialog open={batchDialogOpen} onOpenChange={(open) => { if (!open) closeBatchDialog() }}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Wand2 className="h-5 w-5 text-primary" />
-              AI 批量生成章节规划
-            </DialogTitle>
-            <DialogDescription>
-              批量生成章节大纲，包含标题、核心情节、关键冲突、伏笔安排等
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedVolumeForBatch && (
-            <div className="space-y-4">
-              <div className="bg-muted/50 p-3 rounded-lg">
-                <p className="text-sm font-medium">目标卷：《{selectedVolumeForBatch.title}》</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  将为该卷批量生成章节大纲，每个大纲包含标题、核心情节、关键冲突、伏笔安排等
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label>章节数量</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={30}
-                  value={batchChapterCount}
-                  onChange={(e) => setBatchChapterCount(e.target.value)}
-                  placeholder="请输入要生成的章节数量（1-30）"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>补充上下文（可选）</Label>
-                <Textarea
-                  placeholder="如：这一卷主要讲述主角进入秘境历练，需要安排3个小高潮..."
-                  rows={4}
-                  value={batchContext}
-                  onChange={(e) => setBatchContext(e.target.value)}
-                />
-              </div>
-
-              {!batchResult && (
-                <Button
-                  onClick={handleBatchGenerate}
-                  disabled={isBatchGenerating || !batchChapterCount}
-                  className="w-full gap-2"
-                >
-                  {isBatchGenerating ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      正在生成中...
-                    </>
-                  ) : (
-                    <>
-                      <Wand2 className="h-4 w-4" />
-                      开始批量生成
-                    </>
-                  )}
-                </Button>
-              )}
-
-              {batchResult && (
-                <div className="space-y-3">
-                  <div className={`p-3 rounded-lg ${batchResult.ok ? 'bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800'}`}>
-                    <p className={`text-sm font-medium ${batchResult.ok ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
-                      {batchResult.ok ? `✓ 成功生成 ${batchResult.successCount} 个章节规划` : `✗ 生成失败`}
-                    </p>
-                    {batchResult.message && (
-                      <p className="text-xs text-muted-foreground mt-1">{batchResult.message}</p>
-                    )}
-                  </div>
-
-                  {batchResult.outlines && batchResult.outlines.length > 0 && (
-                    <div className="space-y-2">
-                      <Label>生成的章节列表（{batchResult.outlines.length} 章）</Label>
-                      <div className="max-h-[300px] overflow-y-auto space-y-2">
-                        {batchResult.outlines?.map((outline: { chapterTitle: string; summary: string }, idx: number) => (
-                          <div key={idx} className="border rounded-lg p-3 space-y-1">
-                            <p className="font-medium text-sm">{idx + 1}. {outline.chapterTitle || `第${idx + 1}章`}</p>
-                            {outline.summary && (
-                              <p className="text-xs text-muted-foreground line-clamp-2">{outline.summary}</p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => setBatchResult(null)} className="flex-1">
-                      重新生成
-                    </Button>
-                    <Button 
-                      onClick={() => {
-                        if (batchResult.outlines) {
-                          setIsConfirming(true)
-                          confirmBatchMutation.mutate(batchResult.outlines)
-                        }
-                      }}
-                      disabled={confirmBatchMutation.isPending || isConfirming}
-                      className="flex-1"
-                    >
-                      {confirmBatchMutation.isPending || isConfirming ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          创建中...
-                        </>
-                      ) : (
-                        <>
-                          确认创建章节
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

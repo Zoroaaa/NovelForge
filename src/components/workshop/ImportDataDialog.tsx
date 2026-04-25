@@ -535,6 +535,19 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
                       <pre className="text-xs font-mono whitespace-pre-wrap break-all bg-muted/50 p-2 rounded overflow-x-auto max-h-[160px] overflow-y-auto">
                         {JSON.stringify(preview.data, null, 2)}
                       </pre>
+                      {preview.module === 'volume' && preview.data && typeof preview.data === 'object' && 'targetWordCount' in (preview.data as Record<string, unknown>) && (
+                        <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded text-xs">
+                          <span className="text-blue-700 dark:text-blue-300 font-medium">📊 目标字数：</span>
+                          <span className="text-blue-600 dark:text-blue-400">
+                            {((preview.data as Record<string, unknown>).targetWordCount as number)?.toLocaleString()} 字
+                            {((preview.data as Record<string, unknown>).targetChapterCount as number) && (
+                              <span className="ml-2 text-muted-foreground">
+                                （目标 {(preview.data as Record<string, unknown>).targetChapterCount as number} 章）
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      )}
                       {preview.parseMessage && (
                         <p className="text-xs text-muted-foreground mt-1">{preview.parseMessage}</p>
                       )}

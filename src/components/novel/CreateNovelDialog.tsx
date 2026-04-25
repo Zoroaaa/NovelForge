@@ -36,14 +36,21 @@ export function CreateNovelDialog({ onCreate }: CreateNovelDialogProps) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [genre, setGenre] = useState('')
+  const [targetWordCount, setTargetWordCount] = useState('')
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim()) return
-    onCreate({ title: title.trim(), description: description.trim() || undefined, genre: genre || undefined })
+    onCreate({
+      title: title.trim(),
+      description: description.trim() || undefined,
+      genre: genre || undefined,
+      targetWordCount: targetWordCount ? parseInt(targetWordCount, 10) : undefined
+    })
     setTitle('')
     setDescription('')
     setGenre('')
+    setTargetWordCount('')
     setOpen(false)
   }
 
@@ -99,6 +106,18 @@ export function CreateNovelDialog({ onCreate }: CreateNovelDialogProps) {
               onChange={(e) => setDescription(e.target.value)}
               placeholder="输入小说简介（选填）"
               rows={3}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="target-word-count">目标字数</Label>
+            <Input
+              id="target-word-count"
+              type="number"
+              value={targetWordCount}
+              onChange={(e) => setTargetWordCount(e.target.value)}
+              placeholder="输入目标总字数（选填）"
+              min="0"
             />
           </div>
 

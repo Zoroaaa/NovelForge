@@ -30,6 +30,7 @@ export const novels = sqliteTable('novels', {
   coverR2Key: text('cover_r2_key'),
   wordCount: integer('word_count').notNull().default(0),
   chapterCount: integer('chapter_count').notNull().default(0),
+  targetWordCount: integer('target_word_count'),
   ...timestamps,
   deletedAt: integer('deleted_at'),
 }, (table) => [
@@ -119,6 +120,7 @@ export const volumes = sqliteTable('volumes', {
   wordCount: integer('word_count').notNull().default(0),
   chapterCount: integer('chapter_count').notNull().default(0),
   targetWordCount: integer('target_word_count'),
+  targetChapterCount: integer('target_chapter_count'),
   notes: text('notes'),
   
   ...timestamps,

@@ -23,9 +23,10 @@ interface EditNovelDialogProps {
   initialTitle: string
   initialDescription: string
   initialGenre: string
+  initialTargetWordCount?: number | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSave: (id: string, data: { title: string; description?: string; genre?: string }) => void
+  onSave: (id: string, data: { title: string; description?: string; genre?: string; targetWordCount?: number }) => void
 }
 
 export function EditNovelDialog({ 
@@ -33,6 +34,7 @@ export function EditNovelDialog({
   initialTitle,
   initialDescription,
   initialGenre,
+  initialTargetWordCount,
   open, 
   onOpenChange, 
   onSave 
@@ -40,6 +42,7 @@ export function EditNovelDialog({
   const [title, setTitle] = useState(initialTitle)
   const [description, setDescription] = useState(initialDescription)
   const [genre, setGenre] = useState(initialGenre)
+  const [targetWordCount, setTargetWordCount] = useState(initialTargetWordCount?.toString() || '')
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -47,7 +50,8 @@ export function EditNovelDialog({
     onSave(novelId, { 
       title: title.trim(), 
       description: description.trim() || undefined, 
-      genre: genre || undefined 
+      genre: genre || undefined,
+      targetWordCount: targetWordCount ? parseInt(targetWordCount, 10) : undefined
     })
     onOpenChange(false)
   }
@@ -100,6 +104,18 @@ export function EditNovelDialog({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="输入小说简介（选填）"
               rows={3}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-target-word-count">目标字数</Label>
+            <Input
+              id="edit-target-word-count"
+              type="number"
+              value={targetWordCount}
+              onChange={(e) => setTargetWordCount(e.target.value)}
+              placeholder="输入目标总字数（选填）"
+              min="0"
             />
           </div>
 

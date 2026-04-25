@@ -31,6 +31,15 @@ router.post('/format-import', zValidator('json', formatImportSchema), async (c) 
       db
     )
 
+    if (module === 'volume' && result.parseStatus === 'success' && result.data) {
+      const volumeData = result.data as Record<string, any>
+      if (!volumeData.targetWordCount && volumeData.chapterCount) {
+        const avgChapterWords = 4000
+        volumeData.targetWordCount = Number(volumeData.chapterCount) * avgChapterWords
+        result.data = volumeData
+      }
+    }
+
     return c.json({
       ok: true,
       ...result,

@@ -23,6 +23,7 @@ interface GenerationLog {
   durationMs: number | null
   status: 'success' | 'error'
   errorMsg: string | null
+  contextSnapshot: string | null
   createdAt: number
 }
 
@@ -68,7 +69,9 @@ export function GenerationLogs({ novelId }: GenerationLogsProps) {
   const stageLabels: Record<string, string> = {
     chapter_gen: '章节生成',
     summary_gen: '摘要生成',
-    outline_gen: '大纲生成',
+    foreshadowing_extraction: '伏笔提取',
+    power_level_detection: '境界检测',
+    semantic_search: '语义检索',
   }
 
   return (
@@ -161,6 +164,21 @@ export function GenerationLogs({ novelId }: GenerationLogsProps) {
                           {log.durationMs ? `${Math.round(log.durationMs)}ms` : '-'}
                         </div>
                       </div>
+                      {log.contextSnapshot && (
+                        <div className="pt-2 border-t">
+                          <div className="text-muted-foreground mb-1">详细信息：</div>
+                          <pre className="p-2 bg-background rounded border text-[11px] font-mono whitespace-pre-wrap break-all max-h-40 overflow-y-auto">
+                            {(() => {
+                              try {
+                                const parsed = JSON.parse(log.contextSnapshot)
+                                return JSON.stringify(parsed, null, 2)
+                              } catch {
+                                return log.contextSnapshot
+                              }
+                            })()}
+                          </pre>
+                        </div>
+                      )}
                       {log.errorMsg && (
                         <div className="p-2 bg-red-50 dark:bg-red-950 rounded border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300">
                           <span className="text-muted-foreground">错误：</span>
