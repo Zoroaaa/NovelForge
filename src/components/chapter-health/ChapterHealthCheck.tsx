@@ -979,14 +979,14 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
               )}
             </div>
             <AlertDialogDescription asChild>
-              <div className="text-left mt-3">
+              <div className="text-left mt-3 overflow-y-auto max-h-[45vh] pr-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent rounded-lg">
                 {volumeChecking ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-3">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                     <span className="text-sm text-muted-foreground">正在执行卷进度检查...</span>
                   </div>
                 ) : volumeReport ? (
-                  <div className="space-y-5">
+                  <div className="space-y-5 pb-2">
                     <div className="grid grid-cols-2 gap-3">
                       <div className="p-4 bg-gradient-to-br from-muted/80 to-muted/40 rounded-xl border">
                         <div className="text-xs text-muted-foreground mb-1">当前章节</div>
