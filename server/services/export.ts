@@ -549,7 +549,8 @@ export async function exportAsZip(env: Env, options: ExportOptions): Promise<Blo
 
     try {
       const epubBlob = await exportAsEpub(env, options)
-      zip.file(`${title}.epub`, epubBlob)
+      const epubArrayBuffer = await epubBlob.arrayBuffer()
+      zip.file(`${title}.epub`, epubArrayBuffer)
     } catch (e) {
       console.warn('Failed to add EPUB to zip:', e)
       zip.file(`${title}-epub-error.txt`, `EPUB生成失败: ${(e as Error).message}`)
