@@ -118,6 +118,7 @@ export default function WorkshopPage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [sessionNovelId, setSessionNovelId] = useState<string | null>(null)
   const [stage, setStage] = useState('concept')
   const [messages, setMessages] = useState<WorkshopMessage[]>([])
   const [inputValue, setInputValue] = useState('')
@@ -144,6 +145,17 @@ export default function WorkshopPage() {
     staleTime: 30000,
   })
 
+  const getStageName = (s: string): string => {
+    const names: Record<string, string> = {
+      concept: '概念构思',
+      worldbuild: '世界观构建',
+      character_design: '角色设计',
+      volume_outline: '卷纲规划',
+      chapter_outline: '章节大纲',
+    }
+    return names[s] || s
+  }
+
   // 自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -156,6 +168,7 @@ export default function WorkshopPage() {
       const res = await api.workshop.getSession(id)
       if (res.ok && res.session) {
         setSessionId(id)
+        setSessionNovelId(res.session.novelId || null)
         setStage(res.session.stage || 'concept')
         setMessages(
           (res.session.messages as Array<{ role: string; content: string; timestamp?: number }> || []).map((m) => ({
@@ -833,44 +846,127 @@ export default function WorkshopPage() {
           <DialogHeader>
             <DialogTitle>确认提交创作数据？</DialogTitle>
             <DialogDescription>
-              确认后将创建新的小说项目并写入数据库
+              {sessionNovelId ? '确认后将更新已有小说项目的相关数据' : '确认后将创建新的小说项目并写入数据库'}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 py-4">
             <p className="text-sm text-muted-foreground">
-              以下数据将被写入数据库并创建新的小说项目：
+              {sessionNovelId ? '以下数据将被更新到已有小说项目：' : '以下数据将被写入数据库并创建新的小说项目：'}
             </p>
 
             <div className="grid grid-cols-2 gap-2 text-sm">
-              {extractedData.title && (
-                <div className="p-2 bg-primary/5 rounded">
-                  <span className="text-muted-foreground">标题：</span>
-                  <span className="font-medium">{extractedData.title}</span>
-                </div>
-              )}
-              {extractedData.genre && (
-                <div className="p-2 bg-primary/5 rounded">
-                  <span className="text-muted-foreground">流派：</span>
-                  <span className="font-medium">{extractedData.genre}</span>
-                </div>
-              )}
-              {extractedData.characters && (
-                <div className="p-2 bg-purple-50 dark:bg-purple-950 rounded">
-                  <span className="text-muted-foreground">角色：</span>
-                  <span className="font-medium">{extractedData.characters.length} 个</span>
-                </div>
-              )}
-              {extractedData.volumes && (
-                <div className="p-2 bg-blue-50 dark:bg-blue-950 rounded">
-                  <span className="text-muted-foreground">卷数：</span>
-                  <span className="font-medium">{extractedData.volumes.length} 卷</span>
-                </div>
+              {sessionNovelId ? (
+                <>
+                  {stage === 'concept' && (
+                    <>
+                      {extractedData.title && (
+                        <div className="p-2 bg-primary/5 rounded">
+                          <span className="text-muted-foreground">标题：</span>
+                          <span className="font-medium">{extractedData.title}</span>
+                        </div>
+                      )}
+                      {extractedData.genre && (
+                        <div className="p-2 bg-primary/5 rounded">
+                          <span className="text-muted-foreground">流派：</span>
+                          <span className="font-medium">{extractedData.genre}</span>
+                        </div>
+                      )}
+                      {extractedData.coreAppeal && extractedData.coreAppeal.length > 0 && (
+                        <div className="p-2 bg-primary/5 rounded">
+                          <span className="text-muted-foreground">核心看点：</span>
+                          <span className="font-medium">{extractedData.coreAppeal.length} 项</span>
+                        </div>
+                      )}
+                      {extractedData.writingRules && extractedData.writingRules.length > 0 && (
+                        <div className="p-2 bg-orange-50 dark:bg-orange-950 rounded">
+                          <span className="text-muted-foreground">创作规则：</span>
+                          <span className="font-medium">{extractedData.writingRules.length} 条</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {stage === 'worldbuild' && (
+                    <div className="p-2 bg-green-50 dark:bg-green-950 rounded col-span-2">
+                      <span className="text-muted-foreground">世界观设定：</span>
+                      <span className="font-medium">{extractedData.worldSettings?.length || 0} 项</span>
+                    </div>
+                  )}
+                  {stage === 'character_design' && (
+                    <div className="p-2 bg-purple-50 dark:bg-purple-950 rounded col-span-2">
+                      <span className="text-muted-foreground">角色：</span>
+                      <span className="font-medium">{extractedData.characters?.length || 0} 个</span>
+                    </div>
+                  )}
+                  {stage === 'volume_outline' && (
+                    <div className="p-2 bg-blue-50 dark:bg-blue-950 rounded col-span-2">
+                      <span className="text-muted-foreground">卷纲：</span>
+                      <span className="font-medium">{extractedData.volumes?.length || 0} 卷</span>
+                    </div>
+                  )}
+                  {stage === 'chapter_outline' && (
+                    <div className="p-2 bg-amber-50 dark:bg-amber-950 rounded col-span-2">
+                      <span className="text-muted-foreground">章节大纲：</span>
+                      <span className="font-medium">{extractedData.chapters?.length || 0} 章</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {extractedData.title && (
+                    <div className="p-2 bg-primary/5 rounded">
+                      <span className="text-muted-foreground">标题：</span>
+                      <span className="font-medium">{extractedData.title}</span>
+                    </div>
+                  )}
+                  {extractedData.genre && (
+                    <div className="p-2 bg-primary/5 rounded">
+                      <span className="text-muted-foreground">流派：</span>
+                      <span className="font-medium">{extractedData.genre}</span>
+                    </div>
+                  )}
+                  {extractedData.coreAppeal && extractedData.coreAppeal.length > 0 && (
+                    <div className="p-2 bg-primary/5 rounded">
+                      <span className="text-muted-foreground">核心看点：</span>
+                      <span className="font-medium">{extractedData.coreAppeal.length} 项</span>
+                    </div>
+                  )}
+                  {extractedData.writingRules && extractedData.writingRules.length > 0 && (
+                    <div className="p-2 bg-orange-50 dark:bg-orange-950 rounded">
+                      <span className="text-muted-foreground">创作规则：</span>
+                      <span className="font-medium">{extractedData.writingRules.length} 条</span>
+                    </div>
+                  )}
+                  {extractedData.worldSettings && extractedData.worldSettings.length > 0 && (
+                    <div className="p-2 bg-green-50 dark:bg-green-950 rounded">
+                      <span className="text-muted-foreground">世界观设定：</span>
+                      <span className="font-medium">{extractedData.worldSettings.length} 项</span>
+                    </div>
+                  )}
+                  {extractedData.characters && extractedData.characters.length > 0 && (
+                    <div className="p-2 bg-purple-50 dark:bg-purple-950 rounded">
+                      <span className="text-muted-foreground">角色：</span>
+                      <span className="font-medium">{extractedData.characters.length} 个</span>
+                    </div>
+                  )}
+                  {extractedData.volumes && extractedData.volumes.length > 0 && (
+                    <div className="p-2 bg-blue-50 dark:bg-blue-950 rounded">
+                      <span className="text-muted-foreground">卷纲：</span>
+                      <span className="font-medium">{extractedData.volumes.length} 卷</span>
+                    </div>
+                  )}
+                  {extractedData.chapters && extractedData.chapters.length > 0 && (
+                    <div className="p-2 bg-amber-50 dark:bg-amber-950 rounded">
+                      <span className="text-muted-foreground">章节大纲：</span>
+                      <span className="font-medium">{extractedData.chapters.length} 章</span>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
             <p className="text-xs text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950 p-2 rounded">
-              ⚠️ 提交后将在数据库中创建正式的小说、总纲、角色、卷等记录。此操作不可撤销。
+              ⚠️ 提交后将{sessionNovelId ? '更新' : '创建'}数据库中的{sessionNovelId ? getStageName(stage) + '数据' : '小说、总纲、角色、卷等记录'}。此操作不可撤销。
             </p>
           </div>
 
