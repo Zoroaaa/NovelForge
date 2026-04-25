@@ -259,6 +259,10 @@ export function NovelCard({ novel, onEdit, onDelete, onStatusChange, onWorkshopO
                 <Sparkles className="h-3 w-3" />
                 AI 创作工坊
               </div>
+              <DropdownMenuItem onClick={() => onWorkshopOpen(novel.id, 'concept')} className="pl-6">
+                <Sparkles className="mr-2 h-4 w-4" />
+                继续概念构思
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onWorkshopOpen(novel.id, 'worldbuild')} className="pl-6">
                 <Globe className="mr-2 h-4 w-4" />
                 继续世界观构建
@@ -270,6 +274,10 @@ export function NovelCard({ novel, onEdit, onDelete, onStatusChange, onWorkshopO
               <DropdownMenuItem onClick={() => onWorkshopOpen(novel.id, 'volume_outline')} className="pl-6">
                 <Layers className="mr-2 h-4 w-4" />
                 继续卷纲规划
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onWorkshopOpen(novel.id, 'chapter_outline')} className="pl-6">
+                <FileText className="mr-2 h-4 w-4" />
+                继续章节大纲
               </DropdownMenuItem>
             </>
           )}
