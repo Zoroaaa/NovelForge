@@ -5,7 +5,7 @@
  * @created 2026-04-21 - Phase 3 对话式创作引擎
  */
 import { drizzle } from 'drizzle-orm/d1'
-import { eq, and, sql } from 'drizzle-orm'
+import { eq, and, isNull, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import * as schema from '../db/schema'
 import { resolveConfig } from './llm'
@@ -152,7 +152,7 @@ async function loadNovelContextData(
     const outline = await db
       .select()
       .from(masterOutline)
-      .where(eq(masterOutline.novelId, novelId))
+      .where(and(eq(masterOutline.novelId, novelId), isNull(masterOutline.deletedAt)))
       .get()
 
     if (outline && outline.content) {
@@ -162,7 +162,7 @@ async function loadNovelContextData(
     const rules = await db
       .select()
       .from(writingRules)
-      .where(eq(writingRules.novelId, novelId))
+      .where(and(eq(writingRules.novelId, novelId), isNull(writingRules.deletedAt)))
       .all()
 
     if (rules.length > 0) {
@@ -179,7 +179,7 @@ async function loadNovelContextData(
     const settings = await db
       .select()
       .from(novelSettings)
-      .where(eq(novelSettings.novelId, novelId))
+      .where(and(eq(novelSettings.novelId, novelId), isNull(novelSettings.deletedAt)))
       .all()
 
     if (settings.length > 0) {
@@ -214,7 +214,7 @@ async function loadNovelContextData(
     const chars = await db
       .select()
       .from(characters)
-      .where(eq(characters.novelId, novelId))
+      .where(and(eq(characters.novelId, novelId), isNull(characters.deletedAt)))
       .all()
 
     if (chars.length > 0) {
@@ -243,7 +243,7 @@ async function loadNovelContextData(
     const vols = await db
       .select()
       .from(volumes)
-      .where(eq(volumes.novelId, novelId))
+      .where(and(eq(volumes.novelId, novelId), isNull(volumes.deletedAt)))
       .all()
 
     if (vols.length > 0) {
@@ -275,7 +275,7 @@ async function loadNovelContextData(
     const existingChapters = await db
       .select()
       .from(chapters)
-      .where(eq(chapters.novelId, novelId))
+      .where(and(eq(chapters.novelId, novelId), isNull(chapters.deletedAt)))
       .all()
 
     if (existingChapters.length > 0) {

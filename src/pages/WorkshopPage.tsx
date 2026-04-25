@@ -700,7 +700,7 @@ export default function WorkshopPage() {
                               variant={ws.importance === 'high' ? 'destructive' : ws.importance === 'low' ? 'secondary' : 'outline'}
                               className="text-[10px]"
                             >
-                              {ws.importance === 'high' ? '🔥 重要' : ws.importance === 'low' ? '💤 次要' : '📖 普通'}
+                              {ws.importance === 'high' ? '🔥 重要' : ws.importance === 'low' ? '💤 次要' : '📖 一般'}
                             </Badge>
                           )}
                         </div>
