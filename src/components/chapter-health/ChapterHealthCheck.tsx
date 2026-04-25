@@ -31,7 +31,7 @@ import { CharacterConsistencyCheck } from './CharacterConsistencyCheck'
 import { ChapterCoherenceCheck } from './ChapterCoherenceCheck'
 import { CombinedCheck } from './CombinedCheck'
 import { VolumeProgressCheck } from './VolumeProgressCheck'
-import { getToken } from '@/lib/api'
+import { api, getToken } from '@/lib/api'
 
 interface ChapterHealthCheckProps {
   novelId: string
@@ -89,16 +89,9 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
 
   const loadLatestCheckLog = useCallback(async () => {
     try {
-      const token = getToken()
-      const headers: Record<string, string> = {}
-      if (token) headers['Authorization'] = `Bearer ${token}`
-
-      const res = await fetch(`/api/generate/check-logs/latest?chapterId=${chapterId}`, { headers })
-      if (res.ok) {
-        const data = await res.json()
-        if (data.log) {
-          setLatestCheckLog(data.log)
-        }
+      const data = await api.generate.getCheckLogsLatest(chapterId!)
+      if (data.log) {
+        setLatestCheckLog(data.log)
       }
     } catch (error) {
       console.error('加载最新检查日志失败:', error)
@@ -116,16 +109,9 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
 
   const loadCheckHistory = useCallback(async () => {
     try {
-      const token = getToken()
-      const headers: Record<string, string> = {}
-      if (token) headers['Authorization'] = `Bearer ${token}`
-
-      const res = await fetch(`/api/generate/check-logs/history?chapterId=${chapterId}&limit=20`, { headers })
-      if (res.ok) {
-        const data = await res.json()
-        setCheckHistory(data.logs || [])
-        setShowCheckHistory(true)
-      }
+      const data = await api.generate.getCheckLogsHistory(chapterId!, 20)
+      setCheckHistory(data.logs || [])
+      setShowCheckHistory(true)
     } catch (error) {
       console.error('加载检查历史失败:', error)
     }
@@ -137,34 +123,21 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
     setCombinedReport(null)
 
     try {
-      const token = getToken()
-      const headers: Record<string, string> = {}
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      const cachedData = await api.generate.getCheckLogsLatest(chapterId!, 'combined')
 
-      const res = await fetch(`/api/generate/check-logs/latest?chapterId=${chapterId}&checkType=combined`, { headers })
-
-      if (res.ok) {
-        const data = await res.json()
-        if (data.log && data.log.characterResult && data.log.coherenceResult) {
-          setCombinedReport({
-            characterResult: data.log.characterResult,
-            coherenceResult: data.log.coherenceResult,
-            score: data.log.score,
-          })
-          setIsFromCache(true)
-          setReportCachedAt(data.log.createdAt)
-          setIsChecking(false)
-          return
-        }
+      if (cachedData.log && cachedData.log.characterResult && cachedData.log.coherenceResult) {
+        setCombinedReport({
+          characterResult: cachedData.log.characterResult,
+          coherenceResult: cachedData.log.coherenceResult,
+          score: cachedData.log.score,
+        })
+        setIsFromCache(true)
+        setReportCachedAt(cachedData.log.createdAt)
+        setIsChecking(false)
+        return
       }
 
-      const checkRes = await fetch('/api/generate/combined-check', {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chapterId, novelId }),
-      })
-      if (!checkRes.ok) throw new Error('综合检查请求失败')
-      const checkData = await checkRes.json()
+      const checkData = await api.generate.combinedCheck({ chapterId: chapterId!, novelId })
 
       setCombinedReport({
         characterResult: checkData.characterCheck,
@@ -188,17 +161,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
     setCombinedReport(null)
 
     try {
-      const token = getToken()
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-
-      const res = await fetch('/api/generate/combined-check', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ chapterId, novelId }),
-      })
-      if (!res.ok) throw new Error('重新检查请求失败')
-      const data = await res.json()
+      const data = await api.generate.combinedCheck({ chapterId: chapterId!, novelId })
 
       setCombinedReport({
         characterResult: data.characterCheck,

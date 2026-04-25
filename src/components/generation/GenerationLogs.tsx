@@ -6,7 +6,7 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { getToken } from '@/lib/api'
+import { api } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -37,13 +37,9 @@ export function GenerationLogs({ novelId }: GenerationLogsProps) {
 
   const { data: logs, isLoading } = useQuery({
     queryKey: ['generation-logs', novelId, limit],
-    queryFn: () => {
-      const token = getToken()
-      const headers: Record<string, string> = {}
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      return fetch(`/api/generate/logs?novelId=${novelId || ''}&limit=${limit}`, { headers }).then((r) =>
-        r.json().then((d) => d.logs as GenerationLog[])
-      )
+    queryFn: async () => {
+      const data = await api.generate.getLogs(novelId, limit)
+      return data.logs as GenerationLog[]
     },
   })
 

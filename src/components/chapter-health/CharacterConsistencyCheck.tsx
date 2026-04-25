@@ -4,13 +4,12 @@
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getToken } from '@/lib/api'
+import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Shield, ShieldAlert, AlertTriangle, CheckCircle, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
-import { api } from '@/lib/api'
 
 interface Conflict {
   characterName: string
@@ -45,24 +44,10 @@ export function CharacterConsistencyCheck({ novelId, chapterId }: CharacterConsi
     setResult(null)
 
     try {
-      const token = getToken()
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      
-      const resp = await fetch('/api/generate/check-character-consistency', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          chapterId,
-          characterIds: characters?.map(c => c.id) || [],
-        }),
+      const data = await api.generate.checkCharacterConsistency({
+        chapterId,
+        characterIds: characters?.map(c => c.id) || [],
       })
-
-      if (!resp.ok) {
-        throw new Error('检查失败')
-      }
-
-      const data = await resp.json()
       setResult(data)
     } catch (error) {
       console.error('角色一致性检查失败:', error)

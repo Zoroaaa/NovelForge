@@ -126,7 +126,7 @@ export async function rebuildEntityIndex(env: Env, novelId: string): Promise<{
     })
 
     const MODULE_PREFIX = '__module__'
-    let stats: Record<string, number> = {}
+    const stats: Record<string, number> = {}
 
     const mo = await db.select()
       .from(masterOutline)

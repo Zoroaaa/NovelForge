@@ -5,7 +5,7 @@
  * @modified 2026-04-21 - 添加规范化注释
  */
 import { useState } from 'react'
-import { getToken } from '@/lib/api'
+import { api } from '@/lib/api'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -41,12 +41,7 @@ export function SearchBar({ novelId }: SearchBarProps) {
     setSearched(true)
 
     try {
-      const token = getToken()
-      const headers: Record<string, string> = {}
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      const url = `/api/search?q=${encodeURIComponent(query)}${novelId ? `&novelId=${novelId}` : ''}`
-      const resp = await fetch(url, { headers })
-      const data = await resp.json()
+      const data = await api.search.search(query, novelId)
       setResults(data.results || [])
     } catch {
       setResults([])

@@ -8,7 +8,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { getToken } from '@/lib/api'
+import { api, getToken } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -130,13 +130,8 @@ export default function WorkshopPage() {
   const { data: sessions = [] } = useQuery({
     queryKey: ['workshop-sessions'],
     queryFn: async () => {
-      const token = getToken()
-      const headers: Record<string, string> = {}
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      const res = await fetch('/api/workshop/sessions', { headers })
-      if (!res.ok) throw new Error('加载会话列表失败')
-      const data = await res.json()
-      return (data.sessions || []) as SessionListItem[]
+      const res = await api.workshop.listSessions()
+      return (res.sessions || []) as SessionListItem[]
     },
     staleTime: 30000,
   })
@@ -150,26 +145,20 @@ export default function WorkshopPage() {
   const loadSession = useCallback(async (id: string) => {
     try {
       setIsGenerating(true)
-      const token = getToken()
-      const headers: Record<string, string> = {}
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      const res = await fetch(`/api/workshop/session/${id}`, { headers })
-      if (!res.ok) throw new Error('加载会话失败')
-      const data = await res.json()
-      
-      if (data.session) {
+      const res = await api.workshop.getSession(id)
+      if (res.ok && res.session) {
         setSessionId(id)
-        setStage(data.session.stage || 'concept')
+        setStage(res.session.stage || 'concept')
         setMessages(
-          (data.session.messages || []).map((m: { role: string; content: string; timestamp?: number }) => ({
+          (res.session.messages || []).map((m: { role: string; content: string; timestamp?: number }) => ({
             id: crypto.randomUUID(),
             role: m.role,
             content: m.content,
             timestamp: m.timestamp || Date.now(),
           }))
         )
-        if (data.session.extractedData) {
-          setExtractedData(data.session.extractedData)
+        if (res.session.extractedData) {
+          setExtractedData(res.session.extractedData)
         }
       }
     } catch (e) {
@@ -193,16 +182,9 @@ export default function WorkshopPage() {
   // 创建新会话
   const createSessionMutation = useMutation({
     mutationFn: async () => {
-      const token = getToken()
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      const res = await fetch('/api/workshop/session', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ stage }),
-      })
+      const res = await api.workshop.createSession({ stage })
       if (!res.ok) throw new Error('创建会话失败')
-      return res.json()
+      return res
     },
     onSuccess: (data) => {
       if (data.ok) {
@@ -244,14 +226,7 @@ export default function WorkshopPage() {
     ])
 
     try {
-      const token = getToken()
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      const response = await fetch(`/api/workshop/session/${sessionId}/message`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ message: userMessage, stage }),
-      })
+      const response = await api.workshop.sendMessage(sessionId, { message: userMessage, stage })
 
       if (!response.ok) throw new Error('发送消息失败')
 
@@ -316,15 +291,9 @@ export default function WorkshopPage() {
       // AI对话完成后从服务端拉取最新预览数据，确保右侧预览同步
       if (sessionId) {
         try {
-          const token = getToken()
-          const headers: Record<string, string> = {}
-          if (token) headers['Authorization'] = `Bearer ${token}`
-          const refreshRes = await fetch(`/api/workshop/session/${sessionId}`, { headers })
-          if (refreshRes.ok) {
-            const refreshData = await refreshRes.json()
-            if (refreshData.session?.extractedData) {
-              setExtractedData(refreshData.session.extractedData)
-            }
+          const refreshRes = await api.workshop.getSession(sessionId)
+          if (refreshRes.ok && refreshRes.session?.extractedData) {
+            setExtractedData(refreshRes.session.extractedData)
           }
         } catch (e) {
           console.warn('刷新预览数据失败:', e)
@@ -340,15 +309,9 @@ export default function WorkshopPage() {
   const commitMutation = useMutation({
     mutationFn: async () => {
       if (!sessionId) throw new Error('没有活动会话')
-      const token = getToken()
-      const headers: Record<string, string> = {}
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      const res = await fetch(`/api/workshop/session/${sessionId}/commit`, {
-        method: 'POST',
-        headers,
-      })
+      const res = await api.workshop.commitSession(sessionId)
       if (!res.ok) throw new Error('提交失败')
-      return res.json()
+      return res
     },
     onSuccess: (data) => {
       if (data.ok && data.novelId) {
@@ -370,14 +333,7 @@ export default function WorkshopPage() {
     toast.info(`已切换到 ${STAGES.find(s => s.id === newStage)?.label} 阶段`)
 
     try {
-      const token = getToken()
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      await fetch(`/api/workshop/session/${sessionId}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ stage: newStage }),
-      })
+      await api.workshop.updateSession(sessionId, { stage: newStage })
       queryClient.invalidateQueries({ queryKey: ['workshop-sessions'] })
     } catch (e) {
       console.error('Failed to update session stage:', e)
@@ -407,15 +363,9 @@ export default function WorkshopPage() {
   const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
     try {
-      const token = getToken()
-      const headers: Record<string, string> = {}
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      const res = await fetch(`/api/workshop/session/${id}`, {
-        method: 'DELETE',
-        headers,
-      })
+      const res = await api.workshop.deleteSession(id)
       if (!res.ok) throw new Error('删除失败')
-      
+
       queryClient.invalidateQueries({ queryKey: ['workshop-sessions'] })
       if (sessionId === id) handleNewChat()
       toast.success('会话已删除')
@@ -429,14 +379,7 @@ export default function WorkshopPage() {
     const v = renameValue.trim()
     if (v) {
       try {
-        const token = getToken()
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-        if (token) headers['Authorization'] = `Bearer ${token}`
-        await fetch(`/api/workshop/session/${id}`, {
-          method: 'PATCH',
-          headers,
-          body: JSON.stringify({ title: v }),
-        })
+        await api.workshop.updateSession(id, { title: v })
         queryClient.invalidateQueries({ queryKey: ['workshop-sessions'] })
       } catch (e) {
         console.error('重命名失败:', e)

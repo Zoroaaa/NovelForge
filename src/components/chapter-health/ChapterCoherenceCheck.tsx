@@ -17,7 +17,7 @@ import {
   BookOpen,
   Zap,
 } from 'lucide-react'
-import { getToken } from '@/lib/api'
+import { api } from '@/lib/api'
 
 interface CoherenceIssue {
   severity: 'error' | 'warning'
@@ -48,19 +48,7 @@ export function ChapterCoherenceCheck({ novelId, chapterId, onCheckComplete }: C
     setResult(null)
 
     try {
-      const token = getToken()
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-
-      const res = await fetch('/api/generate/coherence-check', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ chapterId, novelId }),
-      })
-
-      if (!res.ok) throw new Error('检查请求失败')
-
-      const data = await res.json()
+      const data = await api.generate.checkCoherence({ chapterId, novelId })
       const checkResult: CoherenceCheckResult = {
         score: data.score ?? 100,
         issues: data.issues ?? [],

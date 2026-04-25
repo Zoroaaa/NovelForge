@@ -19,7 +19,6 @@ import {
   ChevronUp,
 } from 'lucide-react'
 import { api } from '@/lib/api'
-import { getToken } from '@/lib/api'
 
 interface Conflict {
   characterName: string
@@ -70,23 +69,7 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete }: CombinedC
     setResult(null)
 
     try {
-      const token = getToken()
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-
-      const res = await fetch('/api/generate/combined-check', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          chapterId,
-          novelId,
-          characterIds: characters?.map(c => c.id) || [],
-        }),
-      })
-
-      if (!res.ok) throw new Error('检查请求失败')
-
-      const data = await res.json()
+      const data = await api.generate.combinedCheck({ chapterId, novelId })
       setResult(data)
       onCheckComplete?.(data)
     } catch (error) {

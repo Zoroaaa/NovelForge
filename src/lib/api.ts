@@ -173,6 +173,13 @@ export const api = {
     delete: (id: string)          => req(`/api/novels/${id}`, { method: 'DELETE' }),
     /** 恢复已删除的小说 */
     restore: (id: string)         => req<Novel>(`/api/novels/${id}/restore`, { method: 'PATCH' }),
+    /** 上传小说封面 */
+    uploadCover: (id: string, formData: FormData) =>
+      fetch(`/api/novels/${id}/cover`, {
+        method: 'POST',
+        headers: { ...((getToken() && { 'Authorization': `Bearer ${getToken()}` }) || {}) },
+        body: formData,
+      }),
     trash: {
       list: (novelId: string)       => req<{ ok: boolean; tables: Array<{ key: string; label: string; icon: string; count: number; items: Record<string, unknown>[] }>; total: number }>(`/api/novels/${novelId}/trash`),
       all: () => req<{ ok: boolean; novels: Array<{ id: string; title: string; genre?: string; status: string; wordCount: number; chapterCount: number; deletedAt: number; createdAt: number; updatedAt: number }>; total: number }>('/api/novels/trash'),
@@ -209,7 +216,7 @@ export const api = {
     update: (id: string, body: Partial<Pick<NovelSetting, 'type' | 'category' | 'name' | 'content' | 'summary' | 'importance' | 'sortOrder' | 'attributes'>>) =>
                                   req<NovelSetting>(`/api/settings/${id}`, { method: 'PUT', body: j(body) }),
     delete: (id: string) => req(`/api/settings/${id}`, { method: 'DELETE' }),
-    generateSummary: (id: string) => req<{ ok: boolean; summary?: string; error?: string }>(`/api/settings/${id}/generate-summary`, { method: 'POST' }),
+    generateSummary: (id: string) => req<{ ok: boolean; summary?: string; error?: string }>(`/api/settings/${id}/generate-summary`, { method: 'POST', timeout: 120000 }),
     tree:   (novelId: string)     => req<{ tree: Record<string, unknown>[]; stats: Record<string, number>; total: number }>(`/api/settings/tree/${novelId}`),
   },
 
@@ -249,6 +256,20 @@ export const api = {
     update: (id: string, body: Partial<CharacterInput>) =>
                                    req<Character>(`/api/characters/${id}`, { method: 'PATCH', body: j(body) }),
     delete: (id: string)          => req(`/api/characters/${id}`, { method: 'DELETE' }),
+    uploadImage: (characterId: string, formData: FormData) =>
+      fetch(`/api/characters/${characterId}/image`, {
+        method: 'POST',
+        headers: { ...((getToken() && { 'Authorization': `Bearer ${getToken()}` }) || {}) },
+        body: formData,
+      }),
+  },
+
+  // 数据导出 API
+  export: {
+    getFormats: () =>
+      req<{ formats: Array<{ id: string; name: string; description: string; extensions: string[] }> }>('/api/export/formats'),
+    exportData: (body: { novelId: string; format: string; options?: Record<string, unknown> }) =>
+      req<{ ok: boolean; downloadUrl?: string; message?: string }>('/api/export', { method: 'POST', body: j(body) }),
   },
 
   // Phase 1.2 / v2.0: 伏笔追踪
@@ -267,11 +288,11 @@ export const api = {
                                    ),
     check: (novelId: string, params?: { recentChaptersCount?: number; staleThreshold?: number }) =>
                                    req<ForeshadowingHealthReport>(`/api/foreshadowing/${novelId}/check`, {
-                                     method: 'POST', body: j(params || {})
+                                     method: 'POST', body: j(params || {}), timeout: 120000
                                    }),
     suggest: (novelId: string, body: { chapterContext: string; topK?: number }) =>
                                    req<{ suggestions: ForeshadowingSuggestion[]; query: string }>(`/api/foreshadowing/${novelId}/suggest`, {
-                                     method: 'POST', body: j(body)
+                                     method: 'POST', body: j(body), timeout: 120000
                                    }),
     getStats: (novelId: string)   => req<ForeshadowingStats>(`/api/foreshadowing/${novelId}/stats`),
   },
@@ -284,9 +305,19 @@ export const api = {
     history:   (novelId: string)     => req<{ history: PowerLevelHistoryItem[] }>(`/api/power-level/history/${novelId}`),
     character: (characterId: string) => req<{ characterId: string; characterName: string; hasData: boolean; data: PowerLevelHistoryItem | null }>(`/api/power-level/character/${characterId}`),
     validate:  (body: { characterId: string; novelId: string; recentChapterCount?: number }) =>
-                                   req<PowerLevelValidationResult>('/api/power-level/validate', { method: 'POST', body: j(body) }),
+                                   req<PowerLevelValidationResult>('/api/power-level/validate', { method: 'POST', body: j(body), timeout: 120000 }),
     applySuggestion: (body: { characterId: string; novelId: string; suggestedCurrent: string; suggestedSystem?: string; note?: string }) =>
                                    req<PowerLevelApplyResult>('/api/power-level/apply-suggestion', { method: 'POST', body: j(body) }),
+  },
+
+  // 全文搜索 API
+  search: {
+    search: (query: string, novelId?: string) => {
+      const params = novelId ? `?q=${encodeURIComponent(query)}&novelId=${novelId}` : `?q=${encodeURIComponent(query)}`
+      return req<{
+        results: Array<{ id: string; novelId: string; title: string; chapterNumber: number; summary: string | null; snippet: string }>
+      }>(`/api/search${params}`)
+    },
   },
 
   // v2.0: 总索引（树形结构）
@@ -345,19 +376,19 @@ export const api = {
         chapterTitle?: string
         summary?: string
         error?: string
-      }>('/api/generate/next-chapter', { method: 'POST', body: j(body) }),
+      }>('/api/generate/next-chapter', { method: 'POST', body: j(body), timeout: 120000 }),
     masterOutlineSummary: (body: { novelId: string }) =>
       req<{
         ok: boolean
         summary?: string
         error?: string
-      }>('/api/generate/master-outline-summary', { method: 'POST', body: j(body) }),
+      }>('/api/generate/master-outline-summary', { method: 'POST', body: j(body), timeout: 120000 }),
     volumeSummary: (body: { volumeId: string; novelId: string }) =>
       req<{
         ok: boolean
         summary?: string
         error?: string
-      }>('/api/generate/volume-summary', { method: 'POST', body: j(body) }),
+      }>('/api/generate/volume-summary', { method: 'POST', body: j(body), timeout: 120000 }),
     previewContext: (novelId: string, chapterId: string) =>
       req<{
         ok: boolean
@@ -371,19 +402,19 @@ export const api = {
           ragQueryTimeMs?: number
         }
         error?: string
-      }>('/api/generate/preview-context', { method: 'POST', body: j({ novelId, chapterId }) }),
+      }>('/api/generate/preview-context', { method: 'POST', body: j({ novelId, chapterId }), timeout: 120000 }),
     checkCoherence: (body: { chapterId: string; novelId: string }) =>
       req<{
         score: number
         issues: Array<{ severity: 'error' | 'warning'; category?: string; message: string; suggestion?: string }>
         error?: string
-      }>('/api/generate/coherence-check', { method: 'POST', body: j(body) }),
+      }>('/api/generate/coherence-check', { method: 'POST', body: j(body), timeout: 120000 }),
     checkCharacterConsistency: (body: { characterIds: string[]; chapterId: string }) =>
       req<{
         conflicts: Array<{ characterName: string; conflict: string; excerpt: string }>
         warnings: string[]
         error?: string
-      }>('/api/generate/check-character-consistency', { method: 'POST', body: j(body) }),
+      }>('/api/generate/check-character-consistency', { method: 'POST', body: j(body), timeout: 120000 }),
     checkVolumeProgress: (body: { chapterId: string; novelId: string }) =>
       req<{
         volumeId: string
@@ -397,7 +428,53 @@ export const api = {
         risk: 'early_ending' | 'late_ending' | null
         suggestion: string
         error?: string
-      }>('/api/generate/volume-progress-check', { method: 'POST', body: j(body) }),
+      }>('/api/generate/volume-progress-check', { method: 'POST', body: j(body), timeout: 120000 }),
+    getLogs: (novelId?: string, limit?: number) =>
+      req<{
+        logs: Array<{
+          id: string
+          novelId: string
+          chapterId: string | null
+          stage: string
+          modelId: string
+          promptTokens: number
+          completionTokens: number
+          totalTokens: number
+          generationTime: number
+          wordCount: number
+          createdAt: number
+        }>
+      }>(`/api/generate/logs?novelId=${novelId || ''}&limit=${limit || 200}`),
+    getCheckLogsLatest: (chapterId: string, checkType?: string) =>
+      req<{
+        log?: {
+          id: string
+          chapterId: string
+          checkType: string
+          characterResult?: Record<string, unknown>
+          coherenceResult?: { score: number; issues: Array<{ severity: string; message: string }> }
+          score: number
+          createdAt: number
+        }
+      }>(`/api/generate/check-logs/latest?chapterId=${chapterId}${checkType ? `&checkType=${checkType}` : ''}`),
+    getCheckLogsHistory: (chapterId: string, limit?: number) =>
+      req<{
+        logs: Array<{
+          id: string
+          chapterId: string
+          checkType: string
+          characterResult?: Record<string, unknown>
+          coherenceResult?: { score: number; issues: Array<{ severity: string; message: string }> }
+          score: number
+          createdAt: number
+        }>
+      }>(`/api/generate/check-logs/history?chapterId=${chapterId}&limit=${limit || 20}`),
+    combinedCheck: (body: { chapterId: string; novelId: string }) =>
+      req<{
+        characterCheck: { conflicts: Array<{ characterName: string; conflict: string; excerpt: string }>; warnings: string[] }
+        coherenceCheck: { score: number; issues: Array<{ severity: string; message: string }> }
+        score: number
+      }>('/api/generate/combined-check', { method: 'POST', body: j(body), timeout: 180000 }),
   },
 
   // 认证系统API
@@ -444,6 +521,31 @@ export const api = {
       req<{ ok: boolean; message: string }>(`/api/workshop/session/${sessionId}`, { method: 'DELETE' }),
     updateSession: (sessionId: string, body: { title?: string; stage?: string }) =>
       req<{ ok: boolean; message: string }>(`/api/workshop/session/${sessionId}`, { method: 'PATCH', body: j(body) }),
+    sendMessage: (sessionId: string, body: { message: string; stage: string }) =>
+      fetch(`/api/workshop/session/${sessionId}/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...((getToken() && { 'Authorization': `Bearer ${getToken()}` }) || {}) },
+        body: j(body),
+      }),
+    commitSession: (sessionId: string) =>
+      req<{ ok: boolean; novelId?: string; message?: string }>(`/api/workshop/session/${sessionId}/commit`, { method: 'POST' }),
+  },
+
+  // AI 创作工坊数据导入 API
+  workshopImport: {
+    listExisting: (novelId: string, targetModule: string) =>
+      req<{ items: Record<string, unknown>[] }>(`/api/workshop-import/list/${targetModule}?novelId=${novelId}`),
+    import: (params: { module: string; data: Record<string, unknown>; novelId: string; importMode: string }) =>
+      req<{ ok: boolean; message?: string }>('/api/workshop-import/import', { method: 'POST', body: j(params) }),
+  },
+
+  // AI 创作工坊格式化导入 API
+  workshopFormatImport: {
+    format: (content: string, module: string) =>
+      req<{ module: string; data: Record<string, unknown> | Record<string, unknown>[]; rawContent: string; parseStatus: string; parseMessage?: string }>(
+        '/api/workshop-format-import/format-import',
+        { method: 'POST', body: j({ content, module }) }
+      ),
   },
 
   // 系统设置API（管理员）

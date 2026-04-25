@@ -5,7 +5,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { getToken } from '@/lib/api'
+import { api, getToken } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -83,13 +83,8 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
   const { data: novels = [] } = useQuery({
     queryKey: ['novels-for-import'],
     queryFn: async () => {
-      const token = getToken()
-      const headers: Record<string, string> = {}
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      const res = await fetch('/api/novels?perPage=100', { headers })
-      if (!res.ok) return []
-      const result = await res.json()
-      return (result.data || []) as Array<{ id: string; title: string }>
+      const res = await api.novels.list()
+      return (res.data || []) as Array<{ id: string; title: string }>
     },
     enabled: open,
   })
@@ -103,35 +98,16 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
   const { data: existingItems = [] } = useQuery({
     queryKey: ['existing-items', targetModule, selectedNovelId],
     queryFn: async () => {
-      const token = getToken()
-      const headers: Record<string, string> = {}
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      const res = await fetch(`/api/workshop-import/list/${targetModule}?novelId=${selectedNovelId}`, { headers })
-      if (!res.ok) return []
-      const result = await res.json()
-      return result.items || []
+      const res = await api.workshopImport.listExisting(selectedNovelId, targetModule)
+      return res.items || []
     },
     enabled: open && importMode === 'update' && !!selectedNovelId,
   })
 
   const formatMutation = useMutation({
     mutationFn: async (content: string) => {
-      const token = getToken()
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-
-      const res = await fetch('/api/workshop-format-import/format-import', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          content,
-          module: targetModule,
-        }),
-      })
-      if (!res.ok) throw new Error('格式化失败')
-      return res.json() as Promise<FormattedImportData>
+      const res = await api.workshopFormatImport.format(content, targetModule)
+      return res as FormattedImportData
     },
     onSuccess: (data) => {
       setFormattedPreview([data])
@@ -144,19 +120,8 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
 
   const importMutation = useMutation({
     mutationFn: async (params: { module: string; data: Record<string, unknown>; novelId: string; importMode: string }) => {
-      const token = getToken()
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-
-      const res = await fetch('/api/workshop-import/import', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(params),
-      })
-      if (!res.ok) throw new Error('导入失败')
-      return res.json()
+      const res = await api.workshopImport.import(params)
+      return res
     },
     onSuccess: (data) => {
       if (data.ok) {
