@@ -454,6 +454,18 @@ export const api = {
           checkType: string
           characterResult?: Record<string, unknown>
           coherenceResult?: { score: number; issues: Array<{ severity: string; message: string }> }
+          volumeProgressResult?: {
+            volumeId: string
+            currentChapter: number
+            targetChapter: number | null
+            currentWordCount: number
+            targetWordCount: number | null
+            chapterProgress: number
+            wordProgress: number
+            healthStatus: 'healthy' | 'ahead' | 'behind' | 'critical'
+            risk: 'early_ending' | 'late_ending' | null
+            suggestion: string
+          }
           score: number
           createdAt: number
         }
@@ -466,6 +478,18 @@ export const api = {
           checkType: string
           characterResult?: Record<string, unknown>
           coherenceResult?: { score: number; issues: Array<{ severity: string; message: string }> }
+          volumeProgressResult?: {
+            volumeId: string
+            currentChapter: number
+            targetChapter: number | null
+            currentWordCount: number
+            targetWordCount: number | null
+            chapterProgress: number
+            wordProgress: number
+            healthStatus: 'healthy' | 'ahead' | 'behind' | 'critical'
+            risk: 'early_ending' | 'late_ending' | null
+            suggestion: string
+          }
           score: number
           createdAt: number
         }>

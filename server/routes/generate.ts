@@ -198,9 +198,33 @@ router.post('/summary', zValidator('json', z.object({
       completion_tokens: 0,
     })
 
+    await logGeneration(c.env, {
+      novelId,
+      chapterId,
+      stage: 'auto_summary',
+      modelId: 'N/A',
+      promptTokens: 0,
+      completionTokens: 0,
+      durationMs: 0,
+      status: 'success',
+      contextSnapshot: JSON.stringify({ enabled: true, manual: true }),
+    })
+
     return c.json({ ok: true, message: 'Summary generation triggered' })
   } catch (error) {
     console.error('Manual summary failed:', error)
+
+    await logGeneration(c.env, {
+      novelId,
+      chapterId,
+      stage: 'auto_summary',
+      modelId: 'N/A',
+      durationMs: 0,
+      status: 'error',
+      errorMsg: (error as Error).message,
+      contextSnapshot: JSON.stringify({ enabled: true, manual: true, error: (error as Error).message }),
+    })
+
     return c.json(
       { error: 'Failed to generate summary', details: (error as Error).message },
       500
@@ -450,7 +474,7 @@ router.post('/volume-progress-check', zValidator('json', z.object({
       chapterId,
       checkType: 'volume_progress',
       status: 'success',
-      coherenceResult: result,
+      volumeProgressResult: result,
       issuesCount: result.healthStatus === 'critical' ? 1 : 0,
     })
 

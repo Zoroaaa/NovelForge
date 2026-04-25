@@ -386,11 +386,12 @@ export const checkLogs = sqliteTable('check_logs', {
   id: id(),
   novelId: text('novel_id').notNull(),
   chapterId: text('chapter_id').notNull(),
-  checkType: text('check_type').notNull(), // 'character_consistency' | 'chapter_coherence' | 'combined'
+  checkType: text('check_type').notNull(), // 'character_consistency' | 'chapter_coherence' | 'combined' | 'volume_progress'
   score: integer('score').notNull().default(100),
   status: text('status').notNull().default('success'), // 'success' | 'failed' | 'error'
   characterResult: text('character_result'), // JSON
   coherenceResult: text('coherence_result'), // JSON
+  volumeProgressResult: text('volume_progress_result'), // JSON: 卷完成度检查结果
   issuesCount: integer('issues_count').notNull().default(0),
   errorMessage: text('error_message'),
   createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),

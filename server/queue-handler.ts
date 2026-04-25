@@ -6,6 +6,7 @@ import { triggerAutoSummary } from './services/agent'
 import { detectPowerLevelBreakthrough } from './services/powerLevel'
 import { extractForeshadowingFromChapter } from './services/foreshadowing'
 import { checkCharacterConsistency } from './services/agent/consistency'
+import { checkChapterCoherence } from './services/agent/coherence'
 import { checkVolumeProgress } from './services/agent/volumeProgress'
 import { logGeneration } from './services/agent/logging'
 import { saveCheckLog } from './services/agent/checkLogService'
@@ -60,21 +61,51 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
     }
 
     case 'post_process_chapter': {
-      // 架构优化: 异步执行章节后处理（摘要/伏笔/境界检测/检查），避免阻塞SSE流
+      // ============================================================
+      // 章节后处理（异步模式，通过队列执行）
+      // 与 generation.ts 的同步模式 setTimeout 部分保持一致
+      // ============================================================
       const { chapterId, novelId, enableAutoSummary, usage } = msg.payload
 
+      // ----- 步骤1：自动摘要 -----
       if (enableAutoSummary) {
         try {
-          await triggerAutoSummary(env, chapterId, novelId, usage || { prompt_tokens: 0, completion_tokens: 0 })
-          console.log(`✅ [Queue] Auto summary completed for chapter ${chapterId}`)
+          const usage = msg.payload.usage || { prompt_tokens: 0, completion_tokens: 0 }
+          await triggerAutoSummary(env, chapterId, novelId, usage)
+          console.log(`✅ [Queue] 自动摘要完成 for chapter ${chapterId}`)
+
+          // 写入生成日志
+          await logGeneration(env, {
+            novelId,
+            chapterId,
+            stage: 'auto_summary',
+            modelId: 'N/A',
+            promptTokens: usage.prompt_tokens,
+            completionTokens: usage.completion_tokens,
+            durationMs: 0,
+            status: 'success',
+            contextSnapshot: JSON.stringify({ enabled: true }),
+          })
         } catch (summaryError) {
-          console.warn('[Queue] Auto-summary failed (non-critical):', summaryError)
+          console.warn('[Queue] 自动摘要失败（非致命）:', summaryError)
+
+          await logGeneration(env, {
+            novelId,
+            chapterId,
+            stage: 'auto_summary',
+            modelId: 'N/A',
+            durationMs: 0,
+            status: 'error',
+            errorMsg: (summaryError as Error).message,
+            contextSnapshot: JSON.stringify({ enabled: true, error: (summaryError as Error).message }),
+          })
         }
       }
 
+      // ----- 步骤2：伏笔提取 -----
       try {
         const foreshadowingResult = await extractForeshadowingFromChapter(env, chapterId, novelId)
-        console.log(`📝 [Queue] Foreshadowing: ${foreshadowingResult.newForeshadowing.length} new, ${foreshadowingResult.resolvedForeshadowingIds.length} resolved, ${foreshadowingResult.progresses?.length || 0} progressed`)
+        console.log(`📝 [Queue] 伏笔提取: ${foreshadowingResult.newForeshadowing.length} 个新伏笔, ${foreshadowingResult.resolvedForeshadowingIds.length} 个已解决`)
 
         await logGeneration(env, {
           novelId,
@@ -90,7 +121,7 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
           status: 'success',
         })
       } catch (foreshadowError) {
-        console.warn('[Queue] Foreshadowing extraction failed (non-critical):', foreshadowError)
+        console.warn('[Queue] 伏笔提取失败（非致命）:', foreshadowError)
 
         await logGeneration(env, {
           novelId,
@@ -104,9 +135,10 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
         })
       }
 
+      // ----- 步骤3：境界突破检测 -----
       try {
         const powerLevelResult = await detectPowerLevelBreakthrough(env, chapterId, novelId)
-        console.log(`⚡ [Queue] Power level: ${powerLevelResult.updates.length} breakthroughs detected`)
+        console.log(`⚡ [Queue] 境界检测: 检测到 ${powerLevelResult.updates.length} 个突破`)
 
         await logGeneration(env, {
           novelId,
@@ -126,7 +158,7 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
           status: 'success',
         })
       } catch (powerLevelError) {
-        console.warn('[Queue] Power level detection failed (non-critical):', powerLevelError)
+        console.warn('[Queue] 境界检测失败（非致命）:', powerLevelError)
 
         await logGeneration(env, {
           novelId,
@@ -140,6 +172,7 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
         })
       }
 
+      // ----- 步骤4：角色一致性检查 -----
       try {
         const db = drizzle(env.DB)
         const chapterData = await db.select({ volumeId: chapters.volumeId }).from(chapters).where(eq(chapters.id, chapterId)).get()
@@ -150,7 +183,7 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
 
           if (characterIds.length > 0) {
             const consistencyResult = await checkCharacterConsistency(env, { chapterId, characterIds })
-            console.log(`🎭 [Queue] Character consistency: ${consistencyResult.conflicts.length} conflicts, ${consistencyResult.warnings.length} warnings`)
+            console.log(`🎭 [Queue] 角色一致性: ${consistencyResult.conflicts.length} 个冲突, ${consistencyResult.warnings.length} 个警告`)
 
             await saveCheckLog(env, {
               novelId,
@@ -163,7 +196,7 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
           }
         }
       } catch (consistencyError) {
-        console.warn('[Queue] Character consistency check failed (non-critical):', consistencyError)
+        console.warn('[Queue] 角色一致性检查失败（非致命）:', consistencyError)
 
         await saveCheckLog(env, {
           novelId,
@@ -175,9 +208,36 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
         })
       }
 
+      // ----- 步骤5：章节连贯性检查 -----
+      try {
+        const coherenceResult = await checkChapterCoherence(env, chapterId, novelId)
+        console.log(`🔗 [Queue] 章节连贯性: score=${coherenceResult.score}, issues=${coherenceResult.issues?.length || 0}`)
+
+        await saveCheckLog(env, {
+          novelId,
+          chapterId,
+          checkType: 'chapter_coherence',
+          status: 'success',
+          coherenceResult: coherenceResult,
+          issuesCount: coherenceResult.issues?.length || 0,
+        })
+      } catch (coherenceError) {
+        console.warn('[Queue] 章节连贯性检查失败（非致命）:', coherenceError)
+
+        await saveCheckLog(env, {
+          novelId,
+          chapterId,
+          checkType: 'chapter_coherence',
+          status: 'error',
+          errorMessage: (coherenceError as Error).message,
+          issuesCount: 0,
+        })
+      }
+
+      // ----- 步骤6：卷完成程度检查 -----
       try {
         const volumeProgressResult = await checkVolumeProgress(env, chapterId, novelId)
-        console.log(`📊 [Queue] Volume progress: status=${volumeProgressResult.healthStatus}, risk=${volumeProgressResult.risk}`)
+        console.log(`📊 [Queue] 卷完成程度: status=${volumeProgressResult.healthStatus}, risk=${volumeProgressResult.risk}`)
 
         await saveCheckLog(env, {
           novelId,
@@ -188,7 +248,7 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
           issuesCount: volumeProgressResult.healthStatus === 'critical' ? 1 : 0,
         })
       } catch (progressError) {
-        console.warn('[Queue] Volume progress check failed (non-critical):', progressError)
+        console.warn('[Queue] 卷进度检查失败（非致命）:', progressError)
 
         await saveCheckLog(env, {
           novelId,
@@ -200,7 +260,7 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
         })
       }
 
-      console.log(`✅ [Queue] Post-processing completed for chapter ${chapterId}`)
+      console.log(`✅ [Queue] 章节后处理全部完成 for chapter ${chapterId}`)
       break
     }
 

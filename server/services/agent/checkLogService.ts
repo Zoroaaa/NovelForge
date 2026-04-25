@@ -13,8 +13,9 @@ export interface CheckLogData {
   checkType: 'character_consistency' | 'chapter_coherence' | 'combined' | 'volume_progress'
   score?: number
   status: 'success' | 'failed' | 'error'
-  characterResult?: any // 角色一致性检查结果
-  coherenceResult?: any // 连贯性检查结果 / 卷完成程度检查结果
+  characterResult?: any
+  coherenceResult?: any
+  volumeProgressResult?: any
   issuesCount?: number
   errorMessage?: string
 }
@@ -35,6 +36,7 @@ export async function saveCheckLog(env: Env, data: CheckLogData): Promise<string
     status: data.status,
     characterResult: data.characterResult ? JSON.stringify(data.characterResult) : null,
     coherenceResult: data.coherenceResult ? JSON.stringify(data.coherenceResult) : null,
+    volumeProgressResult: data.volumeProgressResult ? JSON.stringify(data.volumeProgressResult) : null,
     issuesCount: data.issuesCount ?? 0,
     errorMessage: data.errorMessage || null,
   })
@@ -76,6 +78,7 @@ export async function getLatestCheckLog(
     ...result,
     characterResult: result.characterResult ? JSON.parse(result.characterResult) : null,
     coherenceResult: result.coherenceResult ? JSON.parse(result.coherenceResult) : null,
+    volumeProgressResult: result.volumeProgressResult ? JSON.parse(result.volumeProgressResult) : null,
   }
 }
 
@@ -114,5 +117,6 @@ export async function getCheckLogHistory(
     ...log,
     characterResult: log.characterResult ? JSON.parse(log.characterResult) : null,
     coherenceResult: log.coherenceResult ? JSON.parse(log.coherenceResult) : null,
+    volumeProgressResult: log.volumeProgressResult ? JSON.parse(log.volumeProgressResult) : null,
   }))
 }

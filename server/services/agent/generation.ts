@@ -3,7 +3,7 @@
  * @description Agent章节生成主入口
  */
 import { drizzle } from 'drizzle-orm/d1'
-import { chapters, volumes as volumesTable } from '../../db/schema'
+import { chapters, characters, volumes as volumesTable } from '../../db/schema'
 import { eq, desc, sql, and } from 'drizzle-orm'
 import type { Env } from '../../lib/types'
 import { buildChapterContext, type ContextBundle } from '../contextBuilder'
@@ -13,6 +13,7 @@ import { triggerAutoSummary } from './summarizer'
 import { extractForeshadowingFromChapter } from '../foreshadowing'
 import { detectPowerLevelBreakthrough } from '../powerLevel'
 import { checkChapterCoherence } from './coherence'
+import { checkCharacterConsistency } from './consistency'
 import { checkVolumeProgress } from './volumeProgress'
 import { runReActLoop } from './reactLoop'
 import { buildMessages } from './messages'
@@ -101,13 +102,50 @@ export async function generateChapter(
       })
       LOG_STYLES.SUCCESS('后处理任务已入队（异步模式）')
     } else {
+      // ============================================================
+      // 章节后处理（同步模式，无队列时直接执行）
+      // 与 queue-handler.ts 的 post_process_chapter case 保持一致
+      // ============================================================
       LOG_STYLES.TASK_QUEUE_UNAVAILABLE()
+
+      // ----- 步骤1：自动摘要 -----
       if (agentConfig.enableAutoSummary) {
-        await triggerAutoSummary(env, chapterId, novelId, {
+        const usage = {
           prompt_tokens: usageResult.promptTokens,
           completion_tokens: usageResult.completionTokens,
-        })
+        }
+        try {
+          await triggerAutoSummary(env, chapterId, novelId, usage)
+          LOG_STYLES.SUCCESS(`📝 [Sync] 自动摘要完成`)
+
+          await logGeneration(env, {
+            novelId,
+            chapterId,
+            stage: 'auto_summary',
+            modelId: llmConfig.modelId,
+            promptTokens: usage.prompt_tokens,
+            completionTokens: usage.completion_tokens,
+            durationMs: 0,
+            status: 'success',
+            contextSnapshot: JSON.stringify({ enabled: true }),
+          })
+        } catch (summaryError) {
+          LOG_STYLES.WARN(`📝 [Sync] 自动摘要失败: ${summaryError}`)
+
+          await logGeneration(env, {
+            novelId,
+            chapterId,
+            stage: 'auto_summary',
+            modelId: llmConfig.modelId,
+            durationMs: 0,
+            status: 'error',
+            errorMsg: (summaryError as Error).message,
+            contextSnapshot: JSON.stringify({ enabled: true, error: (summaryError as Error).message }),
+          })
+        }
       }
+
+      // ----- 步骤2：伏笔提取 -----
       try {
         const foreshadowingResult = await extractForeshadowingFromChapter(env, chapterId, novelId)
         if (foreshadowingResult.newForeshadowing.length > 0 || foreshadowingResult.resolvedForeshadowingIds.length > 0) {
@@ -146,6 +184,8 @@ export async function generateChapter(
           result: `⚠️ 伏笔提取失败: ${(foreshadowError as Error).message}`,
         })
       }
+
+      // ----- 步骤3：境界突破检测 -----
       try {
         const powerLevelResult = await detectPowerLevelBreakthrough(env, chapterId, novelId)
         if (powerLevelResult.hasBreakthrough) {
@@ -190,7 +230,47 @@ export async function generateChapter(
       }
     }
 
+    // ============================================================
+    // 章节后处理检查（同步模式，无队列时执行）
+    // 与 queue-handler.ts 的 post_process_chapter case 保持一致
+    // ============================================================
     setTimeout(async () => {
+      // ----- 步骤4：角色一致性检查 -----
+      try {
+        const db = drizzle(env.DB)
+        const chapterData = await db.select({ volumeId: chapters.volumeId }).from(chapters).where(eq(chapters.id, chapterId)).get()
+
+        if (chapterData?.volumeId) {
+          const charList = await db.select({ id: characters.id }).from(characters).where(eq(characters.novelId, novelId)).limit(10).all()
+          const characterIds = charList.map(c => c.id)
+
+          if (characterIds.length > 0) {
+            const consistencyResult = await checkCharacterConsistency(env, { chapterId, characterIds })
+            LOG_STYLES.SUCCESS(`🎭 [Sync] 角色一致性: ${consistencyResult.conflicts.length} 个冲突, ${consistencyResult.warnings.length} 个警告`)
+
+            await saveCheckLog(env, {
+              novelId,
+              chapterId,
+              checkType: 'character_consistency',
+              status: 'success',
+              characterResult: consistencyResult,
+              issuesCount: consistencyResult.conflicts.length + consistencyResult.warnings.length,
+            })
+          }
+        }
+      } catch (consistencyError) {
+        LOG_STYLES.WARN(`角色一致性检查失败（非致命）: ${consistencyError}`)
+        await saveCheckLog(env, {
+          novelId,
+          chapterId,
+          checkType: 'character_consistency',
+          status: 'error',
+          errorMessage: (consistencyError as Error).message,
+          issuesCount: 0,
+        })
+      }
+
+      // ----- 步骤5：章节连贯性检查 -----
       try {
         const coherenceResult = await checkChapterCoherence(env, chapterId, novelId)
         if (coherenceResult.hasIssues) {
@@ -217,6 +297,7 @@ export async function generateChapter(
         })
       }
 
+      // ----- 步骤6：卷完成程度检查 -----
       try {
         const volumeProgressResult = await checkVolumeProgress(env, chapterId, novelId)
         if (volumeProgressResult.healthStatus !== 'healthy') {

@@ -9,6 +9,7 @@ import { eq, and, isNull, desc, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { novels, masterOutline, novelSettings, chapters, characters, foreshadowing, writingRules, volumes } from '../db/schema'
 import { searchSimilar, embedText, searchSimilarMulti, ACTIVE_SOURCE_TYPES } from '../services/embedding'
+import { logGeneration } from '../services/agent/logging'
 
 export interface MCPTool {
   name: string
@@ -434,9 +435,40 @@ export async function handleToolCall(
     case 'generateChapterSummary': {
       const { chapterId } = args
       if (!chapterId) throw new Error('chapterId is required')
+
+      const chapter = await db.select({ novelId: chapters.novelId }).from(chapters).where(eq(chapters.id, chapterId)).get()
+      if (!chapter) throw new Error('Chapter not found')
+
       const { triggerAutoSummary } = await import('../services/agent')
-      await triggerAutoSummary(env, chapterId, '', { prompt_tokens: 0, completion_tokens: 0 })
-      return { ok: true, message: 'Summary generation triggered', chapterId }
+      try {
+        await triggerAutoSummary(env, chapterId, chapter.novelId, { prompt_tokens: 0, completion_tokens: 0 })
+
+        await logGeneration(env, {
+          novelId: chapter.novelId,
+          chapterId,
+          stage: 'auto_summary',
+          modelId: 'N/A',
+          promptTokens: 0,
+          completionTokens: 0,
+          durationMs: 0,
+          status: 'success',
+          contextSnapshot: JSON.stringify({ enabled: true, mcp: true }),
+        })
+
+        return { ok: true, message: 'Summary generation triggered', chapterId }
+      } catch (error) {
+        await logGeneration(env, {
+          novelId: chapter.novelId,
+          chapterId,
+          stage: 'auto_summary',
+          modelId: 'N/A',
+          durationMs: 0,
+          status: 'error',
+          errorMsg: (error as Error).message,
+          contextSnapshot: JSON.stringify({ enabled: true, mcp: true, error: (error as Error).message }),
+        })
+        throw error
+      }
     }
 
     case 'bulkIndexNovels': {

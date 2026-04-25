@@ -322,8 +322,8 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
 
     try {
       const cachedData = await api.generate.getCheckLogsLatest(chapterId!, 'volume_progress')
-      if (cachedData.log && cachedData.log.coherenceResult) {
-        setVolumeReport(cachedData.log.coherenceResult)
+      if (cachedData.log && cachedData.log.volumeProgressResult) {
+        setVolumeReport(cachedData.log.volumeProgressResult)
         setVolumeFromCache(true)
         setVolumeCachedAt(cachedData.log.createdAt)
         setVolumeChecking(false)
@@ -1316,7 +1316,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                           </>
                         )}
 
-                        {selectedHistoryLog.checkType === 'volume_progress' && (
+                        {selectedHistoryLog.checkType === 'volume_progress' && selectedHistoryLog.volumeProgressResult && (
                           <section className="space-y-3">
                             <header className="flex items-center gap-2.5 pb-2 border-b border-blue-200/50 dark:border-blue-800/30">
                               <CheckCircle className="h-4 w-4 text-blue-600" />
@@ -1326,25 +1326,25 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                               <div className="grid grid-cols-2 gap-2 text-xs">
                                 <div className="p-2 bg-muted/30 rounded">
                                   <span className="text-muted-foreground">当前章节：</span>
-                                  <span className="font-medium ml-1">第 {selectedHistoryLog.coherenceResult?.currentChapter || '-'} 章</span>
+                                  <span className="font-medium ml-1">第 {selectedHistoryLog.volumeProgressResult.currentChapter || '-'} 章</span>
                                 </div>
                                 <div className="p-2 bg-muted/30 rounded">
                                   <span className="text-muted-foreground">目标章节：</span>
-                                  <span className="font-medium ml-1">{selectedHistoryLog.coherenceResult?.targetChapter || '未设定'} 章</span>
+                                  <span className="font-medium ml-1">{selectedHistoryLog.volumeProgressResult.targetChapter || '未设定'} 章</span>
                                 </div>
                                 <div className="p-2 bg-muted/30 rounded">
                                   <span className="text-muted-foreground">当前字数：</span>
-                                  <span className="font-medium ml-1">{selectedHistoryLog.coherenceResult?.currentWordCount ? `${(selectedHistoryLog.coherenceResult.currentWordCount / 10000).toFixed(1)} 万` : '-'}</span>
+                                  <span className="font-medium ml-1">{selectedHistoryLog.volumeProgressResult.currentWordCount ? `${(selectedHistoryLog.volumeProgressResult.currentWordCount / 10000).toFixed(1)} 万` : '-'}</span>
                                 </div>
                                 <div className="p-2 bg-muted/30 rounded">
                                   <span className="text-muted-foreground">目标字数：</span>
-                                  <span className="font-medium ml-1">{selectedHistoryLog.coherenceResult?.targetWordCount ? `${(selectedHistoryLog.coherenceResult.targetWordCount / 10000).toFixed(0)} 万` : '未设定'}</span>
+                                  <span className="font-medium ml-1">{selectedHistoryLog.volumeProgressResult.targetWordCount ? `${(selectedHistoryLog.volumeProgressResult.targetWordCount / 10000).toFixed(0)} 万` : '未设定'}</span>
                                 </div>
                               </div>
-                              {selectedHistoryLog.coherenceResult?.suggestion && (
+                              {selectedHistoryLog.volumeProgressResult.suggestion && (
                                 <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded text-xs">
                                   <div className="text-xs text-muted-foreground mb-1">AI 建议：</div>
-                                  {selectedHistoryLog.coherenceResult.suggestion}
+                                  {selectedHistoryLog.volumeProgressResult.suggestion}
                                 </div>
                               )}
                             </div>
