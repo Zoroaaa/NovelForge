@@ -130,7 +130,7 @@ export default function NovelsPage() {
 
   const handleSaveEdit = (
     id: string,
-    data: { title: string; description?: string; genre?: string }
+    data: { title: string; description?: string; genre?: string; targetWordCount?: number; targetChapterCount?: number }
   ) => {
     api
       .novels.update(id, data)
@@ -442,6 +442,8 @@ export default function NovelsPage() {
           initialTitle={editingNovel.title}
           initialDescription={editingNovel.description || ''}
           initialGenre={editingNovel.genre || ''}
+          initialTargetWordCount={editingNovel.targetWordCount}
+          initialTargetChapterCount={editingNovel.targetChapterCount}
           open={editDialogOpen}
           onOpenChange={setEditDialogOpen}
           onSave={handleSaveEdit}

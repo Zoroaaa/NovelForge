@@ -14,6 +14,7 @@ export interface Novel {
   wordCount: number
   chapterCount: number
   targetWordCount: number | null
+  targetChapterCount: number | null
   createdAt: number
   updatedAt: number
   deletedAt: number | null
@@ -132,7 +133,7 @@ export interface VectorIndexRecord {
 }
 
 // Input types
-export type NovelInput = Pick<Novel, 'title'> & Partial<Pick<Novel, 'description' | 'genre' | 'status' | 'targetWordCount'>>
+export type NovelInput = Pick<Novel, 'title'> & Partial<Pick<Novel, 'description' | 'genre' | 'status' | 'targetWordCount' | 'targetChapterCount'>>
 
 // v2.0: OutlineInput 已废弃，使用 MasterOutline / NovelSetting / VolumeInput 替代
 

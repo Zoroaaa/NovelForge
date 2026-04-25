@@ -38,6 +38,7 @@ const CreateSchema = z.object({
   notes: z.string().optional().nullable(),
   status: z.string().optional(),
   targetWordCount: z.number().optional().nullable(),
+  targetChapterCount: z.number().optional().nullable(),
 })
 
 /**

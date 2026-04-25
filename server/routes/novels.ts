@@ -20,6 +20,7 @@ const CreateSchema = z.object({
   genre: z.string().optional(),
   status: z.enum(['draft', 'writing', 'completed', 'archived']).optional(),
   targetWordCount: z.number().optional(),
+  targetChapterCount: z.number().optional(),
 })
 
 /**

@@ -37,6 +37,7 @@ export function CreateNovelDialog({ onCreate }: CreateNovelDialogProps) {
   const [description, setDescription] = useState('')
   const [genre, setGenre] = useState('')
   const [targetWordCount, setTargetWordCount] = useState('')
+  const [targetChapterCount, setTargetChapterCount] = useState('')
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -45,12 +46,14 @@ export function CreateNovelDialog({ onCreate }: CreateNovelDialogProps) {
       title: title.trim(),
       description: description.trim() || undefined,
       genre: genre || undefined,
-      targetWordCount: targetWordCount ? parseInt(targetWordCount, 10) : undefined
+      targetWordCount: targetWordCount ? parseInt(targetWordCount, 10) : undefined,
+      targetChapterCount: targetChapterCount ? parseInt(targetChapterCount, 10) : undefined,
     })
     setTitle('')
     setDescription('')
     setGenre('')
     setTargetWordCount('')
+    setTargetChapterCount('')
     setOpen(false)
   }
 
@@ -117,6 +120,18 @@ export function CreateNovelDialog({ onCreate }: CreateNovelDialogProps) {
               value={targetWordCount}
               onChange={(e) => setTargetWordCount(e.target.value)}
               placeholder="输入目标总字数（选填）"
+              min="0"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="target-chapter-count">预计总章数</Label>
+            <Input
+              id="target-chapter-count"
+              type="number"
+              value={targetChapterCount}
+              onChange={(e) => setTargetChapterCount(e.target.value)}
+              placeholder="输入预计总章数（选填）"
               min="0"
             />
           </div>

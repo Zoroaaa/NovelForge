@@ -214,6 +214,9 @@ export function NovelCard({ novel, onEdit, onDelete, onStatusChange, onWorkshopO
               <BookOpen className="h-3.5 w-3.5" />
               <span className="font-medium">{novel.chapterCount}</span>
               <span>章</span>
+              {novel.targetChapterCount && (
+                <span className="text-primary/70">/ 共{novel.targetChapterCount}章</span>
+              )}
             </span>
           </div>
 

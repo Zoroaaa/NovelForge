@@ -31,6 +31,7 @@ export const novels = sqliteTable('novels', {
   wordCount: integer('word_count').notNull().default(0),
   chapterCount: integer('chapter_count').notNull().default(0),
   targetWordCount: integer('target_word_count'),
+  targetChapterCount: integer('target_chapter_count'),
   ...timestamps,
   deletedAt: integer('deleted_at'),
 }, (table) => [

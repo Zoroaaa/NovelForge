@@ -24,9 +24,10 @@ interface EditNovelDialogProps {
   initialDescription: string
   initialGenre: string
   initialTargetWordCount?: number | null
+  initialTargetChapterCount?: number | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSave: (id: string, data: { title: string; description?: string; genre?: string; targetWordCount?: number }) => void
+  onSave: (id: string, data: { title: string; description?: string; genre?: string; targetWordCount?: number; targetChapterCount?: number }) => void
 }
 
 export function EditNovelDialog({ 
@@ -35,6 +36,7 @@ export function EditNovelDialog({
   initialDescription,
   initialGenre,
   initialTargetWordCount,
+  initialTargetChapterCount,
   open, 
   onOpenChange, 
   onSave 
@@ -43,6 +45,7 @@ export function EditNovelDialog({
   const [description, setDescription] = useState(initialDescription)
   const [genre, setGenre] = useState(initialGenre)
   const [targetWordCount, setTargetWordCount] = useState(initialTargetWordCount?.toString() || '')
+  const [targetChapterCount, setTargetChapterCount] = useState(initialTargetChapterCount?.toString() || '')
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -51,7 +54,8 @@ export function EditNovelDialog({
       title: title.trim(), 
       description: description.trim() || undefined, 
       genre: genre || undefined,
-      targetWordCount: targetWordCount ? parseInt(targetWordCount, 10) : undefined
+      targetWordCount: targetWordCount ? parseInt(targetWordCount, 10) : undefined,
+      targetChapterCount: targetChapterCount ? parseInt(targetChapterCount, 10) : undefined,
     })
     onOpenChange(false)
   }
@@ -115,6 +119,18 @@ export function EditNovelDialog({
               value={targetWordCount}
               onChange={(e) => setTargetWordCount(e.target.value)}
               placeholder="输入目标总字数（选填）"
+              min="0"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-target-chapter-count">预计总章数</Label>
+            <Input
+              id="edit-target-chapter-count"
+              type="number"
+              value={targetChapterCount}
+              onChange={(e) => setTargetChapterCount(e.target.value)}
+              placeholder="输入预计总章数（选填）"
               min="0"
             />
           </div>

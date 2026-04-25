@@ -46,6 +46,7 @@ export function CharacterList({ novelId }: CharacterListProps) {
   const [aliases, setAliases] = useState('')
   const [powerLevel, setPowerLevel] = useState('')
   const [attributes, setAttributes] = useState('')
+  const [imageR2Key, setImageR2Key] = useState<string | null>(null)
 
   const { data: characters, isLoading } = useQuery({
     queryKey: ['characters', novelId],
@@ -96,6 +97,7 @@ export function CharacterList({ novelId }: CharacterListProps) {
     setAliases('')
     setPowerLevel('')
     setAttributes('')
+    setImageR2Key(null)
   }
 
   const handleCreate = (e: React.FormEvent) => {
@@ -130,6 +132,7 @@ export function CharacterList({ novelId }: CharacterListProps) {
     setRole(character.role || 'supporting')
     setDescription(character.description || '')
     setAliases(character.aliases || '')
+    setImageR2Key(character.imageR2Key || null)
     let parsedPowerLevel = ''
     if (character.powerLevel) {
       try {
@@ -190,6 +193,7 @@ export function CharacterList({ novelId }: CharacterListProps) {
                 <CharacterImageUpload
                   characterId={editingId || 'temp'}
                   characterName={name || '新角色'}
+                  currentImageR2Key={imageR2Key}
                   onUploadSuccess={() => {}}
                   onAnalysisComplete={handleAnalysisComplete}
                 />
