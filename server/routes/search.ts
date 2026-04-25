@@ -5,8 +5,6 @@
  * @modified 2026-04-21 - 添加规范化注释
  */
 import { Hono } from 'hono'
-import { drizzle } from 'drizzle-orm/d1'
-import { sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { logGeneration } from '../services/agent/logging'
 
@@ -22,7 +20,6 @@ const router = new Hono<{ Bindings: Env }>()
  * @throws {400} 查询参数过短
  */
 router.get('/', async (c) => {
-  const db = drizzle(c.env.DB)
   const q = c.req.query('q')
   const novelId = c.req.query('novelId')
   const limit = parseInt(c.req.query('limit') || '20')
@@ -32,41 +29,18 @@ router.get('/', async (c) => {
   }
 
   try {
-    const rows = await db
-      .select({
-        id: c.env.DB.prepare(`
-          SELECT 
-            c.id, c.novelId, c.title, c.chapterNumber, c.summary,
-            substr(c.content, 
-              instr(lower(c.content), lower(?)) - 30, 
-              120
-            ) as snippet,
-            length(replace(lower(c.content), lower(?), '')) - length(c.content) as rank
-          FROM chapters c
-          WHERE c.novelId = ?2
-            AND c.deletedAt IS NULL
-            AND c.content IS NOT NULL
-            AND instr(lower(c.content), lower(?1)) > 0
-          ORDER BY length(c.content) - (length(replace(lower(c.content), lower(?1), ''))) DESC
-          LIMIT ?3
-        `)
-          .bind(q, novelId || '', q, limit)
-          .raw() as any,
-      })
-      .from(sql`SELECT 1`)
-
     const results = await c.env.DB
       .prepare(
-        `SELECT 
-          c.id, c.novelId, c.title, c.chapterNumber, c.summary,
+        `SELECT
+          c.id, c.novel_id, c.title, c.chapter_number, c.summary,
           CASE
             WHEN instr(lower(c.content), lower(?)) > 0
             THEN substr(c.content, MAX(1, instr(lower(c.content), lower(?)) - 30), 120)
             ELSE ''
           END as snippet
         FROM chapters c
-        WHERE c.novelId = ?
-          AND c.deletedAt IS NULL
+        WHERE c.novel_id = ?
+          AND c.deleted_at IS NULL
           AND c.content IS NOT NULL
           AND instr(lower(c.content), lower(?)) > 0
         ORDER BY LENGTH(c.content) - (LENGTH(REPLACE(LOWER(c.content), LOWER(?), ''))) DESC
@@ -96,9 +70,9 @@ router.get('/', async (c) => {
       total: resultCount,
       results: (results.results || []).map((r: any) => ({
         id: r.id,
-        novelId: r.novelId,
+        novelId: r.novel_id,
         title: r.title,
-        chapterNumber: r.chapterNumber,
+        chapterNumber: r.chapter_number,
         summary: r.summary,
         snippet: r.snippet,
       })),

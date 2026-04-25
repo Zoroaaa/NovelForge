@@ -376,7 +376,7 @@ export const api = {
         chapterTitle?: string
         summary?: string
         error?: string
-      }>('/api/generate/next-chapter', { method: 'POST', body: j(body), timeout: 120000 }),
+      }>('/api/generate/next-chapter', { method: 'POST', body: j(body), timeout: 300000 }),
     masterOutlineSummary: (body: { novelId: string }) =>
       req<{
         ok: boolean
@@ -388,7 +388,7 @@ export const api = {
         ok: boolean
         summary?: string
         error?: string
-      }>('/api/generate/volume-summary', { method: 'POST', body: j(body), timeout: 120000 }),
+      }>('/api/generate/volume-summary', { method: 'POST', body: j(body), timeout: 300000 }),
     previewContext: (novelId: string, chapterId: string) =>
       req<{
         ok: boolean

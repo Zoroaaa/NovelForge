@@ -176,7 +176,7 @@ export async function exportAsTxt(env: Env, options: ExportOptions): Promise<Blo
 
 /**
  * 导出为EPUB格式
- * @description 使用epub-gen-memory库生成EPUB电子书
+ * @description 使用JSZip直接构建EPUB电子书，避免使用有eval()问题的库
  * @param {Env} env - 环境变量对象
  * @param {ExportOptions} options - 导出选项
  * @returns {Promise<Blob>} EPUB文件Blob
@@ -184,7 +184,7 @@ export async function exportAsTxt(env: Env, options: ExportOptions): Promise<Blo
  */
 export async function exportAsEpub(env: Env, options: ExportOptions): Promise<Blob> {
   try {
-    const EpubGenMemory = (await import('epub-gen-memory')).default
+    const JSZip = (await import('jszip')).default
     const db = drizzle(env.DB)
     const data = await loadNovelData(db, options)
 
@@ -192,26 +192,167 @@ export async function exportAsEpub(env: Env, options: ExportOptions): Promise<Bl
       throw new Error('没有可导出的章节')
     }
 
-    const content = data.chapters.map(ch => ({
-      title: ch.title,
-      content: ch.content || '<p>（暂无内容）</p>',
-    }))
+    const zip = new JSZip()
+    const epubId = `novel_${Date.now()}`
+    const chapterFiles: string[] = []
 
-    const epubOption: any = {
-      title: data.title,
-      author: 'NovelForge',
-      description: data.description || '',
-      publisher: 'NovelForge',
-      css: `
-        body { font-family: serif; font-size: 16px; line-height: 1.8; margin: 1em; }
-        h2 { text-align: center; margin-top: 2em; font-size: 1.5em; }
-        p { text-indent: 2em; margin: 0.5em 0; }
-        blockquote { border-left: 3px solid #ccc; padding-left: 1em; color: #666; }
-      `,
-      version: 3,
-    }
+    zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' })
 
-    const epubBlob = await (EpubGenMemory as any)(content, epubOption)
+    const containerXml = `<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`
+    zip.file('META-INF/container.xml', containerXml)
+
+    const navCss = `body { font-family: "Times New Roman", serif; font-size: 1em; line-height: 1.8; margin: 1em; text-align: justify; }
+h1 { text-align: center; font-size: 1.5em; margin: 2em 0; }
+h2 { text-align: center; font-size: 1.2em; margin: 1.5em 0; }
+p { text-indent: 2em; margin: 0.5em 0; }
+blockquote { border-left: 3px solid #ccc; padding-left: 1em; color: #666; margin: 1em 2em; }
+.chapter-title { text-align: center; font-size: 1.3em; margin: 2em 0; }
+.toc-entry { display: block; margin: 0.5em 0; text-decoration: none; color: #333; }
+`
+
+    zip.file('OEBPS/styles/styles.css', navCss)
+
+    const coverXhtml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head>
+  <title>${escapeXml(data.title)}</title>
+  <link rel="stylesheet" type="text/css" href="styles/styles.css"/>
+</head>
+<body>
+  <div style="text-align: center; padding: 3em;">
+    <h1>${escapeXml(data.title)}</h1>
+    ${data.description ? `<p style="text-indent: 0; margin-top: 2em;">${escapeXml(data.description)}</p>` : ''}
+    ${data.genre ? `<p style="text-indent: 0; margin-top: 1em;">类型：${escapeXml(data.genre)}</p>` : ''}
+  </div>
+</body>
+</html>`
+    zip.file('OEBPS/titlepage.xhtml', coverXhtml)
+
+    data.chapters.forEach((ch, idx) => {
+      const chapterId = `chapter_${idx + 1}`
+      const chapterFilename = `${chapterId}.xhtml`
+      chapterFiles.push(chapterFilename)
+
+      const htmlContent = ch.content || '<p>（暂无内容）</p>'
+      const plainContent = stripHtmlTags(htmlContent)
+        .split('\n')
+        .filter(line => line.trim())
+        .map(line => `<p>${escapeXml(line.trim())}</p>`)
+        .join('\n')
+
+      const chapterXhtml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <title>${escapeXml(ch.title)}</title>
+  <link rel="stylesheet" type="text/css" href="styles/styles.css"/>
+</head>
+<body>
+  <div class="chapter">
+    <h2 class="chapter-title">${escapeXml(ch.title)}</h2>
+    <div class="chapter-content">
+${plainContent}
+    </div>
+  </div>
+</body>
+</html>`
+      zip.file(`OEBPS/${chapterFilename}`, chapterXhtml)
+    })
+
+    const manifestItems = [
+      { id: 'titlepage', href: 'titlepage.xhtml', mediaType: 'application/xhtml+xml' },
+      { id: 'styles', href: 'styles/styles.css', mediaType: 'text/css' },
+      ...chapterFiles.map((file, idx) => ({
+        id: `chapter_${idx + 1}`,
+        href: file,
+        mediaType: 'application/xhtml+xml'
+      }))
+    ]
+
+    const manifest = manifestItems.map(item =>
+      `    <item id="${item.id}" href="${item.href}" media-type="${item.mediaType}"/>`
+    ).join('\n')
+
+    const spineItems = [
+      '<itemref idref="titlepage"/>',
+      ...chapterFiles.map((_, idx) => `<itemref idref="chapter_${idx + 1}"/>`)
+    ]
+
+    const contentOpf = `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="BookId">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>${escapeXml(data.title)}</dc:title>
+    <dc:creator>NovelForge</dc:creator>
+    <dc:language>zh-CN</dc:language>
+    <dc:identifier id="BookId">urn:uuid:${epubId}</dc:identifier>
+    ${data.description ? `<dc:description>${escapeXml(data.description)}</dc:description>` : ''}
+    ${data.genre ? `<dc:subject>${escapeXml(data.genre)}</dc:subject>` : ''}
+    <meta property="dcterms:modified">${new Date().toISOString().split('.')[0]}Z</meta>
+  </metadata>
+  <manifest>
+${manifest}
+  </manifest>
+  <spine>
+${spineItems.join('\n')}
+  </spine>
+</package>`
+    zip.file('OEBPS/content.opf', contentOpf)
+
+    const tocNcx = `<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head>
+    <meta name="dtb:uid" content="urn:uuid:${epubId}"/>
+    <meta name="dtb:depth" content="1"/>
+    <meta name="dtb:totalPageCount" content="0"/>
+    <meta name="dtb:maxPageNumber" content="0"/>
+  </head>
+  <docTitle>
+    <text>${escapeXml(data.title)}</text>
+  </docTitle>
+  <navMap>
+    <navPoint id="titlepage_nav" playOrder="0">
+      <navLabel><text>封面</text></navLabel>
+      <content src="titlepage.xhtml"/>
+    </navPoint>
+${chapterFiles.map((file, idx) => `    <navPoint id="chapter_${idx + 1}_nav" playOrder="${idx + 1}">
+      <navLabel><text>${escapeXml(data.chapters[idx].title)}</text></navLabel>
+      <content src="${file}"/>
+    </navPoint>`).join('\n')}
+  </navMap>
+</ncx>`
+    zip.file('OEBPS/toc.ncx', tocNcx)
+
+    const navXhtml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head>
+  <title>目录</title>
+  <link rel="stylesheet" type="text/css" href="styles/styles.css"/>
+</head>
+<body>
+  <nav epub:type="toc" id="toc">
+    <h1>目录</h1>
+    <ol>
+      <li><a href="titlepage.xhtml">封面</a></li>
+${chapterFiles.map((file, idx) => `      <li><a href="${file}">${escapeXml(data.chapters[idx].title)}</a></li>`).join('\n')}
+    </ol>
+  </nav>
+</body>
+</html>`
+    zip.file('OEBPS/nav.xhtml', navXhtml)
+
+    const epubBlob = await zip.generateAsync({
+      type: 'blob',
+      mimeType: 'application/epub+zip',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 9 }
+    })
 
     if (!epubBlob || !(epubBlob instanceof Blob)) {
       throw new Error('EPUB生成返回了无效的结果')
@@ -220,12 +361,6 @@ export async function exportAsEpub(env: Env, options: ExportOptions): Promise<Bl
     return epubBlob as Blob
   } catch (error) {
     console.error('EPUB generation failed:', error)
-
-    if ((error as Error).message.includes('epub-gen-memory') ||
-        (error as Error).message.includes('Cannot find module')) {
-      throw new Error('EPUB库未正确安装，请运行 npm install epub-gen-memory')
-    }
-
     throw new Error(`EPUB生成失败: ${(error as Error).message}`)
   }
 }
@@ -377,6 +512,15 @@ function escapeHtml(text: string): string {
     "'": '&#039;',
   }
   return text.replace(/[&<>"']/g, (char) => map[char])
+}
+
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
 }
 
 /**

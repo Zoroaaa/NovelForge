@@ -123,7 +123,7 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
     if (!modelId) return
 
     const data = {
-      stage: stage as 'chapter_gen' | 'summary_gen' | 'embedding' | 'analysis' | 'workshop',
+      stage: stage as 'chapter_gen' | 'summary_gen' | 'analysis' | 'workshop',
       provider,
       modelId,
       scope: (novelId ? 'novel' : 'global') as 'global' | 'novel',
@@ -184,9 +184,15 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
   const stageLabels: Record<string, string> = {
     'chapter_gen': '章节生成',
     'summary_gen': '摘要生成',
-    'embedding': '文本嵌入',
     'analysis': '智能分析',
     'workshop': '创作工坊',
+  }
+
+  const stageDescriptions: Record<string, string> = {
+    'chapter_gen': '章节内容生成、章节修复、MCP工具触发',
+    'summary_gen': '章节摘要、总纲摘要、卷摘要、设定摘要',
+    'analysis': '角色一致性、伏笔检测/提取/建议、战力检测/验证、卷进度检查',
+    'workshop': 'AI创作助手对话',
   }
 
   // 小说工作台可用的用途列表（排除全局用途：workshop）
@@ -305,7 +311,7 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
                       </Badge>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {stageLabels[config.stage]} · {config.scope === 'global' ? '全局' : '当前小说'}
+                      {stageLabels[config.stage]} · {stageDescriptions[config.stage]} · {config.scope === 'global' ? '全局' : '当前小说'}
                       {config.apiKey ? ' · Key已配置' : ' · Key未配置'}
                     </div>
                   </div>
@@ -350,19 +356,18 @@ export function ModelConfig({ novelId }: ModelConfigProps) {
       <div className="text-xs text-muted-foreground p-3 bg-muted/50 rounded-lg">
         <p className="font-medium mb-1">配置说明：</p>
         <ul className="list-disc list-inside space-y-0.5">
-          <li>每个用途（章节生成、创作工坊等）只能有一个激活的配置</li>
+          <li>每个用途只能有一个激活的配置</li>
           <li>小说级配置优先于全局配置</li>
           <li>激活的配置会被用于对应的生成任务</li>
+          <li><strong>创作工坊(workshop)</strong>仅支持全局配置，不可在小说工作台中设置</li>
         </ul>
         {novelId && (
           <>
             <p className="font-medium mt-2 mb-1">📖 小说工作台可用用途：</p>
             <ul className="list-disc list-inside space-y-0.5">
-              <li><strong>章节生成(chapter_gen)</strong>：生成小说章节正文内容</li>
-              <li><strong>摘要生成(summary_gen)</strong>：生成章节摘要、总览</li>
-              <li><strong>文本嵌入(embedding)</strong>：向量嵌入、语义搜索</li>
-              <li><strong>智能分析(analysis)</strong>：一致性检查、伏笔检测等</li>
-              <li><strong>创作工坊(workshop)</strong>：对话式创作引擎</li>
+              <li><strong>章节生成(chapter_gen)</strong>：章节内容生成、章节修复、MCP工具触发</li>
+              <li><strong>摘要生成(summary_gen)</strong>：章节摘要、总纲摘要、卷摘要、设定摘要</li>
+              <li><strong>智能分析(analysis)</strong>：角色一致性、伏笔检测/提取/建议、战力检测/验证、卷进度检查</li>
             </ul>
           </>
         )}

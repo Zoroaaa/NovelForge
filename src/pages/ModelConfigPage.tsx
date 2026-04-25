@@ -42,11 +42,10 @@ import {
 } from 'lucide-react'
 
 const STAGE_CONFIG = [
-  { id: 'chapter_gen', label: '章节生成', icon: FileText, description: '小说章节内容生成' },
-  { id: 'summary_gen', label: '摘要生成', icon: FileText, description: '章节摘要、总览生成' },
-  { id: 'embedding', label: '文本嵌入', icon: Brain, description: '向量嵌入、语义搜索' },
-  { id: 'analysis', label: '智能分析', icon: Cpu, description: '一致性检查、伏笔检测等' },
-  { id: 'workshop', label: '创作工坊', icon: MessageSquare, description: 'AI创作助手对话' },
+  { id: 'chapter_gen', label: '章节生成', icon: FileText, description: '章节内容生成、章节修复、MCP工具触发' },
+  { id: 'summary_gen', label: '摘要生成', icon: FileText, description: '章节摘要、总纲摘要、卷摘要、设定摘要' },
+  { id: 'analysis', label: '智能分析', icon: Cpu, description: '角色一致性、伏笔检测/提取/建议、战力检测/验证、卷进度检查' },
+  { id: 'workshop', label: '创作工坊', icon: MessageSquare, description: 'AI创作助手对话（仅全局配置）' },
 ]
 
 export default function ModelConfigPage() {
@@ -145,7 +144,7 @@ export default function ModelConfigPage() {
     if (!modelId) return
 
     const data = {
-      stage: stage as 'chapter_gen' | 'summary_gen' | 'embedding' | 'analysis' | 'workshop',
+      stage: stage as 'chapter_gen' | 'summary_gen' | 'analysis' | 'workshop',
       provider,
       modelId,
       scope: 'global' as const,
@@ -550,7 +549,7 @@ export default function ModelConfigPage() {
                   <MessageSquare className="w-4 h-4 text-purple-500" />
                   <span className="font-semibold">创作工坊 (workshop)</span>
                 </div>
-                <p className="text-xs text-muted-foreground">AI创作助手对话 · 创意工坊页面的对话式创作引擎</p>
+                <p className="text-xs text-muted-foreground">AI创作助手对话，用于创意工坊页面的对话式创作引擎</p>
                 <p className="text-xs text-muted-foreground mt-1">📍 调用位置：/workshop 页面</p>
               </div>
             </div>
@@ -568,7 +567,7 @@ export default function ModelConfigPage() {
                   <FileText className="w-4 h-4 text-blue-500" />
                   <span className="font-semibold">章节生成 (chapter_gen)</span>
                 </div>
-                <p className="text-xs text-muted-foreground">生成小说章节正文内容</p>
+                <p className="text-xs text-muted-foreground">章节内容生成、章节修复、MCP工具触发</p>
                 <p className="text-xs text-muted-foreground mt-1">📍 小说工作台 → 章节编辑</p>
               </div>
 
@@ -577,17 +576,8 @@ export default function ModelConfigPage() {
                   <FileText className="w-4 h-4 text-blue-500" />
                   <span className="font-semibold">摘要生成 (summary_gen)</span>
                 </div>
-                <p className="text-xs text-muted-foreground">生成章节摘要、总览</p>
-                <p className="text-xs text-muted-foreground mt-1">📍 小说工作台 → 章节列表</p>
-              </div>
-
-              <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-blue-100 dark:border-blue-900">
-                <div className="flex items-center gap-2 mb-1">
-                  <Brain className="w-4 h-4 text-blue-500" />
-                  <span className="font-semibold">文本嵌入 (embedding)</span>
-                </div>
-                <p className="text-xs text-muted-foreground">向量嵌入、语义搜索</p>
-                <p className="text-xs text-muted-foreground mt-1">📍 全局搜索、知识库</p>
+                <p className="text-xs text-muted-foreground">章节摘要、总纲摘要、卷摘要、设定摘要</p>
+                <p className="text-xs text-muted-foreground mt-1">📍 小说工作台 → 各实体列表</p>
               </div>
 
               <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-blue-100 dark:border-blue-900">
@@ -595,7 +585,7 @@ export default function ModelConfigPage() {
                   <Cpu className="w-4 h-4 text-blue-500" />
                   <span className="font-semibold">智能分析 (analysis)</span>
                 </div>
-                <p className="text-xs text-muted-foreground">一致性检查、伏笔检测等</p>
+                <p className="text-xs text-muted-foreground">角色一致性、伏笔检测/提取/建议、战力检测/验证、卷进度检查</p>
                 <p className="text-xs text-muted-foreground mt-1">📍 质量检查工具</p>
               </div>
             </div>

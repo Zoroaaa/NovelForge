@@ -192,6 +192,7 @@ export async function buildChapterContext(
     factions: [], artifacts: [], misc: []
   }
   let chapterTypeRules: string[] = []
+  let actualRagQueriesCount = 0
 
   if (queryText && env.VECTORIZE) {
     const queryVector = await embedText(env.AI, queryText)
@@ -212,6 +213,8 @@ export async function buildChapterContext(
         filter: { novelId, sourceType: 'setting' },
       }).catch(() => []),
     ])
+
+    actualRagQueriesCount = 3
 
     // D1: 角色 — RAG 取 ID → DB 批量查完整卡片
     characterCards = await buildCharacterSlotFromDB(db, characterResults, budget.characters)
@@ -293,7 +296,7 @@ export async function buildChapterContext(
     debug: {
       totalTokenEstimate,
       slotBreakdown,
-      ragQueriesCount: queryText && env.VECTORIZE ? 2 : 0,
+      ragQueriesCount: queryText && env.VECTORIZE ? actualRagQueriesCount : 0,
       buildTimeMs: Date.now() - startTime,
       budgetTier: budget,
       chapterTypeHint,

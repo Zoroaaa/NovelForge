@@ -35,9 +35,21 @@ interface ExportDialogProps {
   novelTitle?: string
 }
 
-const FORMAT_OPTIONS = [
+type FormatId = 'md' | 'txt' | 'epub' | 'zip'
+
+interface FormatOption {
+  id: FormatId
+  name: string
+  icon: React.ComponentType<{ className?: string }>
+  description: string
+  extension: string
+  color: string
+  bgColor: string
+}
+
+const FORMAT_OPTIONS: FormatOption[] = [
   {
-    id: 'md' as const,
+    id: 'md',
     name: 'Markdown',
     icon: FileCode2,
     description: '标准 Markdown 格式，适合编辑和转换',
@@ -46,7 +58,7 @@ const FORMAT_OPTIONS = [
     bgColor: 'bg-blue-50',
   },
   {
-    id: 'txt' as const,
+    id: 'txt',
     name: '纯文本',
     icon: FileText,
     description: '纯文本格式，兼容性最强',
@@ -55,7 +67,7 @@ const FORMAT_OPTIONS = [
     bgColor: 'bg-gray-50',
   },
   {
-    id: 'epub' as const,
+    id: 'epub',
     name: 'EPUB 电子书',
     icon: BookOpen,
     description: '电子书标准格式，支持 Kindle、Apple Books 等',
@@ -64,7 +76,7 @@ const FORMAT_OPTIONS = [
     bgColor: 'bg-purple-50',
   },
   {
-    id: 'zip' as const,
+    id: 'zip',
     name: 'ZIP 打包',
     icon: Archive,
     description: '包含所有格式的压缩包（MD + TXT + EPUB）',
@@ -76,7 +88,7 @@ const FORMAT_OPTIONS = [
 
 export function ExportDialog({ novelId, novelTitle }: ExportDialogProps) {
   const [open, setOpen] = useState(false)
-  const [selectedFormat, setSelectedFormat] = useState<string>('epub')
+  const [selectedFormat, setSelectedFormat] = useState<FormatId>('epub')
   const [includeTOC, setIncludeTOC] = useState(true)
   const [includeMeta, setIncludeMeta] = useState(true)
   const [isExporting, setIsExporting] = useState(false)

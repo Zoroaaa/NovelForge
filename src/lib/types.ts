@@ -82,7 +82,7 @@ export interface ModelConfig {
   id: string
   novelId: string | null
   scope: 'global' | 'novel'
-  stage: 'chapter_gen' | 'summary_gen' | 'embedding' | 'analysis' | 'workshop'
+  stage: 'chapter_gen' | 'summary_gen' | 'analysis' | 'workshop'
   provider: string
   modelId: string
   apiBase: string | null
