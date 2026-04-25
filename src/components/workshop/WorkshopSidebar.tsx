@@ -15,7 +15,7 @@ import { useEffect, useRef } from 'react';
 interface SessionItem {
   id: string;
   title: string;
-  updatedAt: string;
+  updatedAt: number;
   stage?: string;
 }
 
@@ -35,7 +35,7 @@ interface WorkshopSidebarProps {
   onCloseMobile: () => void;
 }
 
-function formatTime(dateStr: string): string {
+function formatTime(dateStr: string | number): string {
   const date = new Date(dateStr);
   const now = new Date();
   const diff = now.getTime() - date.getTime();

@@ -439,9 +439,10 @@ export const api = {
           modelId: string
           promptTokens: number
           completionTokens: number
-          totalTokens: number
-          generationTime: number
-          wordCount: number
+          durationMs: number
+          status: 'success' | 'error'
+          errorMsg: string | null
+          contextSnapshot: string | null
           createdAt: number
         }>
       }>(`/api/generate/logs?novelId=${novelId || ''}&limit=${limit || 200}`),
@@ -474,6 +475,7 @@ export const api = {
         characterCheck: { conflicts: Array<{ characterName: string; conflict: string; excerpt: string }>; warnings: string[] }
         coherenceCheck: { score: number; issues: Array<{ severity: string; message: string }> }
         score: number
+        hasIssues: boolean
       }>('/api/generate/combined-check', { method: 'POST', body: j(body), timeout: 180000 }),
   },
 
@@ -536,7 +538,7 @@ export const api = {
     listExisting: (novelId: string, targetModule: string) =>
       req<{ items: Record<string, unknown>[] }>(`/api/workshop-import/list/${targetModule}?novelId=${novelId}`),
     import: (params: { module: string; data: Record<string, unknown>; novelId: string; importMode: string }) =>
-      req<{ ok: boolean; message?: string }>('/api/workshop-import/import', { method: 'POST', body: j(params) }),
+      req<{ ok: boolean; message?: string; error?: string }>('/api/workshop-import/import', { method: 'POST', body: j(params) }),
   },
 
   // AI 创作工坊格式化导入 API

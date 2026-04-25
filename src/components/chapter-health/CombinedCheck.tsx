@@ -70,8 +70,18 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete }: CombinedC
 
     try {
       const data = await api.generate.combinedCheck({ chapterId, novelId })
-      setResult(data)
-      onCheckComplete?.(data)
+      const typedResult: CombinedCheckResult = {
+        ...data,
+        coherenceCheck: {
+          ...data.coherenceCheck,
+          issues: data.coherenceCheck.issues.map(i => ({
+            ...i,
+            severity: i.severity as 'error' | 'warning'
+          }))
+        }
+      }
+      setResult(typedResult)
+      onCheckComplete?.(typedResult)
     } catch (error) {
       console.error('综合检查失败:', error)
       setResult({

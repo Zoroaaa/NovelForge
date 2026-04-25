@@ -51,10 +51,10 @@ export function WritingStats({ novelId }: WritingStatsProps) {
 
   // Phase 2.4: 计算各章生成统计
   const chapterGenerationStats = useMemo(() => {
-    if (!logs?.logs?.length || !chapters?.length) return []
+    if (!logs?.length || !chapters?.length) return []
 
     return chapters.slice(0, 20).map((chapter: any) => {
-      const relatedLogs = logs.logs.filter(
+      const relatedLogs = logs.filter(
         (l: any) => l.chapterId === chapter.id && l.status === 'success'
       )
 
@@ -83,9 +83,9 @@ export function WritingStats({ novelId }: WritingStatsProps) {
     return <div className="animate-pulse space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-14 bg-muted rounded" />)}</div>
   }
 
-  const totalLogs = logs?.logs?.length || 0
-  const successLogs = logs?.logs?.filter((l: any) => l.status === 'success') || []
-  const errorLogs = logs?.logs?.filter((l: any) => l.status === 'error') || []
+  const totalLogs = logs?.length || 0
+  const successLogs = logs?.filter((l: any) => l.status === 'success') || []
+  const errorLogs = logs?.filter((l: any) => l.status === 'error') || []
 
   const totalPromptTokens = successLogs.reduce((s: number, l: any) => s + (l.promptTokens || 0), 0)
   const totalCompletionTokens = successLogs.reduce((s: number, l: any) => s + (l.completionTokens || 0), 0)

@@ -92,7 +92,7 @@ interface ExtractedData {
 interface SessionListItem {
   id: string
   title: string
-  updatedAt: string
+  updatedAt: number
   stage?: string
 }
 
@@ -150,9 +150,9 @@ export default function WorkshopPage() {
         setSessionId(id)
         setStage(res.session.stage || 'concept')
         setMessages(
-          (res.session.messages || []).map((m: { role: string; content: string; timestamp?: number }) => ({
+          (res.session.messages as Array<{ role: string; content: string; timestamp?: number }> || []).map((m) => ({
             id: crypto.randomUUID(),
-            role: m.role,
+            role: m.role as 'user' | 'assistant',
             content: m.content,
             timestamp: m.timestamp || Date.now(),
           }))
