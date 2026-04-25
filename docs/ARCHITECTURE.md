@@ -1,1245 +1,1216 @@
 # NovelForge · 系统架构设计
 
-> 本文档详细描述了 NovelForge 的系统架构、技术选型、数据流设计和核心模块实现原理。
+> 完整的技术架构、数据流设计和模块依赖关系图。
+>
+> **版本**: 1.9.0 | **最后更新**: 2026-04-25
 
 ---
 
 ## 📋 目录
 
-- [总体架构](#总体架构)
-- [技术栈详解](#技术栈详解)
-- [数据模型设计](#数据模型设计)
-- [核心服务模块](#核心服务模块)
-- [AI 工作流](#ai-工作流)
-- [性能优化策略](#性能优化策略)
-- [安全考虑](#安全考虑)
+1. [系统概述](#系统概述)
+2. [技术栈选型](#技术栈选型)
+3. [整体架构](#整体架构)
+4. [前端架构](#前端架构)
+5. [后端架构](#后端架构)
+6. [数据模型设计](#数据模型设计)
+7. [核心业务流程](#核心业务流程)
+8. [AI 生成架构](#ai-生成架构)
+9. [RAG 检索增强生成](#rag-检索增强生成)
+10. [Agent 系统 (v1.6.0)](#agent-系统-v160)
+11. [向量检索系统](#向量检索系统)
+12. [安全设计](#安全设计)
+13. [性能优化策略](#性能优化策略)
+14. [部署架构](#部署架构)
 
 ---
 
-## 总体架构
+## 系统概述
 
-### 架构图
+NovelForge 是一个**AI 驱动的智能小说创作平台**，采用 **Cloudflare 边缘计算** 作为基础设施，实现了从创意构思到成稿发布的全流程数字化创作环境。
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Client Browser                               │
-└─────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      Cloudflare Pages CDN                            │
-│  ┌───────────────────────────────────────────────────────────────┐  │
-│  │  Static Assets (dist/)                                         │  │
-│  │  - index.html                                                  │  │
-│  │  - assets/index-*.js                                           │  │
-│  │  - assets/index-*.css                                          │  │
-│  └───────────────────────────────────────────────────────────────┘  │
-│  ┌───────────────────────────────────────────────────────────────┐  │
-│  │  Functions /api/[[route]]                                      │  │
-│  │  ┌─────────────────────────────────────────────────────────┐  │  │
-│  │  │         Hono Application (server/index.ts)               │  │  │
-│  │  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐       │  │  │
-│  │  │  │ novels  │ │volumes  │ │chapters │ │characters│      │  │  │
-│  │  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘       │  │  │
-│  │  │  ┌─────────┐ ┌──────────┐ ┌─────────┐ ┌──────────┐    │  │  │
-│  │  │  │generate │ │  export  │ │settings │ │  health  │    │  │  │
-│  │  │  └─────────┘ └──────────┘ └─────────┘ └──────────┘    │  │  │
-│  │  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐      │  │  │
-│  │  │  │foreshadowing│ │writing-rules│ │master-outline│     │  │  │
-│  │  │  └─────────────┘ └─────────────┘ └─────────────┘      │  │  │
-│  │  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐      │  │  │
-│  │  │  │novel-settings│ │   search   │ │  vectorize  │      │  │  │
-│  │  │  └─────────────┘ └─────────────┘ └─────────────┘      │  │  │
-│  │  │  ┌─────────────┐                                        │  │  │
-│  │  │  │     mcp     │  (MCP Server for Claude Desktop)      │  │  │
-│  │  │  └─────────────┘                                        │  │  │
-│  │  │  ┌──────────┐ ┌───────────┐ ┌──────────────┐           │  │  │
-│  │  │  │   auth   │ │  setup    │ │system-settings│ (v1.5)  │  │  │
-│  │  │  └──────────┘ └───────────┘ └──────────────┘           │  │  │
-│  │  │  ┌──────────────┐ ┌────────────────┐                   │  │  │
-│  │  │  │ invite-codes │ │   workshop     │ (v1.5)            │  │  │
-│  │  │  └──────────────┘ └────────────────┘                   │  │  │
-│  │  └─────────────────────────────────────────────────────────┘  │  │
-│  └───────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────┘
-                    │                     │                    │
-        ┌───────────┘                     │                    └──────┐
-        │                                 │                           │
-┌───────▼──────────┐            ┌────────▼────────┐        ┌─────────▼──────┐
-│   D1 Database    │            │  Vectorize      │        │   R2 Bucket    │
-│  (SQLite Edge)   │            │ (Vector Search) │        │  (Object Store)│
-├──────────────────┤            ├─────────────────┤        ├────────────────┤
-│ - novels         │            │ - embeddings    │        │ - character    │
-│ - users          │ (v1.5)     │   (768 dim)     │        │   images       │
-│ - invite_codes   │ (v1.5)     │ - metadata      │        │ - exports      │
-│ - system_settings│ (v1.5)     │   indexing      │        │ - covers       │
-│ - master_outline │            └─────────────────┘        └────────────────┘
-│ - writing_rules  │
-│ - novel_settings │
-│ - volumes        │
-│ - chapters       │
-│ - characters     │
-│ - foreshadowing  │
-│ - workshop_sessions│ (v1.5)
-│ - model_configs  │
-│ - generation_logs│
-│ - exports        │
-│ - vector_index   │
-│ - entity_index   │
-└──────────────────┘
-        │
-        ▼
-┌──────────────────┐
-│  Workers AI      │
-│  (Edge Inference)│
-├──────────────────┤
-│ - BGE Base zh    │ (Embedding)
-│ - LLaVA 1.5 7B   │ (Vision)
-│ - Doubao/Claude  │ (LLM via API)
-└──────────────────┘
-```
+### 核心特性
 
-### 架构特点
+| 特性 | 说明 |
+|------|------|
+| **边缘优先** | 全球 CDN 加速，延迟 <50ms |
+| **Serverless 后端** | Cloudflare Pages Functions，按量付费 |
+| **RAG 增强** | 语义检索 + ReAct Agent，上下文质量高 |
+| **多模态 AI** | 文本生成 + 视觉分析 + 摘要提取 |
+| **用户体系** | JWT 认证 + 邀请码 + 权限管理 |
 
-1. **边缘优先 (Edge-First)**
-   - 所有计算都在 Cloudflare 边缘网络运行
-   - 全球 300+ 数据中心自动路由，延迟最低化
-   - 无服务器冷启动问题
+### 设计原则
 
-2. **单包架构 (Monorepo-free)**
-   - 前端和后端在同一仓库
-   - `functions/` 目录作为唯一后端入口
-   - `server/` 目录存放业务逻辑，被 functions 引用
-
-3. **类型安全 (Type-Safe)**
-   - TypeScript 端到端类型覆盖
-   - Drizzle ORM 提供数据库类型安全
-   - Zod 运行时验证
-
-4. **扁平化数据模型 (v2.0)**
-   - 避免深层嵌套的树形结构
-   - 总纲表替代多层大纲树
-   - 设定表统一管理世界观/境界/势力/地理/宝物功法
-   - 总索引表串联所有实体形成树形结构
+1. **边缘优先** - 前端静态资源全球分发，API 函数就近执行
+2. **无状态设计** - JWT 认证，无需 Session 存储
+3. **渐进式加载** - 路由懒加载 + 组件代码分割
+4. **防御式编程** - Zod 运行时验证 + Drizzle ORM 类型安全
+5. **可观测性** - 结构化日志 + 生成日志 + 检查日志
 
 ---
 
-## 技术栈详解
+## 技术栈选型
 
-### 前端技术栈
+### 为什么选择这个技术栈？
 
-| 技术 | 版本 | 用途 | 选择理由 |
-|------|------|------|----------|
-| **React** | 19.2 | UI 框架 | 成熟的组件生态，Hooks 模式 |
-| **TypeScript** | 6.0 | 类型系统 | 端到端类型安全 |
-| **Vite** | 8.0 | 构建工具 | 极速 HMR，生产优化 |
-| **React Router** | 7.14 | 路由 | 声明式路由，嵌套布局 |
-| **Zustand** | 5.0 | 状态管理 | 轻量级，无需 Provider 嵌套 |
-| **TanStack Query** | 5.99 | 服务端状态 | 缓存、重试、乐观更新 |
-| **shadcn/ui** | - | UI 组件 | 可定制，基于 Radix |
-| **Tailwind CSS** | 3.4 | 样式 | 原子化 CSS，开发效率 |
-| **Novel.js** | 1.0 | 编辑器 | Tiptap 封装，AI 友好 |
-| **Lucide React** | 1.8 | 图标 | 统一图标库，Tree-shaking |
+#### 前端：React + TypeScript + Vite
 
-### 后端技术栈
+```
+✅ React 19 - 最新并发特性，更好的性能
+✅ TypeScript 6.0 - 全类型安全，减少运行时错误
+✅ Vite 8 - 极速 HMR，生产构建优化
+✅ shadcn/ui - 可定制组件库，不锁定样式
+✅ Zustand 5 - 轻量状态管理，适合中小型应用
+✅ TanStack Query 5.99 - 服务端状态管理 + 缓存
+```
 
-| 技术 | 版本 | 用途 | 选择理由 |
-|------|------|------|----------|
-| **Hono** | 4.12 | Web 框架 | 超轻量，Cloudflare 原生 |
-| **Drizzle ORM** | 0.45 | ORM | SQL-like 语法，Type-safe |
-| **Zod** | 4.3 | 验证 | 运行时类型安全 |
-| **@hono/zod-validator** | 0.7 | 验证中间件 | Hono + Zod 集成 |
+#### 后端：Hono + Cloudflare Workers
 
-### 基础设施
+```
+✅ Hono v4.12 - 轻量高性能 Web 框架，TypeScript 优先
+✅ Cloudflare Pages Functions - Serverless API，自动扩缩容
+✅ D1 数据库 - SQLite 兼容，边缘复制读取
+✅ Vectorize - 原生向量数据库，支持 1024 维向量
+✅ Queues - 异步任务处理，解耦耗时操作
+✅ R2 对象存储 - S3 兼容，低成本图片存储
+```
 
-| 服务 | 用途 | 配额 | 成本 |
-|------|------|------|------|
-| **Cloudflare Pages** | 静态托管 + Functions | 100GB/月带宽 | 免费 |
-| **D1** | 关系数据库 | 100 万读/日，10 万写/日 | 免费 |
-| **R2** | 对象存储 | 10GB 存储，100 万 A 类操作 | 免费 |
-| **Vectorize** | 向量搜索 | 1000 索引/账户 | 免费 |
-| **Workers AI** | AI 推理 | 10 万 秒/日 | 免费 |
+#### AI 集成：统一 LLM 抽象层
+
+```
+✅ 多提供商支持 - 20+ AI 提供商统一接口
+✅ 流式输出 - SSE 实时推送生成内容
+✅ 工具调用 - ReAct 模式，支持 Function Calling
+✅ 向量嵌入 - BGE M3 多语言模型（1024 维）
+✅ 视觉理解 - LLaVA 图片分析
+```
+
+---
+
+## 整体架构
+
+### 架构总览
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    用户浏览器 (Client)                        │
+│  ┌──────────┐  ┌──────────┐  ┌───────────────────────────┐  │
+│  │ React UI │  │ Zustand  │  │ TanStack Query (缓存层)   │  │
+│  └────┬─────┘  └────┬─────┘  └─────────────┬─────────────┘  │
+│       │              │                      │                │
+│       └──────────────┼──────────────────────┘                │
+│                      ▼                                       │
+│              ┌──────────┐                                   │
+│              │ API 封装  │ (src/lib/api.ts)                 │
+│              └─────┬────┘                                   │
+└────────────────────┼────────────────────────────────────────┘
+                     │ HTTPS / SSE
+                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Cloudflare Pages (Edge)                         │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │            Hono Application (server/index.ts)        │    │
+│  │                                                      │    │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │    │
+│  │  │ 认证中间件│  │ 路由层    │  │ 错误处理          │   │    │
+│  │  └──────────┘  └────┬─────┘  └──────────────────┘   │    │
+│  │                     │                                │    │
+│  │  ┌──────────────────┼──────────────────────────┐    │    │
+│  │  │              服务层 (Services)               │    │    │
+│  │  │                                            │    │    │
+│  │  │  ┌──────────┐ ┌──────────┐ ┌────────────┐  │    │    │
+│  │  │  │ LLM 服务 │ │Agent 系统│ │ContextBuilder│  │    │    │
+│  │  │  └──────────┘ └────┬─────┘ └────────────┘  │    │    │
+│  │  │  ┌──────────┐ ┌────┴─────┐ ┌────────────┐  │    │    │
+│  │  │  │Embedding │ │Export    │ │Workshop     │  │    │    │
+│  │  │  └──────────┘ │Service   │ │Service      │  │    │    │
+│  │  │  ┌──────────┐ └──────────┘ └────────────┘  │    │    │
+│  │  │  │Vision    │                                    │    │
+│  │  │  └──────────┘                                    │    │
+│  │  └─────────────────────────────────────────────┘    │    │
+│  └─────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+         │           │              │             │
+         ▼           ▼              ▼             ▼
+   ┌──────────┐ ┌──────────┐ ┌──────────┐  ┌──────────────┐
+   │ D1 DB    │ │Vectorize │ │ R2 存储  │  │  Queue 队列   │
+   │(SQLite)  │ │(1024维)  │ │(图片/文件)│  │(异步任务)     │
+   └──────────┘ └──────────┘ └──────────┘  └──────────────┘
+         │                                              │
+         ▼                                              ▼
+   ┌────────────────────────────────────────────────────────┐
+   │              External Services                          │
+   │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+   │  │ OpenAI API   │  │ Anthropic    │  │ Volcengine    │  │
+   │  ├──────────────┤  ├──────────────┤  ├──────────────┤  │
+   │  │ DeepSeek     │  │ Google Gemini│  │ 其他 15+      │  │
+   │  └──────────────┘  └──────────────┘  └──────────────┘  │
+   └────────────────────────────────────────────────────────┘
+```
+
+### 分层架构
+
+```
+┌─────────────────────────────────────────┐
+│           表现层 (Presentation)          │
+│  React Components + shadcn/ui           │
+├─────────────────────────────────────────┤
+│           应用层 (Application)           │
+│  API Routes + Business Logic            │
+├─────────────────────────────────────────┤
+│           领域层 (Domain)                │
+│  Services (LLM, Agent, ContextBuilder)  │
+├─────────────────────────────────────────┤
+│           基础设施层 (Infrastructure)     │
+│  D1 + Vectorize + R2 + Queue            │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## 前端架构
+
+### 项目结构
+
+```
+src/
+├── App.tsx                    # 应用根组件（路由+守卫）
+├── main.tsx                   # 入口文件
+├── pages/                     # 页面组件（路由级代码分割）
+│   ├── LoginPage.tsx
+│   ├── RegisterPage.tsx
+│   ├── SetupPage.tsx
+│   ├── NovelsPage.tsx
+│   ├── WorkspacePage.tsx
+│   ├── WorkshopPage.tsx
+│   ├── ReaderPage.tsx
+│   ├── ModelConfigPage.tsx
+│   ├── AccountPage.tsx
+│   └── AiMonitorPage.tsx     # AI监控中心 (v1.6.0)
+├── components/
+│   ├── ui/                    # shadcn 基础组件
+│   ├── layout/                # 布局组件
+│   │   ├── AppLayout.tsx      # 三栏布局
+│   │   ├── MainLayout.tsx     # 主布局
+│   │   ├── Sidebar.tsx        # 工作区侧边栏
+│   │   └── WorkspaceHeader.tsx # 工作区顶栏
+│   ├── novel/                 # 小说管理组件
+│   ├── outline/               # 大纲编辑器
+│   ├── chapter/               # 章节编辑器
+│   ├── generate/              # AI 生成面板 (v1.6.0 增强)
+│   │   ├── GeneratePanel.tsx
+│   │   ├── StreamOutput.tsx
+│   │   └── ContextPreview.tsx
+│   ├── character/             # 角色管理
+│   ├── workshop/              # 创意工坊
+│   │   ├── WorkshopSidebar.tsx
+│   │   └── ImportDataDialog.tsx # 导入对话框 (v1.8.0)
+│   ├── entitytree/            # 实体树面板 (v1.6.0)
+│   ├── trash/                 # 回收站面板 (v1.6.0)
+│   ├── chapter-health/        # 质量检查组件 (v1.6.0)
+│   │   ├── ChapterCoherenceCheck.tsx
+│   │   ├── ChapterHealthCheck.tsx
+│   │   ├── CharacterConsistencyCheck.tsx
+│   │   ├── CombinedCheck.tsx
+│   │   └── VolumeProgressCheck.tsx
+│   ├── foreshadowing/          # 伏笔追踪
+│   ├── rules/                  # 创作规则
+│   ├── model/                  # 模型配置
+│   ├── novelsetting/           # 小说设定
+│   ├── volume/                 # 卷管理
+│   ├── powerlevel/             # 境界追踪
+│   ├── export/                 # 导出功能
+│   ├── search/                 # 内容搜索
+│   ├── stats/                  # 写作统计
+│   └── generation/             # 生成日志
+├── store/                      # 状态管理
+│   ├── authStore.ts            # 认证状态
+│   ├── novelStore.ts           # 小说状态
+│   └── readerStore.ts          # 阅读器状态
+├── hooks/
+│   └── useGenerate.ts          # 生成 Hook
+├── lib/
+│   ├── api.ts                  # API 封装
+│   ├── providers.ts            # AI 提供商配置
+│   ├── types.ts                # 类型定义
+│   ├── formatContent.ts        # 格式化工具 (v1.6.0)
+│   └── html-to-markdown.ts     # HTML转MD工具
+└── utils/                      # 工具函数
+```
+
+### 路由设计
+
+```typescript
+// src/App.tsx - 路由配置
+const routes = [
+  { path: '/', element: <WorkspacePage /> },           // 工作区
+  { path: '/novels', element: <NovelsPage /> },         // 小说列表
+  { path: '/workshop', element: <WorkshopPage /> },     // 创意工坊
+  { path: '/reader', element: <ReaderPage /> },         // 阅读器
+  { path: '/setup', element: <SetupPage /> },           // 系统初始化
+  { path: '/login', element: <LoginPage /> },           // 登录
+  { path: '/register', element: <RegisterPage /> },     // 注册
+  { path: '/account', element: <AccountPage /> },       // 账户设置
+  { path: '/model-config', element: <ModelConfigPage /> }, // 模型配置
+  { path: '/ai-monitor', element: <AiMonitorPage /> }   // AI监控中心
+];
+```
+
+### 状态管理架构
+
+```
+┌─────────────────────────────────────────────┐
+│              Zustand Store                   │
+│                                             │
+│  ┌─────────────┐  ┌──────────────────────┐  │
+│  │ authStore   │  │ novelStore           │  │
+│  │ - user      │  │ - currentNovel       │  │
+│  │ - token     │  │ - chapters           │  │
+│  │ - login()   │  │ - characters         │  │
+│  │ - logout()  │  │ - volumes            │  │
+│  └─────────────┘  │ - outline            │  │
+│                   │ - foreshadowing      │  │
+│  ┌─────────────┐  │ - settings           │  │
+│  │ readerStore │  │ - rules              │  │
+│  │ - theme     │  │ - powerLevels        │  │
+│  │ - fontSize  │  └──────────────────────┘  │
+│  │ - lineHeight│                             │
+│  └─────────────┘                             │
+└─────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────┐
+│          TanStack Query (缓存层)             │
+│                                             │
+│  - 自动缓存 API 响应                         │
+│  - stale-while-revalidate 策略              │
+│  - 乐观更新                                 │
+│  - 并发请求去重                              │
+└─────────────────────────────────────────────┘
+```
+
+### 核心页面组件关系
+
+```
+AppLayout
+├── MainLayout
+│   ├── Sidebar (导航菜单)
+│   ├── WorkspaceHeader (面包屑+操作按钮)
+│   └── 页面内容区
+│       ├── WorkspacePage (工作区)
+│       │   ├── OutlinePanel (大纲面板)
+│       │   ├── ChapterList (章节列表)
+│       │   ├── ChapterEditor (章节编辑器)
+│       │   └── GeneratePanel (AI 生成面板)
+│       │       ├── StreamOutput (SSE 流式输出)
+│       │       └── ContextPreview (上下文预览)
+│       ├── WorkshopPage (创意工坊)
+│       │   ├── WorkshopSidebar (会话侧边栏)
+│       │   └── ImportDataDialog (导入对话框)
+│       └── AiMonitorPage (AI 监控中心)
+│           ├── EntityTreePanel (实体树)
+│           ├── TrashPanel (回收站)
+│           └── GenerationLogs (生成日志)
+└── 公共页面
+    ├── LoginPage / RegisterPage
+    ├── SetupPage (初始化向导)
+    ├── AccountPage (账户设置)
+    └── ModelConfigPage (模型配置)
+```
+
+---
+
+## 后端架构
+
+### 项目结构
+
+```
+server/
+├── index.ts                    # Hono app 入口
+├── queue-handler.ts            # 队列任务处理器 (v1.6.0)
+├── routes/                     # 路由层
+│   ├── auth.ts                 # 认证路由
+│   ├── invite-codes.ts         # 邀请码路由
+│   ├── setup.ts                # 初始化路由
+│   ├── system-settings.ts      # 系统设置路由
+│   ├── novels.ts               # 小说管理路由
+│   ├── chapters.ts             # 章节管理路由
+│   ├── characters.ts           # 角色管理路由
+│   ├── volumes.ts              # 卷管理路由
+│   ├── master-outline.ts       # 总纲管理路由
+│   ├── writing-rules.ts        # 创作规则路由
+│   ├── novel-settings.ts       # 小说设定路由
+│   ├── foreshadowing.ts        # 伏笔管理路由 (v1.7.0 增强)
+│   ├── generate.ts             # AI 生成路由
+│   ├── search.ts               # 搜索路由
+│   ├── export.ts               # 导出路由
+│   ├── vectorize.ts            # 向量化索引路由 (v1.6.0 增强)
+│   ├── entity-index.ts         # 实体索引路由
+│   ├── power-level.ts          # 境界追踪路由
+│   ├── mcp.ts                  # MCP 服务路由
+│   ├── workshop.ts             # 创意工坊路由
+│   ├── workshop-import.ts      # 工坊导入路由 (v1.7.0)
+│   ├── workshop-format-import.ts # 格式化导入路由 (v1.8.0)
+│   └── settings.ts             # 模型配置路由
+├── services/                   # 服务层
+│   ├── llm.ts                  # LLM 统一调用层
+│   ├── agent/                  # Agent 系统 (v1.6.0 模块化重构)
+│   │   ├── index.ts            # 统一导出
+│   │   ├── types.ts            # 类型定义
+│   │   ├── constants.ts        # 常量定义
+│   │   ├── executor.ts         # 执行器
+│   │   ├── generation.ts       # 生成逻辑
+│   │   ├── reactLoop.ts        # ReAct 循环
+│   │   ├── tools.ts            # 工具定义
+│   │   ├── messages.ts         # 消息构建
+│   │   ├── summarizer.ts       # 摘要生成
+│   │   ├── logging.ts          # 日志记录
+│   │   ├── checkLogService.ts  # 检查日志服务
+│   │   ├── coherence.ts        # 连贯性检查
+│   │   ├── consistency.ts      # 一致性检查
+│   │   └── volumeProgress.ts   # 卷进度检查
+│   ├── contextBuilder.ts       # 上下文组装 (v4.0)
+│   ├── embedding.ts            # 向量化服务
+│   ├── vision.ts               # 视觉分析服务
+│   ├── export.ts               # 导出服务
+│   ├── foreshadowing.ts        # 伏笔追踪服务 (v1.7.0 增强)
+│   ├── powerLevel.ts           # 境界追踪服务
+│   ├── entity-index.ts         # 实体索引服务
+│   ├── formatImport.ts         # 格式导入服务 (v1.7.0)
+│   └── workshop.ts             # 创意工坊服务
+├── lib/
+│   ├── auth.ts                 # 认证与安全模块
+│   ├── queue.ts                # 队列操作库 (v1.6.0)
+│   └── types.ts                # 共享类型定义
+└── db/
+    ├── schema.ts               # 数据库 Schema
+    └── migrations/             # 数据库迁移
+        ├── 0010_schema.sql
+        ├── 0011_check_logs.sql
+        ├── 0012_foreshadowing_progress.sql
+        ├── 0013_novel_target_word_count.sql      # v1.7.0
+        ├── 0014_volume_target_chapter_count.sql  # v1.7.0
+        ├── 0015_check_logs_volume_progress.sql  # v1.7.0
+        └── 0016_novel_target_chapter_count.sql  # v1.7.0
+```
+
+### 中间件链
+
+```typescript
+// server/index.ts - 中间件配置
+app.use('*', cors())
+   .use('*', logger())
+   .use('/api/*', authenticate())  // JWT 认证
+   .use('/api/admin/*', requireAdmin())  // Admin 权限
+   .onError(errorHandler);  // 全局错误处理
+```
+
+### 请求处理流程
+
+```
+客户端请求
+    │
+    ▼
+┌─────────────┐
+│ CORS 检查   │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│ 日志记录     │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│ JWT 认证    │ ← 除公开接口外
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│ 参数验证     │ ← Zod schema
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│ 业务逻辑     │ ← Service 层
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│ 数据持久化   │ ← Drizzle ORM
+└──────┬──────┘
+       │
+       ▼
+   返回响应
+```
 
 ---
 
 ## 数据模型设计
 
-### ER 图
+### ER 关系图（核心实体）
 
 ```
-┌─────────────┐       ┌──────────────┐       ┌─────────────┐
-│   novels    │1─────n│   volumes    │1─────n│   chapters  │
-├─────────────┤       ├──────────────┤       ├─────────────┤
-│ id          │       │ id           │       │ id          │
-│ title       │       │ novelId      │◄──────┤ novelId     │
-│ description │       │ title        │       │ volumeId    │
-│ genre       │       │ outline      │       │ title       │
-│ status      │       │ blueprint    │       │ content     │
-│ coverR2Key  │       │ summary      │       │ wordCount   │
-│ wordCount   │       │ wordCount    │       │ status      │
-│ chapterCount│       │ status       │       │ summary     │
-│ created_at  │       │ created_at   │       │ vectorId    │
-│ updated_at  │       │ updated_at   │       │ created_at  │
-│ deletedAt   │       └──────────────┘       │ updated_at  │
-└─────────────┘                              │ deletedAt   │
-     │                                       └─────────────┘
-     │                                                    │
-     │ n                                                  │ n
-     │                        ┌──────────────┐            │
-     └───────────────────────►│  characters  │            │
-                              ├──────────────┤            │
-                              │ id           │            │
-                              │ novelId      │◄───────────┘
-                              │ name         │
-                              │ aliases      │
-                              │ role         │
-                              │ description  │
-                              │ imageR2Key   │
-                              │ powerLevel   │◄── 境界信息 (JSON)
-                              │ vectorId     │
-                              │ created_at   │
-                              │ deletedAt    │
-                              └──────────────┘
-
-┌─────────────────┐       ┌────────────────┐       ┌─────────────────┐
-│ master_outline  │       │ writing_rules  │       │ novel_settings  │
-├─────────────────┤       ├────────────────┤       ├─────────────────┤
-│ id              │       │ id             │       │ id              │
-│ novelId         │       │ novelId        │       │ novelId         │
-│ title           │       │ category       │       │ type            │
-│ content         │       │ title          │       │ category        │
-│ version         │       │ content        │       │ name            │
-│ summary         │       │ priority       │       │ content         │
-│ wordCount       │       │ isActive       │       │ attributes      │
-│ vectorId        │       │ sortOrder      │       │ parentId        │
-│ created_at      │       │ created_at     │       │ importance      │
-│ deletedAt       │       │ deletedAt      │       │ vectorId        │
-└─────────────────┘       └────────────────┘       └─────────────────┘
-
-┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│ foreshadowing   │       │ generation_logs │       │   vector_index  │
-├─────────────────┤       ├─────────────────┤       ├─────────────────┤
-│ id              │       │ id              │       │ id              │
-│ novelId         │       │ novelId         │       │ novelId         │
-│ chapterId       │       │ chapterId       │       │ sourceType      │
-│ title           │       │ stage           │       │ sourceId        │
-│ description     │       │ modelId         │       │ chunkIndex      │
-│ status          │       │ promptTokens    │       │ contentHash     │
-│ resolvedChapterId│      │ completionTokens│       │ created_at      │
-│ importance      │       │ durationMs      │       └─────────────────┘
-│ created_at      │       │ status          │
-│ deletedAt       │       │ created_at      │
-└─────────────────┘       └─────────────────┘
-
-┌─────────────────┐       ┌─────────────────┐
-│  entity_index   │       │  model_configs  │
-├─────────────────┤       ├─────────────────┤
-│ id              │       │ id              │
-│ entityType      │       │ novelId         │
-│ entityId        │       │ scope           │
-│ novelId         │       │ stage           │
-│ parentId        │       │ provider        │
-│ title           │       │ modelId         │
-│ sortOrder       │       │ apiBase         │
-│ depth           │       │ apiKeyEnv       │
-│ meta            │       │ params          │
-│ created_at      │       │ isActive        │
-│ updated_at      │       │ created_at      │
-└─────────────────┘       └─────────────────┘
+┌──────────────┐       ┌──────────────┐       ┌──────────────┐
+│    users     │       │    novels    │       │   volumes    │
+├──────────────┤       ├──────────────┤       ├──────────────┤
+│ id (PK)      │──┐    │ id (PK)      │──┐    │ id (PK)      │
+│ username     │  │    │ userId (FK)  │  │    │ novelId (FK) │◄─┘
+│ email        │  └───►│ title        │  └───►│ title        │
+│ passwordHash │       │ genre        │       │ sortOrder    │
+│ role         │       │ status       │       │ outline      │
+│ status       │       │ wordCount    │       │ summary      │
+│ inviteCodeId │       │ chapterCount │       │ wordCount    │
+│ lastLoginAt  │       │ targetWordCount│      │ targetWordCount│
+│ createdAt    │       │ targetChapterCount│    │ targetChapterCount│
+│ updatedAt    │       │ deletedAt    │       │ status       │
+└──────────────┘       │ coverR2Key   │       │ notes        │
+                       │ createdAt    │       │ createdAt    │
+                       │ updatedAt    │       │ updatedAt    │
+                       └──────────────┘       └──────────────┘
+                              │                      │
+                              │                      │
+       ┌──────────────────────┼──────────────────────┘
+       │                      │
+       ▼                      ▼
+┌──────────────┐       ┌──────────────┐
+│   chapters   │       │ characters   │
+├──────────────┤       ├──────────────┤
+│ id (PK)      │       │ id (PK)      │
+│ novelId (FK) │       │ novelId (FK) │
+│ volumeId (FK)│       │ name         │
+│ title        │       │ aliases      │
+│ content      │       │ role         │
+│ wordCount    │       │ description  │
+│ status       │       │ imageR2Key   │
+│ modelUsed    │       │ attributes   │
+│ summary      │       │ powerLevel   │
+│ sortOrder    │       │ createdAt    │
+│ createdAt    │       │ updatedAt    │
+│ updatedAt    │       └──────────────┘
+└──────────────┘
 ```
 
-### 核心表说明
+### 数据库表清单（共 19 张表）
 
-#### `novels` - 小说主表
-```sql
-CREATE TABLE novels (
-  id TEXT PRIMARY KEY,           -- UUID (前 16 字符)
-  title TEXT NOT NULL,           -- 标题
-  description TEXT,              -- 简介
-  genre TEXT,                    -- 类型：玄幻/仙侠/都市...
-  status TEXT DEFAULT 'draft',   -- draft/writing/completed/archived
-  cover_r2_key TEXT,             -- 封面图片 R2 路径
-  word_count INTEGER DEFAULT 0,  -- 总字数
-  chapter_count INTEGER DEFAULT 0,-- 章节数
-  created_at INTEGER,            -- Unix 时间戳
-  updated_at INTEGER,
-  deletedAt INTEGER              -- 软删除标记
-);
-```
+| 表名 | 说明 | 主要字段 | 创建版本 |
+|------|------|----------|----------|
+| `users` | 用户表 | id, username, email, passwordHash, role, status, inviteCodeId, lastLoginAt | v1.0 |
+| `inviteCodes` | 邀请码表 | id, code, maxUses, usedCount, status, expiresAt, createdBy | v1.5 |
+| `systemSettings` | 系统设置 | key, value, description, updatedAt | v1.0 |
+| `novels` | 小说表 | id, userId, title, description, genre, status, wordCount, chapterCount, **targetWordCount**, **targetChapterCount**, deletedAt | v1.0 (+v1.7.0) |
+| `masterOutline` | 总纲表 | id, novelId, title, content, version, summary, wordCount | v1.0 |
+| `writingRules` | 创作规则 | id, novelId, category, title, content, priority, isActive, sortOrder | v1.0 |
+| `novelSettings` | 小说设定 | id, novelId, type, name, content, parentId, importance, attributes | v1.0 |
+| `volumes` | 卷表 | id, novelId, title, sortOrder, outline, blueprint, summary, wordCount, chapterCount, **targetChapterCount**, status, notes | v1.0 (+v1.7.0) |
+| `chapters` | 章节表 | id, novelId, volumeId, title, content, wordCount, status, modelUsed, summary, sortOrder | v1.0 |
+| `characters` | 角色表 | id, novelId, name, aliases, role, description, imageR2Key, attributes, powerLevel | v1.0 |
+| `foreshadowing` | 伏笔表 | id, novelId, chapterId, title, description, status, importance | v1.0 |
+| `foreshadowingProgress` | 伏笔进度 | id, foreshadowingId, chapterId, **progressType**, **summary**, **mentionedKeywords**, createdAt | v1.7.0 |
+| `modelConfigs` | 模型配置 | id, novelId, scope, stage, provider, modelId, apiBase, apiKey, params, isActive | v1.0 |
+| `generationLogs` | 生成日志 | id, novelId, chapterId, stage, modelId, promptTokens, completionTokens, durationMs, status | v1.0 |
+| `exports` | 导出记录 | id, novelId, format, status, fileUrl, createdAt | v1.0 |
+| `vectorIndex` | 向量索引 | id, novelId, sourceType, sourceId, vectorId, title, metadata, indexedAt | v1.0 |
+| `entityIndex` | 实体索引 | id, novelId, entityType, entityId, name, metadata, childrenCount | v1.6.0 |
+| `workshopSessions` | 工坊会话 | id, novelId, stage, status, extractedData, messages, title | v1.5 |
+| `checkLogs` | 检查日志 | id, novelId, chapterId, checkType, score, result, **volumeProgressResult**, status | v1.6.0 (+v1.7.0) |
+| `queueTaskLogs` | 队列任务日志 | id, taskType, novelId, payload, status, error, startedAt, completedAt | v1.6.0 |
 
-#### `master_outline` - 总纲表（v2.0 新增）
-```sql
-CREATE TABLE master_outline (
-  id TEXT PRIMARY KEY,
-  novel_id TEXT NOT NULL,
-  title TEXT NOT NULL,
-  content TEXT,                  -- 总纲内容 (Markdown)
-  version INTEGER DEFAULT 1,     -- 版本号
-  summary TEXT,                  -- 摘要
-  word_count INTEGER DEFAULT 0,
-  vector_id TEXT,                -- Vectorize 索引 ID
-  indexed_at INTEGER,
-  created_at INTEGER,
-  updated_at INTEGER,
-  deletedAt INTEGER
-);
-```
+> **注意**: 加粗字段为 v1.7.0 新增或修改的字段
 
-#### `writing_rules` - 创作规则表（v2.0 新增）
-```sql
-CREATE TABLE writing_rules (
-  id TEXT PRIMARY KEY,
-  novel_id TEXT NOT NULL,
-  category TEXT NOT NULL,        -- style/pacing/character/plot/world/taboo/custom
-  title TEXT NOT NULL,
-  content TEXT NOT NULL,
-  priority INTEGER DEFAULT 3,    -- 1=最高 5=最低
-  is_active INTEGER DEFAULT 1,
-  sort_order INTEGER DEFAULT 0,
-  created_at INTEGER,
-  updated_at INTEGER,
-  deletedAt INTEGER
-);
-```
+### 数据库迁移历史
 
-#### `novel_settings` - 小说设定表（v2.0/v4.0 增强）
-```sql
-CREATE TABLE novel_settings (
-  id TEXT PRIMARY KEY,
-  novel_id TEXT NOT NULL,
-  type TEXT NOT NULL,            -- worldview/power_system/faction/geography/item_skill/misc
-  category TEXT,                 -- 子分类
-  name TEXT NOT NULL,
-  content TEXT NOT NULL,
-  summary TEXT,                  -- v4.0 新增：设定摘要，用于 RAG 索引
-  attributes TEXT,               -- JSON
-  parent_id TEXT,                -- 层级结构
-  importance TEXT DEFAULT 'normal',
-  related_ids TEXT,              -- JSON 关联 ID 列表
-  vector_id TEXT,
-  indexed_at INTEGER,
-  sort_order INTEGER DEFAULT 0,
-  created_at INTEGER,
-  updated_at INTEGER,
-  deletedAt INTEGER
-);
-```
-
-#### `volumes` - 卷表（增强版）
-```sql
-CREATE TABLE volumes (
-  id TEXT PRIMARY KEY,
-  novel_id TEXT NOT NULL,
-  title TEXT NOT NULL,
-  sort_order INTEGER DEFAULT 0,
-  outline TEXT,                  -- 卷大纲 (Markdown)
-  blueprint TEXT,                -- 卷蓝图 (JSON)
-  summary TEXT,                  -- 卷概要/摘要
-  status TEXT DEFAULT 'draft',
-  word_count INTEGER DEFAULT 0,
-  chapter_count INTEGER DEFAULT 0,
-  target_word_count INTEGER,
-  notes TEXT,                    -- 作者笔记
-  created_at INTEGER,
-  updated_at INTEGER,
-  deletedAt INTEGER
-);
-```
-
-#### `chapters` - 章节
-```sql
-CREATE TABLE chapters (
-  id TEXT PRIMARY KEY,
-  novel_id TEXT NOT NULL,
-  volume_id TEXT,
-  title TEXT NOT NULL,
-  sort_order INTEGER DEFAULT 0,
-  content TEXT,                  -- 正文内容 (HTML)
-  word_count INTEGER DEFAULT 0,
-  status TEXT DEFAULT 'draft',   -- draft/generated/revised
-  model_used TEXT,
-  prompt_tokens INTEGER,
-  completion_tokens INTEGER,
-  generation_time INTEGER,
-  summary TEXT,
-  summary_model TEXT,
-  summary_at INTEGER,
-  vector_id TEXT,
-  indexed_at INTEGER,
-  snapshot_keys TEXT,            -- 快照存储路径
-  created_at INTEGER,
-  updated_at INTEGER,
-  deletedAt INTEGER
-);
-```
-
-#### `characters` - 角色
-```sql
-CREATE TABLE characters (
-  id TEXT PRIMARY KEY,
-  novel_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  aliases TEXT,                  -- JSON string[]
-  role TEXT,                     -- protagonist/antagonist/supporting
-  description TEXT,
-  image_r2_key TEXT,
-  attributes TEXT,               -- JSON 属性对象
-  power_level TEXT,              -- JSON 境界信息 (v2.0 新增)
-  vector_id TEXT,
-  created_at INTEGER,
-  deletedAt INTEGER
-);
-```
-
-#### `foreshadowing` - 伏笔追踪表（v2.0 新增）
-```sql
-CREATE TABLE foreshadowing (
-  id TEXT PRIMARY KEY,
-  novel_id TEXT NOT NULL,
-  chapter_id TEXT,               -- 埋下伏笔的章节
-  title TEXT NOT NULL,
-  description TEXT,
-  status TEXT DEFAULT 'open',    -- open/resolved/abandoned
-  resolved_chapter_id TEXT,      -- 收尾章节
-  importance TEXT DEFAULT 'normal', -- high/normal/low
-  created_at INTEGER,
-  updated_at INTEGER,
-  deletedAt INTEGER
-);
-```
-
-#### `model_configs` - 模型配置
-```sql
-CREATE TABLE model_configs (
-  id TEXT PRIMARY KEY,
-  novel_id TEXT,                 -- NULL = 全局配置
-  scope TEXT DEFAULT 'global',   -- global/novel
-  stage TEXT NOT NULL,           -- outline_gen/chapter_gen/summary_gen/vision
-  provider TEXT NOT NULL,        -- volcengine/anthropic/openai
-  model_id TEXT NOT NULL,
-  api_base TEXT,
-  api_key_env TEXT,              -- 环境变量名（不存明文）
-  api_key TEXT,                  -- 可选：直接存储（不推荐）
-  params TEXT,                   -- JSON {temperature, max_tokens...}
-  is_active INTEGER DEFAULT 1,
-  created_at INTEGER,
-  updated_at INTEGER
-);
-```
-
-#### `generation_logs` - 生成任务日志（v2.0 新增）
-```sql
-CREATE TABLE generation_logs (
-  id TEXT PRIMARY KEY,
-  novel_id TEXT NOT NULL,
-  chapter_id TEXT,
-  stage TEXT NOT NULL,
-  model_id TEXT NOT NULL,
-  context_snapshot TEXT,         -- 上下文快照
-  prompt_tokens INTEGER,
-  completion_tokens INTEGER,
-  duration_ms INTEGER,
-  status TEXT DEFAULT 'success',
-  error_msg TEXT,
-  created_at INTEGER
-);
-```
-
-#### `vector_index` - 向量索引追踪（v2.0 新增）
-```sql
-CREATE TABLE vector_index (
-  id TEXT PRIMARY KEY,
-  novel_id TEXT NOT NULL,
-  source_type TEXT NOT NULL,     -- outline/chapter/character/summary
-  source_id TEXT NOT NULL,
-  chunk_index INTEGER DEFAULT 0,
-  content_hash TEXT,
-  created_at INTEGER
-);
-```
-
-#### `entity_index` - 总索引表（v2.0 新增）
-```sql
-CREATE TABLE entity_index (
-  id TEXT PRIMARY KEY,
-  entity_type TEXT NOT NULL,     -- novel/volume/chapter/character/setting/rule/foreshadowing
-  entity_id TEXT NOT NULL,
-  novel_id TEXT NOT NULL,
-  parent_id TEXT,
-  title TEXT NOT NULL,
-  sort_order INTEGER DEFAULT 0,
-  depth INTEGER DEFAULT 0,
-  meta TEXT,                     -- JSON 元数据
-  created_at INTEGER,
-  updated_at INTEGER,
-  deletedAt INTEGER              -- v1.5.0 新增软删除支持
-);
-```
-
-#### `users` - 用户表（v3.0/v1.5.0 新增）
-```sql
-CREATE TABLE users (
-  id TEXT PRIMARY KEY,
-  username TEXT NOT NULL UNIQUE,
-  email TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,    -- PBKDF2 哈希值
-  salt TEXT NOT NULL,             -- 随机盐值
-  role TEXT DEFAULT 'user',       -- admin/user
-  is_deleted INTEGER DEFAULT 0,   -- 软删除标记
-  created_at INTEGER,
-  updated_at INTEGER,
-  deletedAt INTEGER
-);
-
--- 索引
-CREATE INDEX idx_users_username ON users(username) WHERE deletedAt IS NULL;
-CREATE INDEX idx_users_email ON users(email) WHERE deletedAt IS NULL;
-```
-
-#### `invite_codes` - 邀请码表（v3.0/v1.5.0 新增）
-```sql
-CREATE TABLE invite_codes (
-  id TEXT PRIMARY KEY,
-  code TEXT NOT NULL UNIQUE,
-  max_uses INTEGER DEFAULT 1,    -- 最大使用次数
-  used_count INTEGER DEFAULT 0,  -- 已使用次数
-  status TEXT DEFAULT 'active',  -- active/used/expired/disabled
-  expires_at INTEGER,            -- 过期时间（null=永不过期）
-  created_by TEXT,               -- 创建者用户 ID
-  created_at INTEGER,
-  updated_at INTEGER
-);
-
--- 索引
-CREATE INDEX idx_invite_codes_code ON invite_codes(code) WHERE status = 'active';
-```
-
-#### `system_settings` - 系统设置表（v3.0/v1.5.0 新增）
-```sql
-CREATE TABLE system_settings (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL,
-  description TEXT,
-  updated_at INTEGER
-);
-```
-
-#### `queue_task_logs` - 队列任务日志表（v4.0 新增）
-```sql
-CREATE TABLE queue_task_logs (
-  id TEXT PRIMARY KEY,
-  novel_id TEXT,
-  task_type TEXT NOT NULL,       -- index_content/reindex_all/rebuild_entity_index/
-                                 -- extract_foreshadowing/post_process_chapter
-  status TEXT DEFAULT 'pending', -- pending/running/success/failed
-  payload TEXT,                   -- JSON 任务载荷
-  error_msg TEXT,
-  retry_count INTEGER DEFAULT 0,
-  created_at INTEGER,
-  finished_at INTEGER
-);
-
-CREATE INDEX idx_queue_logs_novel ON queue_task_logs(novel_id, created_at DESC);
-CREATE INDEX idx_queue_logs_status ON queue_task_logs(status, created_at DESC);
-```
-
-#### `foreshadowing_progress` - 伏笔进度追踪表（v1.7.0 新增）
-```sql
-CREATE TABLE foreshadowing_progress (
-  id TEXT PRIMARY KEY,
-  foreshadowing_id TEXT NOT NULL,
-  chapter_id TEXT,
-  progress INTEGER DEFAULT 0,    -- 进度百分比 0-100
-  status TEXT DEFAULT 'open',    -- open/in_progress/resolved
-  notes TEXT,                    -- 进度说明
-  created_at INTEGER,
-  updated_at INTEGER
-);
-
-CREATE INDEX idx_foreshadowing_progress_fid ON foreshadowing_progress(foreshadowing_id);
-CREATE INDEX idx_foreshadowing_progress_cid ON foreshadowing_progress(chapter_id);
-```
-
-#### `workshop_sessions` - 创意工坊会话表（v1.5.0 增强）
-```sql
-CREATE TABLE workshop_sessions (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL,
-  title TEXT NOT NULL,
-  stage TEXT DEFAULT 'concept',  -- concept/worldbuilding/character/volume
-  data TEXT,                     -- JSON 存储会话数据
-  created_at INTEGER,
-  updated_at INTEGER,
-  deletedAt INTEGER              -- v1.5.0 新增软删除支持
-);
-```
+| 迁移文件 | 版本 | 变更内容 |
+|----------|------|----------|
+| `0010_schema.sql` | v4.0 | 整合迁移，创建基础 16 张表 |
+| `0011_check_logs.sql` | v1.6.0 | 新增 checkLogs 表（质量检查） |
+| `0012_foreshadowing_progress.sql` | v1.7.0 | 新增 foreshadowingProgress 表（伏笔进度追踪） |
+| `0013_novel_target_word_count.sql` | v1.7.0 | novels 表新增 target_word_count 字段 |
+| `0014_volume_target_chapter_count.sql` | v1.7.0 | volumes 表新增 target_chapter_count 字段 |
+| `0015_check_logs_volume_progress.sql` | v1.7.0 | checkLogs 表新增 volume_progress_result 字段 |
+| `0016_novel_target_chapter_count.sql` | v1.7.0 | novels 表新增 target_chapter_count 字段 |
 
 ---
 
-## 核心服务模块
+## 核心业务流程
 
-### 1. LLM 服务 (`/server/services/llm.ts`)
-
-**职责**: 统一 LLM API 调用接口，支持多提供商切换
-
-**核心功能**:
-- 流式生成 (`streamGenerate`) - SSE 实时输出
-- 非流式生成 (`generate`) - 用于摘要等场景
-- 配置解析 (`resolveConfig`) - 优先级：小说级 > 全局 > Fallback
-
-**支持的提供商**:
-```typescript
-{
-  volcengine: {
-    base: 'https://ark.cn-beijing.volces.com/api/v3',
-    models: ['doubao-seed-2-pro', 'doubao-pro-32k']
-  },
-  anthropic: {
-    base: 'https://api.anthropic.com/v1',
-    models: ['claude-sonnet-4-20250514', 'claude-haiku-4-5-20251001']
-  },
-  openai: {
-    base: 'https://api.openai.com/v1',
-    models: ['gpt-4o', 'gpt-4o-mini']
-  }
-}
-```
-
-**代码示例**:
-```typescript
-// 流式生成
-await streamGenerate(config, messages, {
-  onChunk: (text) => console.log(text),
-  onDone: (usage) => console.log(usage),
-  onError: (err) => console.error(err)
-})
-```
-
----
-
-### 2. Agent 系统 (`/server/services/agent/`)
-
-**职责**: 基于 ReAct 模式的智能章节生成（v1.6.0 模块化重构）
-
-**目录结构**:
-```
-agent/
-├── index.ts         # 统一导出
-├── types.ts         # 类型定义
-├── constants.ts     # 常量定义
-├── batch.ts         # 批量大纲生成
-├── checkLogService.ts # 检查日志服务
-├── coherence.ts     # 章节连贯性检查
-├── consistency.ts   # 角色一致性检查
-├── executor.ts      # 执行器
-├── generation.ts    # 生成逻辑
-├── logging.ts       # 日志记录
-├── messages.ts      # 消息处理
-├── reactLoop.ts     # ReAct 循环
-├── summarizer.ts    # 摘要生成
-└── tools.ts         # 工具定义
-```
-
-**ReAct 流程**:
-```
-1. 接收章节 ID → 构建上下文 (ContextBuilder v4)
-2. 组装 System Prompt（角色设定 + 写作风格）
-3. 调用 LLM 流式生成
-4. 支持多轮工具调用（queryOutline/queryCharacter/searchSemantic）
-5. 生成完成后自动触发摘要生成
-```
-
-**Agent 配置**:
-```typescript
-interface AgentConfig {
-  maxIterations?: number    // 最大迭代次数 (默认 3)
-  enableRAG?: boolean       // 启用 RAG (默认 true)
-  enableAutoSummary?: boolean // 自动摘要 (默认 true)
-}
-```
-
----
-
-### 3. 上下文组装器 (`/server/services/contextBuilder.ts`)
-
-**职责**: 为 LLM 组装最优上下文组合（v4.0 重大优化）
-
-**v4.0 核心改进**:
-- **架构优化**: RAG 返回 ID → DB 查完整卡片（替代原来的 RAG 直接返回碎片）
-- **Token 预算大幅增加**: Total 从 14k 提升至 55k tokens
-- **RAG 查询优化**: 从 3 次减少到 2 次
-- **向量类型精简**: 从 6 种减少到 3 种（character/setting/foreshadowing）
-- **超时根治**: 单次索引任务最大 1 个 chunk
-
-**Token 预算分配 (v4.0)**:
-```
-Total: 55,000 tokens
-├─ Core Layer: ≤18,000
-│  ├─ 总纲: ≤10,000
-│  ├─ 卷规划: ≤1,500
-│  ├─ 上一章: ≤500
-│  ├─ 主角卡: ≤3,000
-│  └─ 创作规则: ≤5,000
-└─ Dynamic Layer: ≤37,000
-   ├─ 摘要链: ≤10,000 (20章)
-   ├─ 出场角色: ≤8,000
-   ├─ 世界设定: ≤12,000
-   ├─ 待回收伏笔: ≤4,000
-   └─ 本章规则: ≤3,000
-```
-
-**强制注入内容 (v4.0)**:
-- 总纲内容（来自 `master_outline.content`，使用全文）
-- 创作规则（来自 `writing_rules`，全部 isActive=1，不限 priority）
-- 本章大纲（来自 `novel_settings` 或卷大纲）
-- 上一章摘要（来自 `chapters.summary`）
-- 当前卷概要（来自 `volumes.summary`）
-- 主角卡片（来自 `characters`，包含描述、属性和境界信息）
-
-**RAG 检索 (v4.0)**:
-- 仅检索 3 种类型: character, setting, foreshadowing
-- 使用 summary 字段（≤400字）作为索引内容
-- 高重要性设定追加 DB 全文
-
----
-
-### 4. 嵌入服务 (`/server/services/embedding.ts`)
-
-**模型**: `@cf/baai/bge-base-zh-v1.5`
-- 维度：768
-- 语言：中文优化
-- 场景：语义相似度
-
-**v4.0 优化**:
-- 使用 `summary` 字段作为索引内容（≤400字），避免超长文本
-- 单次索引任务最大 1 个 chunk，从根本上杜绝超时
-- 仅索引 3 种类型：character、setting、foreshadowing
-
-**功能**:
-```typescript
-// 文本向量化
-const vector = await embedText(ai, text)
-
-// 相似度搜索
-const results = await searchSimilar(vectorize, queryVector, {
-  topK: 20,
-  filter: { novelId }
-})
-```
-
----
-
-### 5. 视觉服务 (`/server/services/vision.ts`)
-
-**模型**: `@cf/llava-hf/llava-1.5-7b-hf`
-
-**功能**:
-- 上传图片到 R2
-- 分析角色图片，提取：
-  - 外貌描述（发型、五官、服饰）
-  - 气质特征（冷峻、温暖、神秘）
-  - 性格推测
-  - 标签（3-5 个关键词）
-
-**Prompt 设计**:
-```
-请仔细观察这张角色图片，用中文详细描述：
-1. 外貌特征：发型、发色、眼睛、面部轮廓、体型、穿着
-2. 气质特点：整体感觉（冷峻/温暖/神秘...）
-3. 性格推测：从外貌和表情推测
-4. 标签：3-5 个关键词
-
-请以 JSON 格式返回：
-{
-  "description": "...",
-  "appearance": "...",
-  "traits": [...],
-  "tags": [...]
-}
-```
-
----
-
-### 6. 导出服务 (`/server/services/export.ts`)
-
-**支持的格式**:
-| 格式 | 库 | 特点 |
-|------|-----|------|
-| Markdown | 自定义 | `.md` 文件，保留层级 |
-| TXT | 自定义 | `.txt` 纯文本 |
-| EPUB | `epub-gen-memory` | 电子书格式，含目录 |
-| ZIP | `jszip` | 打包所有章节 |
-
-**EPUB 元数据**:
-```typescript
-{
-  title: novel.title,
-  author: config.author || 'Unknown',
-  language: 'zh-CN',
-  creator: 'NovelForge',
-  generator: 'NovelForge v1.4.0'
-}
-```
-
----
-
-### 7. 伏笔追踪服务 (`/server/services/foreshadowing.ts`) (v2.0 新增，v1.7.0 增强)
-
-**职责**: 自动从章节内容中提取伏笔，追踪伏笔状态和进度
-
-**核心功能**:
-- `extractForeshadowingFromChapter()` - 从章节提取伏笔
-- `updateForeshadowingProgress()` - 更新伏笔进度 (v1.7.0 新增)
-- `getForeshadowingProgress()` - 获取伏笔进度详情 (v1.7.0 新增)
-- 自动检测已收尾的伏笔
-- 支持重要性分级（high/normal/low）
-- 进度追踪支持多章节分布收尾 (v1.7.0)
-
-**工作流程**:
-```
-1. 章节生成完成后触发
-2. 获取章节内容和当前未收尾伏笔列表
-3. 调用 LLM 分析章节内容
-4. 识别新伏笔和已收尾伏笔
-5. 写入数据库并更新状态
-```
-
----
-
-### 8. 境界追踪服务 (`/server/services/powerLevel.ts`) (v2.0 新增)
-
-**职责**: 自动检测角色境界突破事件，记录成长历程
-
-**核心功能**:
-- `detectPowerLevelBreakthrough()` - 检测境界突破
-- 自动更新角色 `powerLevel` 字段
-- 记录突破历史
-
-**PowerLevel 数据结构**:
-```typescript
-interface PowerLevelData {
-  system: string           // 境界体系名称（如"修仙境界"）
-  current: string          // 当前境界（如"金丹期初期"）
-  breakthroughs: Array<{
-    chapterId: string
-    from: string           // 突破前境界
-    to: string             // 突破后境界
-    note?: string          // 突破说明
-    timestamp?: number     // 突破时间戳
-  }>
-  nextMilestone?: string   // 下一阶段目标
-}
-```
-
----
-
-### 9. 创意工坊服务 (`/server/services/workshop.ts`) (v1.5.0 新增，v1.7.0 增强)
-
-**职责**: 多阶段对话式创作引擎，帮助作者从零开始构建小说框架
-
-**v1.7.0 增强**:
-- 工坊流程优化
-- 数据验证增强
-- 提交确认流程改进
-- 与 formatImport 服务集成
-
-**核心功能**:
-- `createSession()` - 创建新的创意会话
-- `chat()` - SSE 流式 AI 对话
-- `extractStructuredData()` - 从 AI 回复中提取结构化数据
-- `submitSession()` - 提交确认，生成完整的小说框架
-
-**分阶段 Prompt 体系**:
-```typescript
-const STAGE_PROMPTS = {
-  concept: {
-    system: '你是一位专业的小说策划师...',
-    userPrompt: '请告诉我你的小说创意...',
-    extractFields: ['title', 'genre', 'synopsis', 'targetLength', 'coreAppeals']
-  },
-  worldbuilding: {
-    system: '你是一位世界观构建专家...',
-    userPrompt: '让我们构建这个世界观...',
-    extractFields: ['worldSettings']
-  },
-  character: {
-    system: '你是一位角色设计大师...',
-    userPrompt: '现在来设计角色...',
-    extractFields: ['characters']
-  },
-  volume: {
-    system: '你是一位资深编辑...',
-    userPrompt: '最后规划卷纲...',
-    extractFields: ['volumes', 'plotThreads']
-  }
-}
-```
-
-**SSE 流式输出格式**:
-```typescript
-// 文本消息
-{ type: 'message', event: 'message', data: { type: 'text', content: '...' } }
-
-// 结构化数据
-{ type: 'extracted_data', event: 'extracted_data', data: { genre: '玄幻', ... } }
-
-// 完成
-{ type: 'done', event: 'done', data: {} }
-```
-
-**提交流程**:
-```
-1. 验证必填字段（title, genre, synopsis）
-2. 创建小说记录 (novels)
-3. 创建总纲 (master_outline)
-4. 批量创建角色 (characters)
-5. 批量创建卷 (volumes)
-6. 返回所有创建的 ID
-```
-
----
-
-### 10. 格式导入服务 (`/server/services/formatImport.ts`) (v1.7.0 新增)
-
-**职责**: 处理结构化工坊数据的导入和转换
-
-**核心功能**:
-- `importWorkshopData()` - 导入工坊数据
-- `importFormatData()` - 导入格式化工坊数据
-- `validateImportData()` - 数据验证
-- `rollbackImport()` - 错误回滚
-
-**支持的数据格式**:
-- JSON 格式工坊数据
-- 批量创建小说、角色、设定等
-- 数据验证和转换
-
----
-
-### 11. 认证与安全模块 (`/server/lib/auth.ts`) (v1.5.0 新增)
-
-**职责**: 用户认证、密码安全、JWT 管理
-
-**核心功能**:
-
-#### 密码哈希
-```typescript
-// PBKDF2 + SHA-256, 100,000 次迭代
-async function hashPassword(password: string): Promise<{ hash: string; salt: string }> {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const encoder = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(password),
-    'PBKDF2',
-    false,
-    ['deriveBits']
-  );
-  const hash = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations: 100_000, hash: 'SHA-256' },
-    keyMaterial,
-    256
-  );
-  return { hash: arrayBufferToBase64(hash), salt: bufferToBase64(salt) };
-}
-```
-
-#### JWT Token 管理
-```typescript
-// HS256 签名, 7 天有效期
-interface JWTPayload {
-  userId: string;
-  username: string;
-  role: 'admin' | 'user';
-  iat: number;  // 签发时间
-  exp: number;  // 过期时间 (iat + 7天)
-}
-
-// 密钥从环境变量获取
-const JWT_SECRET = env.JWT_SECRET || 'novelforge-jwt-secret-key';
-```
-
-#### 认证中间件
-```typescript
-// JWT 认证中间件
-async function authMiddleware(c: Context, next: Next) {
-  const token = c.req.header('Authorization')?.replace('Bearer ', '');
-  if (!token) return c.json({ error: '未提供认证令牌' }, 401);
-
-  const payload = verifyToken(token);
-  if (!payload) return c.json({ error: '认证令牌无效或已过期' }, 401);
-
-  c.set('user', payload);
-  await next();
-}
-
-// Admin 权限中间件
-async function adminMiddleware(c: Context, next: Next) {
-  const user = c.get('user');
-  if (user.role !== 'admin') {
-    return c.json({ error: '需要管理员权限' }, 403);
-  }
-  await next();
-}
-```
-
----
-
-## AI 工作流
-
-### 章节生成完整流程
+### 1. 用户认证流程
 
 ```mermaid
 sequenceDiagram
-    participant User as 用户
-    participant FE as 前端
-    participant BE as 后端 API
-    participant Agent as Agent Service
-    participant CB as ContextBuilder
-    participant DB as D1 Database
-    participant V as Vectorize
-    participant LLM as LLM Service
-    participant AI as Workers AI
-
-    User->>FE: 点击"生成章节"
-    FE->>BE: POST /api/generate/chapter
-    BE->>Agent: generateChapter()
-    Agent->>CB: buildChapterContext()
-    CB->>DB: 查询总纲/规则/摘要/角色
-    DB-->>CB: 返回强制注入内容
-    CB->>V: 语义检索 (topK=20)
-    V-->>CB: 返回相关片段
-    CB-->>Agent: ContextBundle
-    Agent->>LLM: streamGenerate(messages)
-    LLM->>LLM: 组装消息 (System+User)
-    LLM->>LLM: 调用火山引擎 API
-    LLM-->>Agent: SSE 流
-    Agent-->>BE: Pipe SSE
-    BE-->>FE: SSE 流
-    FE-->>User: 实时渲染文字
+    participant C as 客户端
+    participant S as 服务器
+    participant D as D1 数据库
     
-    Note over Agent,DB: 生成完成后
-    Agent->>LLM: 生成摘要 (非流式)
-    LLM-->>Agent: 摘要文本
-    Agent->>DB: UPDATE chapters SET summary
-    Agent->>Agent: extractForeshadowingFromChapter()
-    Agent->>Agent: detectPowerLevelBreakthrough()
+    Note over C,D: 登录流程
+    C->>S: POST /api/auth/login<br/>{username, password}
+    S->>D: 查询用户
+    D-->>S: 返回用户记录
+    S->>S: PBKDF2 验证密码
+    S->>S: 生成 JWT Token (HS256)
+    S-->>C: {token, user}
+    
+    Note over C,D: 后续请求
+    C->>S: Authorization: Bearer <token>
+    S->>S: 验证 Token + 提取用户信息
+    S-->>C: 正常响应
 ```
 
-### 自动向量化流程
+### 2. 系统初始化流程
+
+```mermaid
+flowchart TD
+    A[首次访问] --> B{管理员已创建?}
+    B -->|否| C[重定向到 /setup]
+    C --> D[填写管理员信息]
+    D --> E[POST /api/setup]
+    E --> F[创建 admin 用户]
+    F --> G[更新 system_settings]
+    G --> H[返回 JWT Token]
+    H --> I[自动登录]
+    
+    B -->|是| J[正常访问]
+```
+
+### 3. AI 章节生成流程
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant FE as 前端
+    participant BE as 后端
+    participant CB as ContextBuilder
+    participant AG as Agent 系统
+    participant LLM as LLM 服务
+    participant DB as D1 数据库
+    participant VEC as Vectorize
+    
+    U->>FE: 点击"生成章节"
+    FE->>BE: POST /api/generate/chapter<br/>{chapterId, mode, options}
+    BE->>CB: buildContext(novelId, chapterId)
+    CB->>DB: 查询总纲、角色、摘要等
+    CB->>VEC: 语义检索相关片段
+    CB-->>BE: 组装完成 context (55k tokens)
+    
+    BE->>AG: executeGeneration(context)
+    AG->>LLM: 流式生成 (SSE)
+    
+    loop ReAct 循环
+        LLM-->>AG: 文本片段 / 工具调用
+        alt 工具调用
+            AG->>DB: queryOutline / searchSemantic
+            DB-->>AG: 查询结果
+            AG->>LLM: 工具结果
+        end
+        AG-->>FE: SSE data chunk
+        FE->>U: 实时显示生成内容
+    end
+    
+    AG->>AG: 后处理
+    AG->>DB: 保存章节内容
+    AG->>VEC: 向量化新章节
+    AG->>DB: 生成摘要并保存
+    AG-->>FE: data: [DONE]
+```
+
+### 4. 创意工坊流程
+
+```mermaid
+stateDiagram-v2
+    [*] --> concept: 创建会话
+    concept --> worldbuilding: 切换阶段
+    worldbuilding --> character: 切换阶段
+    character --> volume: 切换阶段
+    volume --> [*]: 提交确认
+    
+    state concept {
+        [*] --> discussing
+        discussing --> extracting: AI 提取结构化数据
+        extracting --> discussing: 继续对话
+    }
+    
+    state worldbuilding {
+        [*] --> buildingWorld
+        buildingWorld --> definingSystem: 定义力量体系
+        definingSystem --> mappingGeography: 绘制地理
+    }
+    
+    state character {
+        [*] --> designingProtagonist
+        designingProtagonist --> creatingSupporting: 设计配角
+        creatingSupporting --> designingAntagonist: 设计反派
+    }
+    
+    state volume {
+        [*] --> planningVolumes: 规划分卷
+        planningVolumes --> outliningChapters: 章节大纲
+        outliningChapters --> arrangingForeshadowing: 安排伏笔
+    }
+```
+
+---
+
+## AI 生成架构
+
+### LLM 统一调用层
+
+```typescript
+// server/services/llm.ts - 核心接口
+interface LLMService {
+  // 非流式生成
+  generate(prompt: string, options: LLMOptions): Promise<string>;
+  
+  // 流式生成
+  streamGenerate(prompt: string, options: LLMOptions): ReadableStream<string>;
+  
+  // 嵌入向量
+  embed(texts: string[]): Promise<number[][]>;
+  
+  // 视觉理解
+  vision(imageUrl: string, prompt: string): Promise<VisionResult>;
+}
+
+interface LLMOptions {
+  provider: string;      // volcengine / openai / anthropic ...
+  modelId: string;       // doubao-seed-2-pro / gpt-4o ...
+  temperature?: number;  // 0.0 - 1.0
+  maxTokens?: number;    // 最大生成长度
+  tools?: Tool[];        // 工具定义 (Function Calling)
+}
+```
+
+### 支持的 AI 提供商（20+）
+
+| 类别 | 提供商 | 推荐模型 | 适用场景 |
+|------|--------|----------|----------|
+| **国内** | 字节豆包 | doubao-seed-2-pro | 中文创作主力 |
+| | 智谱AI | glm-4-plus | 中文理解 |
+| | 阿里通义 | qwen-max | 多模态 |
+| | 百度文心 | ernie-4.0 | 中文生成 |
+| | 腾讯混元 | hunyuan-pro | 对话场景 |
+| | MiniMax | abab6.5s-chat | 长文本 |
+| | 月之暗面 | moonshot-v1-128k | 超长文本 |
+| | 硅基流动 | deepseek-ai/deepseek-chat | 性价比 |
+| **国际** | OpenAI | gpt-4o | 通用场景 |
+| | Anthropic | claude-sonnet-4-20250514 | 高质量创作 |
+| | Google | gemini-2.0-flash | 多模态推理 |
+| | Mistral | mistral-large-latest | 欧洲合规 |
+| | xAI | grok-3 | 实时信息 |
+| | Groq | llama-3.3-70b-versatile | 高速推理 |
+| | Perplexity | sonar | 搜索增强 |
+| **其他** | OpenRouter | 多模型聚合 | 备用方案 |
+| | NVIDIA | nemotron-3 | 企业级 |
+| | 模力方舟 | 自定义模型 | 私有化 |
+| | 魔搭社区 | 开源模型 | 本地部署 |
+| | 自定义 | OpenAI 兼容 | 任意兼容接口 |
+
+### 模型配置优先级
 
 ```
-触发时机:
-- 总纲内容更新 (onMasterOutlineSave)
-- 章节摘要生成 (onSummaryComplete)
-- 角色描述更新 (onCharacterUpdate)
-- 小说设定更新 (onNovelSettingsUpdate)
+小说级配置 > 全局配置 > 默认值
+```
 
-流程:
-1. 检测内容变化
-2. 调用 embedText() 生成向量
-3. VECTORIZE.upsert({
-     id: content.id,
-     values: vector,
-     metadata: {
-       sourceType: 'master_outline'|'chapter'|'character'|'setting',
-       novelId,
-       title,
-       content
-     }
-   })
-4. 更新数据库 vectorId 字段
-5. 更新 vector_index 追踪表
+每个生成阶段可独立配置：
+- `chapter_gen` - 章节生成
+- `outline_gen` - 大纲生成
+- `summary_gen` - 摘要生成
+- `embedding` - 文本嵌入
+- `vision` - 视觉理解
+- `analysis` - 智能分析
+- `workshop` - 创作工坊
+
+---
+
+## RAG 检索增强生成
+
+### ContextBuilder v4.0 架构
+
+> Token 预算：**55,000 tokens** (从 v3 的 12k 大幅提升)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   ContextBuilder v4.0                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ Core Layer (强制注入) - ≤18,000 tokens              │   │
+│  │                                                     │   │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐            │   │
+│  │  │ 总纲内容  │ │ 卷规划   │ │ 上一章   │            │   │
+│  │  │ ≤10,000  │ │ ≤1,500   │ │ ≤500     │            │   │
+│  │  └──────────┘ └──────────┘ └──────────┘            │   │
+│  │  ┌──────────┐ ┌──────────┐                           │   │
+│  │  │ 主角卡   │ │ 创作规则 │                           │   │
+│  │  │ ≤3,000   │ │ ≤5,000   │                           │   │
+│  │  └──────────┘ └──────────┘                           │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ Dynamic Layer (动态组装) - ≤37,000 tokens            │   │
+│  │                                                     │   │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐            │   │
+│  │  │ 摘要链   │ │ 出场角色 │ │ 世界设定 │            │   │
+│  │  │ ≤10,000  │ │ ≤8,000   │ │ ≤12,000  │            │   │
+│  │  └──────────┘ └──────────┘ └──────────┘            │   │
+│  │  ┌──────────┐ ┌──────────┐                           │   │
+│  │  │ 待回收伏笔│ │ 本章规则 │                           │   │
+│  │  │ ≤4,000   │ │ ≤3,000   │                           │   │
+│  │  └──────────┘ └──────────┘                           │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+│  Total Budget: 55,000 tokens                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 上下文组装流程
+
+```
+输入: novelId + chapterId
+         │
+         ▼
+┌─────────────────┐
+│ 1. 查询基本信息  │ → 小说信息、卷信息、章节信息
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ 2. Core Layer   │ → 强制注入关键信息
+│    (18k tokens)  │ → 总纲 + 卷规划 + 上一章 + 主角卡 + 规则
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ 3. Dynamic Layer│ → 语义检索相关内容
+│   (37k tokens)  │ → 摘要链(20章) + 角色 + 设定 + 伏笔 + 规则
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ 4. Token 控制   │ → 截断超长内容
+│    & 优化       │ → 保留重要部分
+└────────┬────────┘
+         │
+         ▼
+    输出: context string
+```
+
+### 向量检索流程
+
+```
+查询文本
+    │
+    ▼
+┌──────────────┐
+│ Embedding    │ @cf/baai/bge-m3 (1024维)
+│ (文本转向量)  │
+└──────┬───────┘
+       │ 1024-dim vector
+       ▼
+┌──────────────┐
+│ Vectorize    │ 余弦相似度搜索
+│ (相似度匹配)  │ Top-K = 5~10
+└──────┬───────┘
+       │ 结果排序
+       ▼
+┌──────────────┐
+│ 过滤 & 重排  │ 按相关性 + 时间衰减
+└──────┬───────┘
+       │
+       ▼
+   返回相关片段
+```
+
+---
+
+## Agent 系统 (v1.6.0)
+
+> 基于 **ReAct (Reason + Act)** 模式的智能代理，负责章节生成的完整流程。
+
+### 模块化架构（14 个子模块）
+
+```
+server/services/agent/
+├── index.ts              # 统一导出入口
+├── types.ts              # 类型定义（AgentState, ToolResult 等）
+├── constants.ts          # 常量定义（Token限制、提示词模板）
+├── executor.ts           # 执行器（协调各模块）
+├── generation.ts         # 生成逻辑（主控流程）
+├── reactLoop.ts          # ReAct 循环（思考-行动循环）
+├── tools.ts              # 工具定义（queryOutline, searchSemantic 等）
+├── messages.ts           # 消息构建（System/User/Tool 消息）
+├── summarizer.ts         # 摘要生成（章节摘要提取）
+├── logging.ts            # 日志记录（生成过程记录）
+├── checkLogService.ts    # 检查日志服务（质量检查记录）
+├── coherence.ts          # 连贯性检查（章节间一致性）
+├── consistency.ts        # 一致性检查（角色行为一致性）
+└── volumeProgress.ts     # 卷进度检查（写作节奏评估）
+```
+
+### ReAct 循环流程
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     ReAct Loop                               │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌──────────┐                                               │
+│  │ 开始     │                                               │
+│  └────┬─────┘                                               │
+│       ▼                                                     │
+│  ┌──────────────────────────────────────────────┐          │
+│  │ Reason: LLM 分析当前需求                      │          │
+│  │ - 理解生成目标                                 │          │
+│  │ - 决定是否需要查询额外信息                     │          │
+│  └──────────────────────┬───────────────────────┘          │
+│                         │                                   │
+│              ┌──────────┴──────────┐                       │
+│              ▼                     ▼                       │
+│     ┌────────────────┐   ┌────────────────┐               │
+│     │ 直接生成内容    │   │ 需要更多信息    │               │
+│     │ (无工具调用)    │   │ (调用工具)      │               │
+│     └───────┬────────┘   └───────┬────────┘               │
+│             │                    │                         │
+│             │          ┌────────▼────────┐               │
+│             │          │ Act: 执行工具    │               │
+│             │          │ - queryOutline   │               │
+│             │          │ - searchSemantic │               │
+│             │          │ - getSummary     │               │
+│             │          └────────┬─────────┘               │
+│             │                   │                         │
+│             │          ┌───────▼─────────┐               │
+│             │          │ Observe: 结果   │               │
+│             │          │ 将工具结果加入   │               │
+│             │          │ 上下文继续推理   │               │
+│             │          └───────┬─────────┘               │
+│             │                   │                         │
+│             └─────────┬─────────┘                         │
+│                       ▼                                   │
+│              ┌────────────────┐                          │
+│              │ 达到最大轮次?   │                          │
+│              └───────┬────────┘                          │
+│              是 ↙         ↘ 否                            │
+│         ┌──────────┐  返回 Reason                        │
+│         │ 结束循环  │                                   │
+│         └────┬─────┘                                   │
+│              ▼                                         │
+│  ┌──────────────────────────────────────────────┐      │
+│  │ Post-Processing                               │      │
+│  │ 1. 保存章节到数据库                            │      │
+│  │ 2. 生成摘要 (summarizer.ts)                   │      │
+│  │ 3. 向量化索引 (embedding.ts)                  │      │
+│  │ 4. 记录生成日志 (logging.ts)                  │      │
+│  │ 5. 执行质量检查 (checkLogService.ts)          │      │
+│  └──────────────────────────────────────────────┘      │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 可用工具集
+
+| 工具名称 | 功能 | 使用场景 |
+|---------|------|----------|
+| `queryOutline` | 查询大纲节点详情 | 获取特定卷/章节的大纲信息 |
+| `searchSemantic` | 语义搜索 | 搜索相关的设定、角色、伏笔等 |
+| `getSummary` | 获取章节摘要 | 获取前序章节的摘要链 |
+| `getCharacters` | 获取角色信息 | 获取出场角色的详细信息 |
+| `getSettings` | 获取世界设定 | 获取相关的世界观/境界等信息 |
+| `getForeshadowing` | 获取伏笔信息 | 获取待回收的开放伏笔 |
+| `getWritingRules` | 获取创作规则 | 获取适用的写作风格/禁忌规则 |
+
+### 质量检查系统 (v1.6.0+)
+
+```mermaid
+graph LR
+    A[章节生成完成] --> B[角色一致性检查]
+    A --> C[连贯性检查]
+    A --> D[卷进度检查]
+    
+    B --> E{有冲突?}
+    E -->|是| F[记录警告]
+    E -->|否| G[通过]
+    
+    C --> H{评分?}
+    H -->|< 70| I[记录问题]
+    H -->|≥ 70| J[通过]
+    
+    D --> K{进度正常?}
+    K -->|否| L[建议调整节奏]
+    K -->|是| M[通过]
+    
+    F --> N[Combined Check]
+    I --> N
+    L --> N
+    G --> N
+    J --> N
+    M --> N
+    
+    N --> O[生成检查报告]
+    O --> P[存入 checkLogs 表]
+```
+
+---
+
+## 向量检索系统
+
+### 技术规格
+
+| 参数 | 值 |
+|------|-----|
+| **向量维度** | **1024** (BGE M3 多语言模型) |
+| **距离度量** | 余弦相似度 (Cosine Similarity) |
+| **索引算法** | HNSW (Hierarchical Navigable Small World) |
+| **嵌入模型** | `@cf/baai/bge-m3` (Cloudflare Workers AI) |
+| **最大批量** | 100 条/次 |
+| **检索数量** | Top-K (默认 5-10) |
+
+### 向量索引的数据类型
+
+```typescript
+type SourceType =
+  | 'outline'      // 大纲内容
+  | 'chapter'      // 章节正文
+  | 'character'    // 角色描述
+  | 'summary'      // 章节摘要
+  | 'setting'      // 世界设定
+  | 'foreshadowing'; // 伏笔描述
+```
+
+### 索引策略
+
+```
+自动索引时机:
+├── 章节生成完成后 → 索引章节内容 + 摘要
+├── 角色创建/更新时 → 索引角色描述
+├── 设定创建/更新时 → 索引设定内容
+├── 伏笔创建时 → 索引伏笔描述
+└── 总纲更新时 → 索引总纲内容
+
+手动触发:
+├── 全量重建 → POST /api/vectorize/reindex-all
+└── 增量索引 → POST /api/vectorize/index-missing
+```
+
+### 异步队列处理 (v1.6.0+)
+
+```
+索引请求
+    │
+    ▼
+┌──────────────┐
+│ 判断数据量    │
+└──────┬───────┘
+       │
+   ┌───┴───┐
+   ▼       ▼
+ 小量    大量
+ (≤10)  (>10)
+   │       │
+   ▼       ▼
+同步处理  提交Queue
+   │       │
+   │       ▼
+   │   ┌──────────┐
+   │   │ Queue    │
+   │   │ Consumer │
+   │   └────┬─────┘
+   │        │
+   ▼        ▼
+┌──────────────┐
+│ 返回结果     │
+└──────────────┘
+```
+
+---
+
+## 安全设计
+
+### 认证机制
+
+```
+JWT Token 结构:
+{
+  "sub": "user_id",       // 用户ID
+  "username": "xxx",      // 用户名
+  "role": "admin|user",   // 角色
+  "iat": 1713571200,      // 签发时间
+  "exp": 1714176000,      // 过期时间 (7天)
+  "iss": "novelforge"     // 签发者
+}
+
+签名算法: HS256
+密钥来源: 环境变量 JWT_SECRET
+```
+
+### 密码安全
+
+```
+哈希算法: PBKDF2-HMAC-SHA256
+迭代次数: 100,000 次
+盐值长度: 32 字节
+输出长度: 64 字节 (512 bit)
+
+安全性评估:
+- 抗彩虹表攻击 ✅
+- 抗暴力破解 ✅ (每秒仅能尝试 ~10 次)
+- 抗 GPU 破解 ✅ (高内存消耗)
+```
+
+### API 安全措施
+
+| 措施 | 实现 |
+|------|------|
+| **输入验证** | Zod schema 运行时校验所有输入参数 |
+| **SQL 注入防护** | Drizzle ORM 参数化查询 |
+| **XSS 防护** | 前端 DOMPurify + 后端转义 |
+| **CORS 配置** | 仅允许前端域名跨域访问 |
+| **速率限制** | Cloudflare Rate Limiting (可选) |
+| **敏感信息保护** | API Key 仅存环境变量名，运行时读取 |
+| **软删除** | 所有数据逻辑删除，永不物理删除 |
+
+### 权限控制
+
+```
+权限层级:
+├── Public (公开)
+│   ├── POST /api/auth/login
+│   ├── POST /api/auth/register (需开启注册)
+│   ├── GET /api/setup/status
+│   └── GET /api/health
+│
+├── User (需登录)
+│   ├── 小说 CRUD
+│   ├── 章节 CRUD
+│   ├── 角色管理
+│   ├── AI 生成
+│   └── 导出功能
+│
+└── Admin (管理员)
+    ├── 用户管理
+    ├── 邀请码管理
+    ├── 系统设置
+    └── 永久删除操作
 ```
 
 ---
 
 ## 性能优化策略
 
-### 1. 边缘缓存
+### 前端优化
 
-```typescript
-// 健康检查接口缓存
-app.get('/health', (c) => {
-  c.header('Cache-Control', 'no-cache')
-  return c.json({ ok: true, ts: Date.now() })
-})
-```
+| 优化项 | 技术 | 效果 |
+|--------|------|------|
+| **代码分割** | React.lazy + Suspense | 首屏加载时间 -60% |
+| **资源压缩** | Vite 生产构建 | JS/CSS 体积 -40% |
+| **图片优化** | R2 CDN + WebP 格式 | 图片加载速度 +200% |
+| **缓存策略** | TanStack Query (stale-while-revalidate) | API 请求 -50% |
+| **防抖节流** | lodash.debounce | 无效请求 -80% |
+| **虚拟滚动** | 仅长列表使用 | 内存占用 -90% |
 
-### 2. Token 预算控制
+### 后端优化
 
-```typescript
-// 防止超长输入
-const MAX_RAG_TOKENS = 4000
-let usedTokens = 0
-for (const chunk of ragResults) {
-  const tokens = estimateTokens(chunk.content)
-  if (usedTokens + tokens > MAX_RAG_TOKENS) break
-  usedTokens += tokens
-  selectedChunks.push(chunk)
-}
-```
+| 优化项 | 技术 | 效果 |
+|--------|------|------|
+| **边缘部署** | Cloudflare Workers | 全球延迟 <50ms |
+| **D1 读取副本** | 区域性数据库复制 | 读取性能 +300% |
+| **连接池** | Drizzle 内置连接池 | 数据库操作 -40% |
+| **流式传输** | SSE (Server-Sent Events) | 首字时间 -90% |
+| **异步队列** | Cloudflare Queues | 解耦耗时操作 |
+| **向量缓存** | TanStack Query 缓存 | 重复查询 -60% |
 
-### 3. 并发请求
+### 数据库优化
 
-```typescript
-// 并行拉取强制注入内容
-const [outline, prevSummary, volumeSummary, protagonists] =
-  await Promise.all([
-    fetchChapterOutline(db, chapterId),
-    fetchPrevChapterSummary(db, chapterId),
-    fetchVolumeSummary(db, chapterId),
-    fetchProtagonistCards(db, chapterId)
-  ])
-```
-
-### 4. 懒加载
-
-```typescript
-// TanStack Query 配置
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30 * 1000,  // 30 秒内不重新获取
-      refetchOnWindowFocus: false
-    }
-  }
-})
-```
+| 优化项 | 实现 |
+|--------|------|
+| **索引设计** | 外键字段 + 常查询字段建立索引 |
+| **分页查询** | 所有列表接口支持分页 |
+| **字段裁剪** | API 只返回必要字段 |
+| **读写分离** | D1 自动读取副本 |
+| **迁移管理** | Drizzle Kit + SQL 迁移脚本 |
 
 ---
 
-## 安全考虑
+## 部署架构
 
-### 1. API Key 管理
+### Cloudflare 基础设施
 
-**❌ 错误做法**:
-```typescript
-// 不要把 API Key 存入数据库！
-const config = { apiKey: 'sk-xxx' }
-db.insert(config)
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Cloudflare 网络                            │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │              Cloudflare Pages                       │   │
+│  │                                                     │   │
+│  │  ┌─────────────────┐  ┌─────────────────────────┐  │   │
+│  │  │  Static Assets  │  │  Functions (Workers)     │  │   │
+│  │  │  (dist/)        │  │  - /api/* 路由          │  │   │
+│  │  │  - HTML/JS/CSS  │  │  - queue-handler.ts     │  │   │
+│  │  │  - Images       │  │  - SSR (如需要)          │  │   │
+│  │  └────────┬────────┘  └────────────┬────────────┘  │   │
+│  │           │                      │                │   │
+│  └───────────┼──────────────────────┼────────────────┘   │
+│              │                      │                    │
+│  ┌───────────▼──────────────────────▼────────────────┐    │
+│  │              Cloudflare Services                   │    │
+│  │                                                    │    │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐  │    │
+│  │  │ D1 DB    │ │Vectorize │ │ R2 Storage       │  │    │
+│  │  │ (SQLite) │ │ (1024维) │ │ (Images/Files)   │  │    │
+│  │  └──────────┘ └──────────┘ └──────────────────┘  │    │
+│  │                                                    │    │
+│  │  ┌──────────────────────────────────────────┐    │    │
+│  │  │ Queue (异步任务)                           │    │    │
+│  │  │ - 索引重建                                  │    │    │
+│  │  │ - 批量操作                                  │    │    │
+│  │  └──────────────────────────────────────────┘    │    │
+│  └────────────────────────────────────────────────────┘    │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │              CDN (全球 300+ 节点)                   │   │
+│  │                                                     │   │
+│  │  北京 → 东京 → 新加坡 → 法兰克福 → 纽约 → 圣保罗    │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**✅ 正确做法**:
-```typescript
-// 只存环境变量名，运行时读取
-const config = { apiKeyEnv: 'VOLCENGINE_API_KEY' }
-const apiKey = c.env[config.apiKeyEnv]  // 从 Secret 读取
-```
-
-### 2. 输入验证
-
-```typescript
-import { zValidator } from '@hono/zod-validator'
-
-router.post('/', zValidator('json', CreateSchema), async (c) => {
-  // Zod 自动验证，无效请求直接返回 400
-  const data = c.req.valid('json')
-})
-```
-
-### 3. 软删除
-
-```typescript
-// 永远不要物理删除！
-await db.update(novels)
-  .set({ deletedAt: sql`(unixepoch())` })
-  .where(eq(novels.id, id))
-```
-
-### 4. CORS 配置
-
-```typescript
-// Hono 中间件
-app.use('*', async (c, next) => {
-  c.header('Access-Control-Allow-Origin', '*')
-  c.header('Access-Control-Allow-Headers', 'Content-Type')
-  c.header('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE')
-  await next()
-})
-```
-
----
-
-## 监控与日志
-
-### 健康检查
+### 环境配置
 
 ```bash
-curl https://your-domain.pages.dev/api/health
-# {"ok":true,"ts":1234567890,"phase":3}
+# 必需环境变量
+VOLCENGINE_API_KEY=xxx        # 字节豆包 API Key
+ANTHROPIC_API_KEY=xxx         # Anthropic API Key
+OPENAI_API_KEY=xxx            # OpenAI API Key
+JWT_SECRET=your-jwt-secret    # JWT 签名密钥 (至少 32 字符)
+D1_DATABASE_ID=xxx            # D1 数据库 ID
+R2_BUCKET_NAME=xxx            # R2 存储桶名称
+VECTORIZE_INDEX_ID=xxx        # Vectorize 索引 ID
+QUEUE_ID=xxx                  # Queue ID (v1.6.0+)
+
+# 可选环境变量
+CLOUDFLARE_ACCOUNT_ID=xxx     # Cloudflare 账户 ID
+CLOUDFLARE_API_TOKEN=xxx      # Cloudflare API Token
 ```
 
-### 错误日志
-
-```typescript
-try {
-  await someOperation()
-} catch (error) {
-  console.error('Operation failed:', error)  // 写入 Workers 日志
-  throw error
-}
-```
-
-### Token 使用统计
-
-```typescript
-// 记录每次生成的 token 消耗
-await db.update(chapters).set({
-  promptTokens: usage.prompt_tokens,
-  completionTokens: usage.completion_tokens
-})
-```
+详细部署指南见 [DEPLOYMENT.md](./DEPLOYMENT.md)
 
 ---
 
-## 扩展性设计
+## 附录：版本演进
 
-### 1. 插件化 Provider
-
-```typescript
-// 新增 Provider 只需：
-// 1. 在 llm.ts 添加 provider 配置
-// 2. 实现对应的 API 适配层
-// 3. 在前端 providers.ts 添加选项
-```
-
-### 2. 模块化 Services
-
-```
-services/
-├── llm.ts           # LLM 调用（可替换）
-├── embedding.ts     # 向量化（可换模型）
-├── vision.ts        # 视觉分析（可换模型）
-├── agent.ts         # Agent 逻辑（可改策略）
-├── contextBuilder.ts # 上下文组装（可调参数）
-└── export.ts        # 导出（可加格式）
-```
-
-### 3. 配置驱动
-
-```typescript
-// 所有行为都可通过 model_configs 调整
-// 无需修改代码即可：
-// - 切换模型
-// - 调整 temperature
-// - 设置 max_tokens
-```
+| 版本 | 重要变更 |
+|------|----------|
+| **v1.0** | 基础功能：小说/章节/角色/大纲/设定/规则/伏笔 |
+| **v1.5** | 用户系统 + 邀请码 + MCP + 创意工坊 |
+| **v1.6.0** | Agent 模块化重构 + 质量检查 + 实体树 + 回收站 + Queue |
+| **v1.7.0** | 目标管理 + 伏笔进度 + 工坊导入 + 检查日志增强 |
+| **v1.8.0** | 格式化导入 + 数据导入对话框 |
+| **v1.9.0** | 质量检查系统重构 + 卷进度检查 + 上下文v4.1优化 |
 
 ---
 
-## 总结
+<div align="center">
 
-NovelForge 采用现代化的边缘计算架构，充分利用 Cloudflare 生态的能力：
+**Architecture Version: 1.9.0 · 最后更新: 2026-04-25**
 
-- **零运维**: 完全 Serverless，自动扩缩容
-- **低延迟**: 全球边缘节点，用户就近访问
-- **低成本**: 免费额度充足个人使用
-- **高可用**: Cloudflare 99.99% SLA
-- **易扩展**: 模块化设计，功能易于扩展
-
-未来可扩展方向：
-- Phase 4: 多用户 SaaS 化
-- MCP 集成：接入 Claude Desktop
-- PDF 导出：Cloudflare Browser Rendering
-- 语音朗读：Workers AI TTS
+</div>

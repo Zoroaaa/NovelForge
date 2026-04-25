@@ -3,8 +3,8 @@
 <div align="center">
 
 ![NovelForge Logo](https://img.shields.io/badge/NovelForge-AI%20Writing%20Studio-blue?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-1.8.0-success?style=for-the-badge)
-![Phase](https://img.shields.io/badge/Phase-8%20Complete-success?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-1.9.0-success?style=for-the-badge)
+![Phase](https://img.shields.io/badge/Phase-9%20Complete-success?style=for-the-badge)
 ![Cloudflare](https://img.shields.io/badge/Cloudflare-Pages%2BWorkers-orange?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
@@ -238,7 +238,7 @@ Total: 12,000 tokens
 | **🖥️ AI 监控中心** | 向量索引统计 · 生成日志 · 上下文诊断 · 服务状态检查 (v1.6.0 新增) |
 | **🌳 实体树** | 树形结构展示 · 快速定位章节 · 元数据展示 (v1.6.0 新增) |
 | **🗑️ 回收站** | 软删除数据查看 · 单条/批量永久删除 (v1.6.0 新增) |
-| **🛡️ 质量检查** | 角色一致性检查 · 章节连贯性检查 · 综合评分 (v1.6.0 新增) |
+| **🛡️ 质量检查** | 角色一致性检查 · 章节连贯性检查 · 卷进度检查 · 综合评分 (v1.9.0 新增) |
 | **⚡ 队列任务** | 异步索引重建 · 后台任务处理 · 任务日志追踪 (v1.6.0 新增) |
 | **🪄 数据导入** | AI智能格式识别 · JSON/TXT/MD支持 · 7种模块 · 3种导入模式 · 批量处理 (v1.8.0 新增) |
 | **📥 工坊导入** | 结构化数据导入 · 批量创建 · 数据验证 (v1.7.0 新增) |
@@ -299,7 +299,9 @@ wrangler pages dev --local -- pnpm dev
 | [部署指南](./docs/DEPLOYMENT.md) | 生产环境部署、CI/CD 配置、环境变量 |
 | [API 参考](./docs/API.md) | 完整的 REST API 文档 |
 | [MCP 配置](./docs/MCP-SETUP.md) | Claude Desktop 集成配置指南 |
-| [上下文构建v4](./docs/context-v4-execution-guide.md) | v4上下文构建完整执行逻辑 |
+| [章节生成上下文指南](./docs/CHAPTER-GENERATION-CONTEXT-GUIDE.md) | v4.1上下文构建完整执行逻辑 |
+| [模型使用指南](./docs/MODEL-USAGE-GUIDE.md) | 模型配置与使用详解 |
+| [创作工坊指南](./docs/WORKSHOP-EXECUTION-GUIDE.md) | 创作工坊完整执行逻辑 |
 | [CHANGELOG](./CHANGELOG.md) | 版本更新记录 |
 
 ---
@@ -414,9 +416,14 @@ novelforge/
 │   │   ├── model/                # 模型配置组件
 │   │   ├── novel/                # 小说相关组件
 │   │   ├── outline/              # 大纲组件
-│   │   ├── chapter/              # 章节编辑器
 │   │   ├── generate/             # AI 生成面板 (v1.6.0 增强)
-│   │   ├── workshop/             # 创作工坊组件
+│   ├── chapter-health/           # 质量检查组件 (v1.9.0 重构)
+│   │   ├── ChapterCoherenceCheck.tsx
+│   │   ├── ChapterHealthCheck.tsx
+│   │   ├── CharacterConsistencyCheck.tsx
+│   │   ├── CombinedCheck.tsx
+│   │   └── VolumeProgressCheck.tsx (v1.9.0 新增)
+│   ├── workshop/             # 创作工坊组件
 │   │   │   ├── WorkshopSidebar.tsx     # 工坊会话侧边栏
 │   │   │   └── ImportDataDialog.tsx    # 导入数据对话框 (v1.8.0 新增)
 │   │   ├── character/            # 角色管理
@@ -577,6 +584,6 @@ novelforge/
 
 <div align="center">
 
-**Made with ❤️ by the NovelForge Team · Version 1.8.0**
+**Made with ❤️ by the NovelForge Team · Version 1.9.0**
 
 </div>

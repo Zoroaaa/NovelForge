@@ -387,10 +387,16 @@ API_BASE_URL=/api  # 使用相对路径，无需配置
 server/db/migrations/
 ├── 0010_schema.sql       # v4.0 整合迁移（合并所有历史迁移）
 ├── 0011_check_logs.sql   # v4.0 检查日志表
-└── 0012_foreshadowing_progress.sql # v1.7.0 伏笔进度追踪表
+├── 0012_foreshadowing_progress.sql # v1.7.0 伏笔进度追踪表
+├── 0013_novel_target_word_count.sql # v1.7.0 小说目标字数字段
+├── 0014_volume_target_chapter_count.sql # v1.7.0 卷目标章节数字段
+├── 0015_check_logs_volume_progress.sql # v1.7.0 检查日志卷进度字段
+└── 0016_novel_target_chapter_count.sql # v1.7.0 小说目标章数字段
 ```
 
-> **v1.7.0 变更说明**：新增伏笔进度追踪功能，需要执行 `0012_foreshadowing_progress.sql` 迁移。
+> **v1.7.0 变更说明**：新增伏笔进度追踪功能和目标管理字段，需要执行 `0012-0016` 迁移。
+
+> **v1.9.0 变更说明**：无需额外迁移，但建议运行迁移以确保数据库结构最新。
 
 > **v4.0 变更说明**：从 v1.6.0 开始，数据库迁移已整合为 `0010_schema.sql`，使用触发器自动维护字数/章数统计。升级时请直接执行 `0010_schema.sql`。
 
@@ -686,7 +692,7 @@ git pull origin main
 # 2. 更新依赖
 pnpm update
 
-# 3. 运行新迁移（v1.6.0 使用整合迁移）
+# 3. 运行新迁移
 wrangler d1 migrations apply novelforge --remote
 
 # 4. 创建/更新 Vectorize 索引（v4.0 维度为 1024）
@@ -700,6 +706,15 @@ wrangler queues create novelforge-tasks
 pnpm build
 wrangler pages deploy dist
 ```
+
+**v1.9.0 升级注意事项**：
+- 无需数据库迁移（已在 v1.7.0 中完成）
+- 质量检查组件已重构，如有自定义修改需要同步更新
+- 上下文构建 v4.1 优化了 token 预算分配
+
+**v1.8.0 升级注意事项**：
+- AI 智能数据导入功能无需额外配置
+- 实体树面板增加了伏笔状态和规则分类显示
 
 **v1.6.0 升级注意事项**：
 - Node.js 版本需要 >= 20
@@ -715,6 +730,7 @@ wrangler pages deploy dist
 
 | 版本 | Node.js | Wrangler | Drizzle |
 |------|---------|----------|---------|
+| v1.9+ | >= 20 | >= 4.0 | >= 0.45 |
 | v1.7+ | >= 20 | >= 4.0 | >= 0.45 |
 | v1.6+ | >= 20 | >= 4.0 | >= 0.45 |
 | v1.5+ | >= 18 | >= 3.0 | >= 0.45 |
@@ -722,7 +738,14 @@ wrangler pages deploy dist
 | v1.3+ | >= 18 | >= 3.0 | >= 0.40 |
 | v1.0+ | >= 18 | >= 3.0 | >= 0.30 |
 
-### 重要变更说明 (v1.7.0)
+### 重要变更说明 (v1.9.0)
+
+- **上下文构建 v4.1**：预算提升至 128k tokens，新增创作节奏把控 (Slot-10)
+- **章节健康检查重构**：组件从 generate 目录移动到 chapter-health 目录
+- **卷进度检查**：新增卷进度检查功能，可评估创作节奏健康状态
+- **数据库新增字段**：novels 和 volumes 表新增 target_word_count、target_chapter_count 字段
+
+### 重要变更说明 (v1.8.0)
 
 - **伏笔进度追踪**：新增 `foreshadowing_progress` 表
 - **工坊导入增强**：新增格式化工坊导入路由和服务
