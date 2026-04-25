@@ -681,7 +681,7 @@ export async function commitWorkshopSession(
           blueprint: vol.blueprint || null,
           eventLine: eventLineValue,
           notes: notesValue,
-          chapterCount: vol.chapterCount || 0,
+          chapterCount: 0,
           targetWordCount: vol.targetWordCount || null,
           targetChapterCount: vol.targetChapterCount || null,
           sortOrder: createdVolumes.length,
@@ -785,7 +785,7 @@ ${readonlyCtx}
 
 ## 输出约束（严格执行）
 - 当信息足够时，输出如下 JSON 代码块进行汇总
-- ⛔ 禁止输出 worldSettings / characters / volumes 字段，这些属于其他阶段
+- ⛔ 禁止输出 worldSettings / characters / volumes / chapters 字段，这些属于其他阶段
 - ✅ 只允许输出以下字段：
 
 \`\`\`json
@@ -821,7 +821,7 @@ ${readonlyCtx}
 先讨论关键设定点，收集足够信息后输出最终结构化文档。
 
 ## 输出约束（严格执行）
-- ⛔ 禁止输出 title / genre / characters / volumes / writingRules 等字段
+- ⛔ 禁止输出 title / genre / description / coreAppeal / targetWordCount / targetChapters / writingRules / characters / volumes / chapters 字段，这些属于其他阶段
 - ✅ 只允许输出以下字段：
 
 \`\`\`json
@@ -848,7 +848,7 @@ ${readonlyCtx}
 每个角色需要：姓名、性格、外貌、背景、目标、与其他角色的关系。
 
 ## 输出约束（严格执行）
-- ⛔ 禁止输出 worldSettings / volumes / title / genre 等字段
+- ⛔ 禁止输出 title / genre / description / coreAppeal / targetWordCount / targetChapters / writingRules / worldSettings / volumes / chapters 字段，这些属于其他阶段
 - ✅ 只允许输出以下字段：
 
 \`\`\`json
@@ -876,7 +876,7 @@ ${readonlyCtx}
 帮用户将故事分成若干卷（建议 3-8 卷），为每卷制定：标题、主要事件线、关键转折点、伏笔安排、预计章节数和目标字数。
 
 ## 输出约束（严格执行）
-- ⛔ 禁止输出 worldSettings / characters / title / genre / targetWordCount / targetChapters 等字段
+- ⛔ 禁止输出 title / genre / description / coreAppeal / targetWordCount / targetChapters / writingRules / worldSettings / characters / chapters 字段，这些属于其他阶段
 - ✅ 只允许输出以下字段：
 
 \`\`\`json
@@ -888,7 +888,6 @@ ${readonlyCtx}
       "blueprint": "详细的情节蓝图...",
       "eventLine": ["关键事件1", "重要转折点"],
       "notes": ["伏笔1", "备注信息"],
-      "chapterCount": 10,
       "targetWordCount": 50000,
       "targetChapterCount": 15
     }
@@ -907,7 +906,7 @@ ${readonlyCtx}
 注意根据每卷的目标字数和章节数，合理分配每章的内容量。
 
 ## 输出约束（严格执行）
-- ⛔ 禁止输出 worldSettings / characters / title / genre / volumes 等字段
+- ⛔ 禁止输出 title / genre / description / coreAppeal / targetWordCount / targetChapters / writingRules / worldSettings / characters / volumes 字段，这些属于其他阶段
 - ✅ 只允许输出以下字段：
 
 \`\`\`json
@@ -970,9 +969,12 @@ function buildReadonlyContext(stage: string, data: WorkshopExtractedData): strin
     return parts.join('\n')
   }
 
-  // volume_outline 阶段：可以参考 concept + character
+  // volume_outline 阶段：可以参考 concept + worldbuild + character
   if (stage === 'volume_outline') {
     parts.push(`### 小说概念（只读）\n${JSON.stringify({ title: data.title, genre: data.genre, description: data.description, targetWordCount: data.targetWordCount, targetChapters: data.targetChapters }, null, 2)}`)
+    if (data.worldSettings?.length) {
+      parts.push(`### 世界观设定（只读）\n${JSON.stringify(data.worldSettings, null, 2)}`)
+    }
     if (data.characters?.length) {
       parts.push(`### 角色设定（只读）\n${JSON.stringify(data.characters, null, 2)}`)
     }
