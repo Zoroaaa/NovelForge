@@ -62,6 +62,12 @@ interface ExtractedData {
   coreAppeal?: string[]
   targetWordCount?: string
   targetChapters?: string
+  writingRules?: Array<{
+    category: string
+    title: string
+    content: string
+    priority?: number
+  }>
   worldSettings?: Array<{ type: string; title: string; content: string; importance?: string }>
   characters?: Array<{
     name: string
@@ -78,6 +84,8 @@ interface ExtractedData {
     eventLine?: string[]
     notes?: string[]
     chapterCount?: number
+    targetWordCount?: number | null
+    targetChapterCount?: number | null
   }>
   chapters?: Array<{
     title: string
@@ -619,7 +627,7 @@ export default function WorkshopPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {(extractedData.title || extractedData.genre || extractedData.description) && (
+                {(extractedData.title || extractedData.genre || extractedData.description || extractedData.targetWordCount || extractedData.targetChapters || extractedData.coreAppeal) && (
                   <PreviewCard title="基本信息" icon={Sparkles}>
                     {extractedData.title && (
                       <PreviewField label="标题" value={extractedData.title} highlight />
@@ -627,6 +635,12 @@ export default function WorkshopPage() {
                     {extractedData.genre && <PreviewField label="流派" value={extractedData.genre} />}
                     {extractedData.description && (
                       <PreviewField label="简介" value={extractedData.description} multiline />
+                    )}
+                    {extractedData.targetWordCount && (
+                      <PreviewField label="预计字数" value={extractedData.targetWordCount} />
+                    )}
+                    {extractedData.targetChapters && (
+                      <PreviewField label="预计章节" value={extractedData.targetChapters} />
                     )}
                     {extractedData.coreAppeal && (
                       <div className="space-y-1">
@@ -643,18 +657,50 @@ export default function WorkshopPage() {
                   </PreviewCard>
                 )}
 
+                {(extractedData.writingRules && extractedData.writingRules.length > 0) && (
+                  <PreviewCard title="创作规则" icon={BookOpen}>
+                    {extractedData.writingRules.map((rule, i) => (
+                      <div key={i} className="mb-3 last:mb-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="font-medium text-sm">{rule.title}</span>
+                          <Badge
+                            variant={rule.category === 'taboo' ? 'destructive' : 'outline'}
+                            className="text-[10px]"
+                          >
+                            {rule.category === 'style' ? '文风' :
+                             rule.category === 'pacing' ? '节奏' :
+                             rule.category === 'character' ? '角色' :
+                             rule.category === 'plot' ? '情节' :
+                             rule.category === 'world' ? '世界观' :
+                             rule.category === 'taboo' ? '禁忌' : '自定义'}
+                          </Badge>
+                          {rule.priority && (
+                            <Badge
+                              variant={rule.priority <= 1 ? 'destructive' : rule.priority >= 3 ? 'secondary' : 'outline'}
+                              className="text-[10px]"
+                            >
+                              {rule.priority === 1 ? '最高' : rule.priority === 2 ? '高' : rule.priority === 3 ? '中' : '低'}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground whitespace-pre-wrap line-clamp-3">{rule.content}</p>
+                      </div>
+                    ))}
+                  </PreviewCard>
+                )}
+
                 {extractedData.worldSettings && extractedData.worldSettings.length > 0 && (
                   <PreviewCard title="世界观设定" icon={Globe}>
                     {extractedData.worldSettings.map((ws, i) => (
                       <div key={i} className="mb-3 last:mb-0">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <p className="font-medium text-sm">{ws.title}</p>
                           {ws.importance && (
-                            <Badge 
-                              variant={ws.importance === 'high' ? 'destructive' : ws.importance === 'low' ? 'secondary' : 'outline'} 
+                            <Badge
+                              variant={ws.importance === 'high' ? 'destructive' : ws.importance === 'low' ? 'secondary' : 'outline'}
                               className="text-[10px]"
                             >
-                              {ws.importance === 'high' ? '重要' : ws.importance === 'low' ? '次要' : '普通'}
+                              {ws.importance === 'high' ? '🔥 重要' : ws.importance === 'low' ? '💤 次要' : '📖 普通'}
                             </Badge>
                           )}
                         </div>
@@ -668,13 +714,38 @@ export default function WorkshopPage() {
                   <PreviewCard title="角色设计" icon={Users}>
                     {extractedData.characters.map((char, i) => (
                       <div key={i} className="mb-3 last:mb-0 pb-3 border-b last:border-b-0 last:pb-0">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <span className="font-medium text-sm">{char.name}</span>
-                          <Badge variant="outline" className="text-[10px]">
-                            {char.role === 'protagonist' ? '主角' : char.role === 'antagonist' ? '反派' : char.role === 'minor' ? '次要' : '配角'}
+                          {char.aliases && char.aliases.length > 0 && (
+                            <span className="text-xs text-muted-foreground">({char.aliases.join(', ')})</span>
+                          )}
+                          <Badge
+                            variant={char.role === 'protagonist' ? 'default' : char.role === 'antagonist' ? 'destructive' : 'secondary'}
+                            className="text-[10px]"
+                          >
+                            {char.role === 'protagonist' ? '⭐ 主角' : char.role === 'antagonist' ? '💀 反派' : char.role === 'minor' ? '🌙 次要' : '👤 配角'}
                           </Badge>
+                          {char.powerLevel && (
+                            <Badge variant="outline" className="text-[10px]">
+                              ⚔️ {char.powerLevel}
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground line-clamp-2">{char.description}</p>
+                        {char.attributes && Object.keys(char.attributes).length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {Object.entries(char.attributes).slice(0, 4).map(([key, val]) => (
+                              <Badge key={key} variant="outline" className="text-[10px]">
+                                {key}: {String(val)}
+                              </Badge>
+                            ))}
+                            {Object.keys(char.attributes).length > 4 && (
+                              <Badge variant="outline" className="text-[10px]">
+                                +{Object.keys(char.attributes).length - 4}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </PreviewCard>
@@ -684,22 +755,38 @@ export default function WorkshopPage() {
                   <PreviewCard title="卷纲规划" icon={Layers}>
                     {extractedData.volumes.map((vol, i) => (
                       <div key={i} className="mb-3 last:mb-0">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <Badge variant="outline" className="text-[10px]">第{i + 1}卷</Badge>
                           <span className="font-medium text-sm">{vol.title}</span>
-                          <span className="text-[10px] text-muted-foreground ml-auto">
-                            约{vol.chapterCount}章
-                          </span>
+                          {(vol.targetWordCount || vol.targetChapterCount) && (
+                            <span className="text-[10px] text-muted-foreground">
+                              {vol.targetWordCount ? `${vol.targetWordCount}字` : ''}
+                              {vol.targetWordCount && vol.targetChapterCount ? ' / ' : ''}
+                              {vol.targetChapterCount ? `${vol.targetChapterCount}章` : ''}
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground line-clamp-2 mb-1">{vol.summary || '暂无概述'}</p>
+                        {vol.blueprint && (
+                          <p className="text-xs text-muted-foreground/70 whitespace-pre-wrap line-clamp-2 mb-1 italic">
+                            📋 {vol.blueprint}
+                          </p>
+                        )}
                         {vol.eventLine && vol.eventLine.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {vol.eventLine.slice(0, 3).map((event, idx) => (
-                              <Badge key={idx} variant="secondary" className="text-[10px]">{event}</Badge>
+                              <Badge key={idx} variant="secondary" className="text-[10px]">📍 {event}</Badge>
                             ))}
                             {vol.eventLine.length > 3 && (
                               <Badge variant="secondary" className="text-[10px]">+{vol.eventLine.length - 3}</Badge>
                             )}
+                          </div>
+                        )}
+                        {vol.notes && vol.notes.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {vol.notes.slice(0, 2).map((note, idx) => (
+                              <Badge key={idx} variant="outline" className="text-[10px]">📌 {note}</Badge>
+                            ))}
                           </div>
                         )}
                       </div>

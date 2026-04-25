@@ -123,6 +123,7 @@ export async function createWorkshopSession(
 
 /**
  * 从已有小说加载上下文数据到 extractedData
+ * 每个阶段加载本阶段及之前所有阶段的数据
  */
 async function loadNovelContextData(
   db: any,
@@ -147,37 +148,45 @@ async function loadNovelContextData(
   if (novel.targetWordCount) extractedData.targetWordCount = String(novel.targetWordCount)
   if (novel.targetChapterCount) extractedData.targetChapters = String(novel.targetChapterCount)
 
-  if (targetStage === 'worldbuild' || targetStage === 'character_design' || targetStage === 'volume_outline') {
+  if (targetStage === 'concept' || targetStage === 'worldbuild' || targetStage === 'character_design' || targetStage === 'volume_outline' || targetStage === 'chapter_outline') {
     const outline = await db
       .select()
       .from(masterOutline)
       .where(eq(masterOutline.novelId, novelId))
       .get()
 
-    if (outline) {
-      if (outline.summary) extractedData.description = outline.summary
-      if (outline.content) extractedData.masterOutline = outline.content
+    if (outline && outline.content) {
+      extractedData.coreAppeal = extractCoreAppealFromContent(outline.content)
+    }
+
+    const rules = await db
+      .select()
+      .from(writingRules)
+      .where(eq(writingRules.novelId, novelId))
+      .all()
+
+    if (rules.length > 0) {
+      extractedData.writingRules = rules.map((r: typeof rules[number]) => ({
+        category: r.category,
+        title: r.title,
+        content: r.content,
+        priority: r.priority,
+      }))
     }
   }
 
-  if (targetStage === 'character_design' || targetStage === 'volume_outline' || targetStage === 'chapter_outline') {
+  if (targetStage === 'worldbuild' || targetStage === 'character_design' || targetStage === 'volume_outline' || targetStage === 'chapter_outline') {
     const settings = await db
       .select()
       .from(novelSettings)
       .where(eq(novelSettings.novelId, novelId))
-      .get()
+      .all()
 
-    if (settings) {
-      const allSettings = await db
-        .select()
-        .from(novelSettings)
-        .where(eq(novelSettings.novelId, novelId))
-        .all()
-
+    if (settings.length > 0) {
       const worldSettings: Array<{ type: string; title: string; content: string }> = []
       const settingTypes = ['geography', 'power_system', 'faction', 'worldview', 'item_skill', 'misc']
       for (const type of settingTypes) {
-        const typeSettings = allSettings.filter((s: typeof allSettings[number]) => s.type === type)
+        const typeSettings = settings.filter((s: typeof settings[number]) => s.type === type)
         if (typeSettings.length > 0) {
           const typeLabel = {
             geography: '地理环境',
@@ -190,7 +199,7 @@ async function loadNovelContextData(
           worldSettings.push({
             type,
             title: typeLabel,
-            content: typeSettings.map((s: typeof allSettings[number]) => `- ${s.name}: ${s.content}`).join('\n'),
+            content: typeSettings.map((s: typeof settings[number]) => `- ${s.name}: ${s.content}`).join('\n'),
           })
         }
       }
@@ -201,7 +210,7 @@ async function loadNovelContextData(
     }
   }
 
-  if (targetStage === 'volume_outline') {
+  if (targetStage === 'character_design' || targetStage === 'volume_outline' || targetStage === 'chapter_outline') {
     const chars = await db
       .select()
       .from(characters)
@@ -230,7 +239,7 @@ async function loadNovelContextData(
     }
   }
 
-  if (targetStage === 'chapter_outline') {
+  if (targetStage === 'volume_outline' || targetStage === 'chapter_outline') {
     const vols = await db
       .select()
       .from(volumes)
@@ -260,34 +269,9 @@ async function loadNovelContextData(
         }
       })
     }
+  }
 
-    const chars = await db
-      .select()
-      .from(characters)
-      .where(eq(characters.novelId, novelId))
-      .all()
-
-    if (chars.length > 0) {
-      extractedData.characters = chars.map((c: typeof chars[number]) => {
-        let parsedAttrs = {}
-        try {
-          parsedAttrs = c.attributes ? JSON.parse(c.attributes) : {}
-        } catch (e) {
-          console.warn('[workshop] 解析角色attributes失败:', e)
-        }
-
-        return {
-          name: c.name,
-          role: c.role || 'supporting',
-          description: c.description || '',
-          aliases: c.aliases ? JSON.parse(c.aliases) : undefined,
-          attributes: parsedAttrs,
-          relationships: (parsedAttrs as any).relationships || undefined,
-          powerLevel: c.powerLevel || undefined,
-        }
-      })
-    }
-
+  if (targetStage === 'chapter_outline') {
     const existingChapters = await db
       .select()
       .from(chapters)
@@ -305,6 +289,15 @@ async function loadNovelContextData(
   }
 
   return extractedData
+}
+
+function extractCoreAppealFromContent(content: string): string[] | undefined {
+  const coreAppealMatch = content.match(/## 核心看点\n([\s\S]*?)(?=\n## |$)/i)
+  if (coreAppealMatch) {
+    const lines = coreAppealMatch[1].trim().split('\n').filter(line => line.trim())
+    return lines.length > 0 ? lines : undefined
+  }
+  return undefined
 }
 
 /**
@@ -941,7 +934,7 @@ function buildReadonlyContext(stage: string, data: WorkshopExtractedData): strin
   // concept 阶段：没有只读上下文（它是起点）
   if (stage === 'concept') {
     if (data.title || data.genre || data.description) {
-      parts.push(`### 已有概念信息\n${JSON.stringify({ title: data.title, genre: data.genre, description: data.description, targetWordCount: data.targetWordCount, targetChapters: data.targetChapters }, null, 2)}`)
+      parts.push(`### 已有概念信息\n${JSON.stringify({ title: data.title, genre: data.genre, description: data.description, targetWordCount: data.targetWordCount, targetChapters: data.targetChapters, coreAppeal: data.coreAppeal, writingRules: data.writingRules }, null, 2)}`)
     } else {
       return ''
     }
@@ -950,7 +943,7 @@ function buildReadonlyContext(stage: string, data: WorkshopExtractedData): strin
 
   // worldbuild 阶段：可以参考 concept 数据
   if (stage === 'worldbuild') {
-    parts.push(`### 小说概念（只读）\n${JSON.stringify({ title: data.title, genre: data.genre, description: data.description, coreAppeal: data.coreAppeal, targetWordCount: data.targetWordCount, targetChapters: data.targetChapters }, null, 2)}`)
+    parts.push(`### 小说概念（只读）\n${JSON.stringify({ title: data.title, genre: data.genre, description: data.description, coreAppeal: data.coreAppeal, targetWordCount: data.targetWordCount, targetChapters: data.targetChapters, writingRules: data.writingRules }, null, 2)}`)
     if (data.worldSettings?.length) {
       parts.push(`### 已有世界观（本阶段可修改/完善，但必须完整输出替换版本）\n${JSON.stringify(data.worldSettings, null, 2)}`)
     }
@@ -959,7 +952,7 @@ function buildReadonlyContext(stage: string, data: WorkshopExtractedData): strin
 
   // character_design 阶段：可以参考 concept + worldbuild
   if (stage === 'character_design') {
-    parts.push(`### 小说概念（只读）\n${JSON.stringify({ title: data.title, genre: data.genre, description: data.description, targetWordCount: data.targetWordCount, targetChapters: data.targetChapters }, null, 2)}`)
+    parts.push(`### 小说概念（只读）\n${JSON.stringify({ title: data.title, genre: data.genre, description: data.description, coreAppeal: data.coreAppeal, targetWordCount: data.targetWordCount, targetChapters: data.targetChapters, writingRules: data.writingRules }, null, 2)}`)
     if (data.worldSettings?.length) {
       parts.push(`### 世界观设定（只读）\n${JSON.stringify(data.worldSettings, null, 2)}`)
     }
@@ -971,7 +964,7 @@ function buildReadonlyContext(stage: string, data: WorkshopExtractedData): strin
 
   // volume_outline 阶段：可以参考 concept + worldbuild + character
   if (stage === 'volume_outline') {
-    parts.push(`### 小说概念（只读）\n${JSON.stringify({ title: data.title, genre: data.genre, description: data.description, targetWordCount: data.targetWordCount, targetChapters: data.targetChapters }, null, 2)}`)
+    parts.push(`### 小说概念（只读）\n${JSON.stringify({ title: data.title, genre: data.genre, description: data.description, coreAppeal: data.coreAppeal, targetWordCount: data.targetWordCount, targetChapters: data.targetChapters, writingRules: data.writingRules }, null, 2)}`)
     if (data.worldSettings?.length) {
       parts.push(`### 世界观设定（只读）\n${JSON.stringify(data.worldSettings, null, 2)}`)
     }
@@ -986,7 +979,7 @@ function buildReadonlyContext(stage: string, data: WorkshopExtractedData): strin
 
   // chapter_outline 阶段：可以参考 concept + worldbuild + volumes + characters + existing chapters
   if (stage === 'chapter_outline') {
-    parts.push(`### 小说概念（只读）\n${JSON.stringify({ title: data.title, genre: data.genre, description: data.description, targetWordCount: data.targetWordCount, targetChapters: data.targetChapters }, null, 2)}`)
+    parts.push(`### 小说概念（只读）\n${JSON.stringify({ title: data.title, genre: data.genre, description: data.description, coreAppeal: data.coreAppeal, targetWordCount: data.targetWordCount, targetChapters: data.targetChapters, writingRules: data.writingRules }, null, 2)}`)
     if (data.worldSettings?.length) {
       parts.push(`### 世界观设定（只读）\n${JSON.stringify(data.worldSettings, null, 2)}`)
     }

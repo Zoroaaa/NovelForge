@@ -172,13 +172,13 @@ export function WorkshopSidebar({
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <p className="text-[10px] text-slate-400">{formatTime(session.updatedAt)}</p>
-                      {session.stage && session.stage !== 'concept_development' && (
+                      {session.stage && (
                         <span className="inline-flex items-center gap-0.5 text-[10px] text-violet-500 dark:text-violet-400">
+                          {session.stage === 'concept' && '概念构思'}
+                          {session.stage === 'worldbuild' && '世界观构建'}
                           {session.stage === 'character_design' && '角色设计'}
-                          {session.stage === 'worldbuilding' && '世界观构建'}
-                          {session.stage === 'plot_outline' && '情节大纲'}
-                          {session.stage === 'chapter_planning' && '章节规划'}
-                          {session.stage === 'writing' && '写作中'}
+                          {session.stage === 'volume_outline' && '卷纲规划'}
+                          {session.stage === 'chapter_outline' && '章节大纲'}
                         </span>
                       )}
                     </div>
