@@ -183,7 +183,7 @@ async function loadNovelContextData(
       .all()
 
     if (settings.length > 0) {
-      const worldSettings: Array<{ type: string; title: string; content: string }> = []
+      const worldSettings: Array<{ type: string; title: string; content: string; importance: string }> = []
       const settingTypes = ['geography', 'power_system', 'faction', 'worldview', 'item_skill', 'misc']
       for (const type of settingTypes) {
         const typeSettings = settings.filter((s: typeof settings[number]) => s.type === type)
@@ -200,6 +200,7 @@ async function loadNovelContextData(
             type,
             title: typeLabel,
             content: typeSettings.map((s: typeof settings[number]) => `- ${s.name}: ${s.content}`).join('\n'),
+            importance: typeSettings[0]?.importance || 'normal',
           })
         }
       }
