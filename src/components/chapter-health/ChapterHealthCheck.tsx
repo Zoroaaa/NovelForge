@@ -16,6 +16,8 @@ import {
   Loader2,
   Link,
   Zap,
+  BookOpen,
+  Target,
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -86,6 +88,24 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
   const [rewriteDialogOpen, setRewriteDialogOpen] = useState(false)
   const [coherenceResult, setCoherenceResult] = useState<CoherenceCheckResult | null>(null)
   const [coherenceCheckFailed, setCoherenceCheckFailed] = useState(false)
+
+  const [coherenceDialogOpen, setCoherenceDialogOpen] = useState(false)
+  const [coherenceChecking, setCoherenceChecking] = useState(false)
+  const [coherenceReport, setCoherenceReport] = useState<CoherenceCheckResult | null>(null)
+  const [coherenceFromCache, setCoherenceFromCache] = useState(false)
+  const [coherenceCachedAt, setCoherenceCachedAt] = useState<number | null>(null)
+
+  const [characterDialogOpen, setCharacterDialogOpen] = useState(false)
+  const [characterChecking, setCharacterChecking] = useState(false)
+  const [characterReport, setCharacterReport] = useState<any>(null)
+  const [characterFromCache, setCharacterFromCache] = useState(false)
+  const [characterCachedAt, setCharacterCachedAt] = useState<number | null>(null)
+
+  const [volumeDialogOpen, setVolumeDialogOpen] = useState(false)
+  const [volumeChecking, setVolumeChecking] = useState(false)
+  const [volumeReport, setVolumeReport] = useState<any>(null)
+  const [volumeFromCache, setVolumeFromCache] = useState(false)
+  const [volumeCachedAt, setVolumeCachedAt] = useState<number | null>(null)
 
   const loadLatestCheckLog = useCallback(async () => {
     try {
@@ -179,6 +199,166 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
     }
   }
 
+  const handleCoherenceCheck = async () => {
+    setCoherenceDialogOpen(true)
+    setCoherenceChecking(true)
+    setCoherenceReport(null)
+
+    try {
+      const cachedData = await api.generate.getCheckLogsLatest(chapterId!, 'chapter_coherence')
+      if (cachedData.log && cachedData.log.coherenceResult) {
+        setCoherenceReport({
+          ...cachedData.log.coherenceResult,
+          issues: cachedData.log.coherenceResult.issues.map((i: any) => ({
+            ...i,
+            severity: i.severity as 'error' | 'warning'
+          }))
+        })
+        setCoherenceFromCache(true)
+        setCoherenceCachedAt(cachedData.log.createdAt)
+        setCoherenceChecking(false)
+        return
+      }
+
+      const data = await api.generate.checkCoherence({ chapterId: chapterId!, novelId })
+      setCoherenceReport({
+        score: data.score ?? 100,
+        issues: (data.issues ?? []).map((i: any) => ({
+          ...i,
+          severity: i.severity as 'error' | 'warning'
+        }))
+      })
+      setCoherenceFromCache(false)
+      setCoherenceCachedAt(null)
+      loadLatestCheckLog()
+    } catch (error) {
+      console.error('连贯性检查失败:', error)
+      setCoherenceReport({ score: 0, issues: [{ severity: 'error', message: `检查失败: ${(error as Error).message}` }] })
+    } finally {
+      setCoherenceChecking(false)
+    }
+  }
+
+  const handleCoherenceRecheck = async () => {
+    setCoherenceChecking(true)
+    setCoherenceReport(null)
+
+    try {
+      const data = await api.generate.checkCoherence({ chapterId: chapterId!, novelId })
+      setCoherenceReport({
+        score: data.score ?? 100,
+        issues: (data.issues ?? []).map((i: any) => ({
+          ...i,
+          severity: i.severity as 'error' | 'warning'
+        }))
+      })
+      setCoherenceFromCache(false)
+      setCoherenceCachedAt(null)
+      loadLatestCheckLog()
+    } catch (error) {
+      console.error('连贯性检查失败:', error)
+    } finally {
+      setCoherenceChecking(false)
+    }
+  }
+
+  const handleCharacterCheck = async () => {
+    setCharacterDialogOpen(true)
+    setCharacterChecking(true)
+    setCharacterReport(null)
+
+    try {
+      const cachedData = await api.generate.getCheckLogsLatest(chapterId!, 'character_consistency')
+      if (cachedData.log && cachedData.log.characterResult) {
+        setCharacterReport(cachedData.log.characterResult)
+        setCharacterFromCache(true)
+        setCharacterCachedAt(cachedData.log.createdAt)
+        setCharacterChecking(false)
+        return
+      }
+
+      const characters = await api.characters.list(novelId)
+      const data = await api.generate.checkCharacterConsistency({
+        chapterId: chapterId!,
+        characterIds: characters?.map(c => c.id) || [],
+      })
+      setCharacterReport(data)
+      setCharacterFromCache(false)
+      setCharacterCachedAt(null)
+      loadLatestCheckLog()
+    } catch (error) {
+      console.error('角色一致性检查失败:', error)
+      setCharacterReport({ conflicts: [], warnings: [`检查失败: ${(error as Error).message}`] })
+    } finally {
+      setCharacterChecking(false)
+    }
+  }
+
+  const handleCharacterRecheck = async () => {
+    setCharacterChecking(true)
+    setCharacterReport(null)
+
+    try {
+      const characters = await api.characters.list(novelId)
+      const data = await api.generate.checkCharacterConsistency({
+        chapterId: chapterId!,
+        characterIds: characters?.map(c => c.id) || [],
+      })
+      setCharacterReport(data)
+      setCharacterFromCache(false)
+      setCharacterCachedAt(null)
+      loadLatestCheckLog()
+    } catch (error) {
+      console.error('角色一致性检查失败:', error)
+    } finally {
+      setCharacterChecking(false)
+    }
+  }
+
+  const handleVolumeCheck = async () => {
+    setVolumeDialogOpen(true)
+    setVolumeChecking(true)
+    setVolumeReport(null)
+
+    try {
+      const cachedData = await api.generate.getCheckLogsLatest(chapterId!, 'volume_progress')
+      if (cachedData.log && cachedData.log.coherenceResult) {
+        setVolumeReport(cachedData.log.coherenceResult)
+        setVolumeFromCache(true)
+        setVolumeCachedAt(cachedData.log.createdAt)
+        setVolumeChecking(false)
+        return
+      }
+
+      const data = await api.generate.checkVolumeProgress({ chapterId: chapterId!, novelId })
+      setVolumeReport(data)
+      setVolumeFromCache(false)
+      setVolumeCachedAt(null)
+      loadLatestCheckLog()
+    } catch (error) {
+      console.error('卷进度检查失败:', error)
+    } finally {
+      setVolumeChecking(false)
+    }
+  }
+
+  const handleVolumeRecheck = async () => {
+    setVolumeChecking(true)
+    setVolumeReport(null)
+
+    try {
+      const data = await api.generate.checkVolumeProgress({ chapterId: chapterId!, novelId })
+      setVolumeReport(data)
+      setVolumeFromCache(false)
+      setVolumeCachedAt(null)
+      loadLatestCheckLog()
+    } catch (error) {
+      console.error('卷进度检查失败:', error)
+    } finally {
+      setVolumeChecking(false)
+    }
+  }
+
   if (!chapterId) {
     return (
       <div className="flex items-center justify-center py-12 text-muted-foreground">
@@ -228,10 +408,17 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                 className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700"
                 onClick={() => {
                   if (latestCheckLog.coherenceResult) {
+                    setCombinedReport({
+                      characterResult: latestCheckLog.characterResult || { conflicts: [], warnings: [] },
+                      coherenceResult: latestCheckLog.coherenceResult,
+                      score: latestCheckLog.score,
+                    })
                     setCoherenceResult({
                       score: latestCheckLog.coherenceResult.score,
                       issues: latestCheckLog.coherenceResult.issues,
                     })
+                    setIsFromCache(true)
+                    setReportCachedAt(latestCheckLog.createdAt)
                     setRewriteDialogOpen(true)
                   }
                 }}
@@ -253,14 +440,60 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
         </TabsList>
 
         <TabsContent value="coherence" className="mt-4">
-          <ChapterCoherenceCheck novelId={novelId} chapterId={chapterId} onCheckComplete={(result) => {
-            setCoherenceResult(result)
-            loadLatestCheckLog()
-          }} />
+          <div className="space-y-3">
+            <div className="flex justify-end">
+              <Button
+                variant="default"
+                size="sm"
+                className="gap-2"
+                onClick={handleCoherenceCheck}
+                disabled={coherenceChecking}
+              >
+                {coherenceChecking ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    检查中...
+                  </>
+                ) : (
+                  <>
+                    <Link className="h-4 w-4" />
+                    执行连贯性检查
+                  </>
+                )}
+              </Button>
+            </div>
+            <ChapterCoherenceCheck novelId={novelId} chapterId={chapterId} onCheckComplete={(result) => {
+              setCoherenceResult(result)
+              loadLatestCheckLog()
+            }} />
+          </div>
         </TabsContent>
 
         <TabsContent value="character" className="mt-4">
-          <CharacterConsistencyCheck novelId={novelId} chapterId={chapterId} />
+          <div className="space-y-3">
+            <div className="flex justify-end">
+              <Button
+                variant="default"
+                size="sm"
+                className="gap-2"
+                onClick={handleCharacterCheck}
+                disabled={characterChecking}
+              >
+                {characterChecking ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    检查中...
+                  </>
+                ) : (
+                  <>
+                    <Shield className="h-4 w-4" />
+                    执行角色一致性检查
+                  </>
+                )}
+              </Button>
+            </div>
+            <CharacterConsistencyCheck novelId={novelId} chapterId={chapterId} />
+          </div>
         </TabsContent>
 
         <TabsContent value="combined" className="mt-4">
@@ -305,7 +538,30 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
         </TabsContent>
 
         <TabsContent value="volume" className="mt-4">
-          <VolumeProgressCheck novelId={novelId} chapterId={chapterId} />
+          <div className="space-y-3">
+            <div className="flex justify-end">
+              <Button
+                variant="default"
+                size="sm"
+                className="gap-2"
+                onClick={handleVolumeCheck}
+                disabled={volumeChecking}
+              >
+                {volumeChecking ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    检查中...
+                  </>
+                ) : (
+                  <>
+                    <Target className="h-4 w-4" />
+                    执行卷进度检查
+                  </>
+                )}
+              </Button>
+            </div>
+            <VolumeProgressCheck novelId={novelId} chapterId={chapterId} />
+          </div>
         </TabsContent>
       </Tabs>
 
@@ -525,6 +781,306 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-shrink-0 px-6 py-4 border-t bg-muted/30 rounded-b-xl gap-3">
+            <AlertDialogCancel className="h-9">关闭</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* 连贯性检查报告对话框 */}
+      <AlertDialog open={coherenceDialogOpen} onOpenChange={setCoherenceDialogOpen}>
+        <AlertDialogContent className="w-[90vw] max-w-3xl max-h-[85vh] flex flex-col rounded-xl shadow-2xl">
+          <AlertDialogHeader className="flex-shrink-0 px-6 pt-6 pb-4 border-b space-y-0 gap-0">
+            <div className="flex items-center justify-between">
+              <AlertDialogTitle className="text-lg font-semibold text-left">连贯性检查报告</AlertDialogTitle>
+              {coherenceFromCache && coherenceCachedAt && (
+                <span className="text-xs text-muted-foreground">上次检查：{formatTimeAgo(coherenceCachedAt)}</span>
+              )}
+            </div>
+            <AlertDialogDescription asChild>
+              <div className="text-left mt-3">
+                {coherenceChecking ? (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <span className="text-sm text-muted-foreground">正在执行连贯性检查...</span>
+                  </div>
+                ) : coherenceReport ? (
+                  <div className="space-y-5">
+                    <div className="flex items-center justify-between p-4 bg-gradient-to-r from-muted/80 to-muted/40 rounded-xl border">
+                      <div className="flex items-baseline gap-4">
+                        <span className="text-sm font-medium text-muted-foreground">评分</span>
+                        <span className={`text-3xl font-bold tabular-nums ${
+                          coherenceReport.score >= 80 ? 'text-green-600' :
+                          coherenceReport.score >= 60 ? 'text-amber-600' : 'text-red-600'
+                        }`}>
+                          {coherenceReport.score}
+                        </span>
+                        <span className="text-lg text-muted-foreground">/100</span>
+                      </div>
+                      <Button variant="secondary" size="sm" className="gap-2 h-9 shadow-sm hover:shadow-md transition-shadow" onClick={handleCoherenceRecheck}>
+                        <RefreshCw className="h-4 w-4" />重新生成报告
+                      </Button>
+                    </div>
+
+                    <div className="overflow-y-auto max-h-[45vh] pr-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent rounded-lg">
+                      <div className="space-y-5 pb-2">
+                        {coherenceReport.issues.length > 0 ? (
+                          coherenceReport.issues.map((issue: any, i: number) => (
+                            <article key={`coh-report-${i}`} className={`p-3.5 rounded-lg border ${
+                              issue.severity === 'error'
+                                ? 'bg-gradient-to-br from-red-50 to-white dark:from-red-950/60 dark:to-transparent border-red-200/70 dark:border-red-800/40'
+                                : 'bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-transparent border-amber-200/60 dark:border-amber-800/30'
+                            }`}>
+                              <header className="flex items-center gap-2 mb-1.5">
+                                {issue.severity === 'error' ? (
+                                  <>
+                                    <ShieldAlert className="h-4 w-4 text-red-500 shrink-0" />
+                                    <strong className="text-sm text-red-700 dark:text-red-300">错误 {i + 1}</strong>
+                                  </>
+                                ) : (
+                                  <>
+                                    <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                                    <strong className="text-sm text-amber-700 dark:text-amber-300">警告 {i + 1}</strong>
+                                  </>
+                                )}
+                                <Badge variant="secondary" className="text-[10px] ml-auto h-5">{issue.category || '其他'}</Badge>
+                              </header>
+                              <p className={`text-[13px] leading-relaxed ${
+                                issue.severity === 'error'
+                                  ? 'text-red-600/90 dark:text-red-400/90'
+                                  : 'text-amber-700/90 dark:text-amber-300/90'
+                              }`}>{issue.message}</p>
+                              {issue.suggestion && (
+                                <footer className="mt-2 ml-4 text-xs text-muted-foreground flex items-start gap-1.5">
+                                  <span>💡 建议：</span>
+                                  <span>{issue.suggestion}</span>
+                                </footer>
+                              )}
+                            </article>
+                          ))
+                        ) : (
+                          <div className="flex flex-col items-center gap-3 p-8 bg-gradient-to-br from-green-50 via-emerald-50/30 to-transparent dark:from-green-950/40 dark:via-emerald-950/10 dark:to-transparent border border-green-200/60 dark:border-green-800/30 rounded-xl">
+                            <CheckCircle className="h-12 w-12 text-green-500" />
+                            <div className="text-center space-y-1">
+                              <p className="text-base font-medium text-green-700 dark:text-green-300">连贯性检查通过 ✨</p>
+                              <p className="text-sm text-green-600/80 dark:text-green-400/80">章节连贯性未发现问题。</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-16 text-center">
+                    <p className="text-sm text-muted-foreground">暂无报告数据</p>
+                  </div>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-shrink-0 px-6 py-4 border-t bg-muted/30 rounded-b-xl gap-3">
+            <AlertDialogCancel className="h-9">关闭</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* 角色一致性检查报告对话框 */}
+      <AlertDialog open={characterDialogOpen} onOpenChange={setCharacterDialogOpen}>
+        <AlertDialogContent className="w-[90vw] max-w-3xl max-h-[85vh] flex flex-col rounded-xl shadow-2xl">
+          <AlertDialogHeader className="flex-shrink-0 px-6 pt-6 pb-4 border-b space-y-0 gap-0">
+            <div className="flex items-center justify-between">
+              <AlertDialogTitle className="text-lg font-semibold text-left">角色一致性检查报告</AlertDialogTitle>
+              {characterFromCache && characterCachedAt && (
+                <span className="text-xs text-muted-foreground">上次检查：{formatTimeAgo(characterCachedAt)}</span>
+              )}
+            </div>
+            <AlertDialogDescription asChild>
+              <div className="text-left mt-3">
+                {characterChecking ? (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <span className="text-sm text-muted-foreground">正在执行角色一致性检查...</span>
+                  </div>
+                ) : characterReport ? (
+                  <div className="space-y-5">
+                    <div className="flex items-center justify-between p-4 bg-gradient-to-r from-muted/80 to-muted/40 rounded-xl border">
+                      <div className="flex items-baseline gap-4">
+                        <span className="text-sm font-medium text-muted-foreground">冲突</span>
+                        <span className={`text-3xl font-bold tabular-nums ${
+                          (characterReport.conflicts?.length || 0) === 0 ? 'text-green-600' : 'text-red-600'
+                        }`}>
+                          {characterReport.conflicts?.length || 0}
+                        </span>
+                        <span className="text-lg text-muted-foreground">个</span>
+                      </div>
+                      <Button variant="secondary" size="sm" className="gap-2 h-9 shadow-sm hover:shadow-md transition-shadow" onClick={handleCharacterRecheck}>
+                        <RefreshCw className="h-4 w-4" />重新生成报告
+                      </Button>
+                    </div>
+
+                    <div className="overflow-y-auto max-h-[45vh] pr-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent rounded-lg">
+                      <div className="space-y-5 pb-2">
+                        {(characterReport.conflicts?.length > 0 || characterReport.warnings?.filter((w: string) => !w.includes('失败')).length > 0) ? (
+                          <>
+                            {characterReport.conflicts?.map((conflict: any, i: number) => (
+                              <article key={`char-report-c-${i}`} className="group p-3.5 bg-gradient-to-br from-red-50 to-white dark:from-red-950/60 dark:to-transparent border border-red-200/70 dark:border-red-800/40 rounded-lg hover:shadow-md transition-shadow">
+                                <header className="flex items-center gap-2 mb-2">
+                                  <ShieldAlert className="h-4 w-4 text-red-500 shrink-0" />
+                                  <strong className="text-sm text-red-700 dark:text-red-300">{conflict.characterName}</strong>
+                                </header>
+                                <p className="text-[13px] leading-relaxed text-red-600/90 dark:text-red-400/90 ml-6">{conflict.conflict}</p>
+                                {conflict.excerpt && (
+                                  <blockquote className="mt-2 ml-6 py-2.5 px-3 bg-red-100/50 dark:bg-red-900/20 rounded border-l-2 border-red-400 italic text-xs text-muted-foreground leading-relaxed">
+                                    "{conflict.excerpt}"
+                                  </blockquote>
+                                )}
+                              </article>
+                            ))}
+                            {characterReport.warnings?.filter((w: string) => !w.includes('失败')).map((warning: string, i: number) => (
+                              <div key={`char-report-w-${i}`} className="flex items-start gap-3 p-3 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/30 rounded-lg text-[13px] text-amber-800 dark:text-amber-200 leading-relaxed">
+                                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
+                                <span>{warning}</span>
+                              </div>
+                            ))}
+                          </>
+                        ) : (
+                          <div className="flex flex-col items-center gap-3 p-8 bg-gradient-to-br from-green-50 via-emerald-50/30 to-transparent dark:from-green-950/40 dark:via-emerald-950/10 dark:to-transparent border border-green-200/60 dark:border-green-800/30 rounded-xl">
+                            <CheckCircle className="h-12 w-12 text-green-500" />
+                            <div className="text-center space-y-1">
+                              <p className="text-base font-medium text-green-700 dark:text-green-300">角色一致性检查通过 ✨</p>
+                              <p className="text-sm text-green-600/80 dark:text-green-400/80">角色设定与章节内容一致。</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-16 text-center">
+                    <p className="text-sm text-muted-foreground">暂无报告数据</p>
+                  </div>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-shrink-0 px-6 py-4 border-t bg-muted/30 rounded-b-xl gap-3">
+            <AlertDialogCancel className="h-9">关闭</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* 卷进度检查报告对话框 */}
+      <AlertDialog open={volumeDialogOpen} onOpenChange={setVolumeDialogOpen}>
+        <AlertDialogContent className="w-[90vw] max-w-3xl max-h-[85vh] flex flex-col rounded-xl shadow-2xl">
+          <AlertDialogHeader className="flex-shrink-0 px-6 pt-6 pb-4 border-b space-y-0 gap-0">
+            <div className="flex items-center justify-between">
+              <AlertDialogTitle className="text-lg font-semibold text-left">卷进度检查报告</AlertDialogTitle>
+              {volumeFromCache && volumeCachedAt && (
+                <span className="text-xs text-muted-foreground">上次检查：{formatTimeAgo(volumeCachedAt)}</span>
+              )}
+            </div>
+            <AlertDialogDescription asChild>
+              <div className="text-left mt-3">
+                {volumeChecking ? (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <span className="text-sm text-muted-foreground">正在执行卷进度检查...</span>
+                  </div>
+                ) : volumeReport ? (
+                  <div className="space-y-5">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-4 bg-gradient-to-br from-muted/80 to-muted/40 rounded-xl border">
+                        <div className="text-xs text-muted-foreground mb-1">当前章节</div>
+                        <div className="text-2xl font-bold">第 {volumeReport.currentChapter || '-'} 章</div>
+                      </div>
+                      <div className="p-4 bg-gradient-to-br from-muted/80 to-muted/40 rounded-xl border">
+                        <div className="text-xs text-muted-foreground mb-1">目标章节</div>
+                        <div className="text-2xl font-bold">{volumeReport.targetChapter ? `${volumeReport.targetChapter} 章` : '未设定'}</div>
+                      </div>
+                      <div className="p-4 bg-gradient-to-br from-muted/80 to-muted/40 rounded-xl border">
+                        <div className="text-xs text-muted-foreground mb-1">当前字数</div>
+                        <div className="text-2xl font-bold">{volumeReport.currentWordCount ? `${(volumeReport.currentWordCount / 10000).toFixed(1)} 万` : '-'}</div>
+                      </div>
+                      <div className="p-4 bg-gradient-to-br from-muted/80 to-muted/40 rounded-xl border">
+                        <div className="text-xs text-muted-foreground mb-1">目标字数</div>
+                        <div className="text-2xl font-bold">{volumeReport.targetWordCount ? `${(volumeReport.targetWordCount / 10000).toFixed(0)} 万` : '未设定'}</div>
+                      </div>
+                    </div>
+
+                    {(volumeReport.targetChapter || volumeReport.targetWordCount) && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 bg-muted/50 rounded-lg">
+                          <div className="text-xs text-muted-foreground mb-1">章节进度</div>
+                          <div className="text-lg font-semibold">{volumeReport.chapterProgress?.toFixed(1) || '0'}%</div>
+                          <div className="mt-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-primary rounded-full transition-all"
+                              style={{ width: `${Math.min(volumeReport.chapterProgress || 0, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                        <div className="p-3 bg-muted/50 rounded-lg">
+                          <div className="text-xs text-muted-foreground mb-1">字数进度</div>
+                          <div className="text-lg font-semibold">{volumeReport.wordProgress?.toFixed(1) || '0'}%</div>
+                          <div className="mt-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-primary rounded-full transition-all"
+                              style={{ width: `${Math.min(volumeReport.wordProgress || 0, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between p-4 bg-gradient-to-r from-muted/80 to-muted/40 rounded-xl border">
+                      <span className="text-sm font-medium">健康状态</span>
+                      <Badge className={
+                        volumeReport.healthStatus === 'healthy' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+                        volumeReport.healthStatus === 'ahead' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' :
+                        volumeReport.healthStatus === 'behind' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                        'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                      }>
+                        {volumeReport.healthStatus === 'healthy' && '✓ 进度正常'}
+                        {volumeReport.healthStatus === 'ahead' && '↑ 进度稍快'}
+                        {volumeReport.healthStatus === 'behind' && '↓ 进度偏慢'}
+                        {volumeReport.healthStatus === 'critical' && '⚠ 严重偏离'}
+                      </Badge>
+                    </div>
+
+                    {volumeReport.risk && (
+                      <div className="p-4 rounded-lg border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
+                          <div>
+                            <div className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                              风险提示：{volumeReport.risk === 'early_ending' ? '可能提前收尾' : '可能延期收尾'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {volumeReport.suggestion && (
+                      <div className="p-4 rounded-lg bg-muted/30 text-sm leading-relaxed">
+                        <div className="flex items-center gap-2 mb-2">
+                          <BookOpen className="h-4 w-4 text-primary" />
+                          <span className="text-xs text-muted-foreground font-medium">AI 建议：</span>
+                        </div>
+                        {volumeReport.suggestion}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="py-16 text-center">
+                    <p className="text-sm text-muted-foreground">暂无报告数据</p>
+                  </div>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-shrink-0 px-6 py-4 border-t bg-muted/30 rounded-b-xl gap-3">
+            <Button variant="secondary" size="sm" className="gap-2 h-9 shadow-sm hover:shadow-md transition-shadow" onClick={handleVolumeRecheck}>
+              <RefreshCw className="h-4 w-4" />重新检查
+            </Button>
             <AlertDialogCancel className="h-9">关闭</AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>

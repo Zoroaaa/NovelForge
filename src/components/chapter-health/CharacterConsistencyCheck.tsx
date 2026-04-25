@@ -75,15 +75,10 @@ export function CharacterConsistencyCheck({ novelId, chapterId }: CharacterConsi
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Shield className="h-4 w-4" />
-            角色一致性检查
-          </CardTitle>
-          <Button size="sm" variant="outline" onClick={handleCheck} disabled={checking}>
-            {checking ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />检查中...</> : '开始检查'}
-          </Button>
-        </div>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Shield className="h-4 w-4" />
+          角色一致性检查
+        </CardTitle>
       </CardHeader>
 
       <CardContent>

@@ -54,27 +54,10 @@ export function VolumeProgressCheck({ novelId, chapterId }: VolumeProgressCheckP
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Target className="h-4 w-4" />
-            卷完成程度检查
-          </CardTitle>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => checkMutation.mutate()}
-            disabled={checkMutation.isPending}
-          >
-            {checkMutation.isPending ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-                检查中...
-              </>
-            ) : (
-              '开始检查'
-            )}
-          </Button>
-        </div>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Target className="h-4 w-4" />
+          卷完成程度检查
+        </CardTitle>
       </CardHeader>
 
       <CardContent>
