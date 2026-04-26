@@ -3,7 +3,7 @@
  * @description Agent章节生成主入口
  */
 import { drizzle } from 'drizzle-orm/d1'
-import { chapters, characters, volumes as volumesTable } from '../../db/schema'
+import { chapters, characters, volumes as volumesTable, novels } from '../../db/schema'
 import { eq, desc, sql, and } from 'drizzle-orm'
 import type { Env } from '../../lib/types'
 import { buildChapterContext, type ContextBundle } from '../contextBuilder'
@@ -63,7 +63,11 @@ export async function generateChapter(
       throw new Error(ERROR_MESSAGES.MODEL_NOT_CONFIGED('章节生成'))
     }
 
-    const messages = buildMessages(chapter.title, contextBundle, options, llmConfig.params?.systemPromptOverride)
+    // 从novel表读取systemPrompt作为小说专属引言
+    const novelRow = await db.select({ systemPrompt: novels.systemPrompt }).from(novels).where(eq(novels.id, novelId)).get()
+    const novelSystemNote = novelRow?.systemPrompt || undefined
+
+    const messages = buildMessages(chapter.title, contextBundle, options, llmConfig.params?.systemPromptOverride, novelSystemNote)
 
     const usageResult = await runReActLoop(
       env,

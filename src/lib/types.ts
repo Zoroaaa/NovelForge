@@ -15,6 +15,7 @@ export interface Novel {
   chapterCount: number
   targetWordCount: number | null
   targetChapterCount: number | null
+  systemPrompt?: string | null
   createdAt: number
   updatedAt: number
   deletedAt: number | null

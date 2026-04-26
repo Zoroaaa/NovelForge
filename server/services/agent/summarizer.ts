@@ -83,13 +83,20 @@ export async function triggerAutoSummary(
       novelId,
       stage: 'summary_gen',
       systemPrompt: SUMMARY_SYSTEM_PROMPT,
-      userPrompt: `请为以下小说章节生成一段简洁的摘要（150–200字），概括本章的主要情节、关键转折点和人物动态。
+      userPrompt: `请为以下小说章节生成350-450字的结构化摘要。
 
 章节标题：《${chapter.title}》
 
 正文内容：
-${chapter.content}`,
-      maxTokens: 500,
+${chapter.content}
+
+【输出格式要求】严格按以下结构输出，每项如无内容则写"无"：
+【角色状态变化】本章角色境界突破、能力获得、重要属性变化（精确到具体境界名称）
+【关键事件】本章主线剧情，2-3句话
+【道具/功法】本章出现、获得或使用的重要道具、功法、丹药（名称+简述）
+【人物关系】本章新出现的角色关系变化或重要互动（如有）
+【章末状态】主角当前所在位置、处境、下一步明确方向`,
+      maxTokens: 1000,
     })
 
     await db

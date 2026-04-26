@@ -177,12 +177,12 @@ export async function buildChapterContext(
   const protagonistStateCards = mergeProtagonistAndPower(protagonistData, powerLevelInfo)
   const chapterTypeHint = inferChapterType(volumeInfo.eventLine, currentChapter.title)
 
-  // ── Step 2: 组装查询向量 ──
+  // ── Step 2: 组装查询向量（聚焦当前章节语义，≤800字） ──
   const queryText = [
-    volumeInfo.eventLine,
-    prevContent,
     currentChapter.title,
-  ].filter(Boolean).join('\n')
+    extractCurrentChapterEvent(volumeInfo.eventLine, currentChapter.sortOrder),
+    prevContent?.slice(0, 300),
+  ].filter(Boolean).join('\n').slice(0, 800)
 
   // ── Step 3: Dynamic 层分槽检索 ──
   let characterCards: string[] = []
@@ -216,8 +216,9 @@ export async function buildChapterContext(
 
     actualRagQueriesCount = 3
 
-    // D1: 角色 — RAG 取 ID → DB 批量查完整卡片
-    characterCards = await buildCharacterSlotFromDB(db, characterResults, budget.characters)
+    // D1: 角色 — RAG 取 ID → DB 批量查完整卡片（排除主角）
+    const protagonistIds = protagonistData.map(p => p.id)
+    characterCards = await buildCharacterSlotFromDB(db, characterResults, budget.characters, protagonistIds)
 
     // D3: 伏笔 — 高重要性 DB 兜底 + 普通 RAG
     const openForeshadowingIds = await fetchOpenForeshadowingIds(db, novelId, currentChapter.sortOrder)
@@ -230,8 +231,9 @@ export async function buildChapterContext(
       db, settingResults, chapterTypeHint, budget.settings
     )
 
-    // D4: 本章类型规则
-    chapterTypeRules = await fetchChapterTypeRules(db, novelId, chapterTypeHint)
+    // D4: 本章类型规则（排除Slot-4已注入的全部活跃规则）
+    const activeRuleIds = allActiveRules.length > 0 ? await fetchAllActiveRuleIds(db, novelId) : []
+    chapterTypeRules = await fetchChapterTypeRules(db, novelId, chapterTypeHint, activeRuleIds)
   }
 
   // ── Step 4: Core Token 预算检查 ──
@@ -310,17 +312,20 @@ export async function buildChapterContext(
 
 /**
  * D1: 出场角色槽 — RAG 返回 sourceId 列表 → DB 批量 IN 查完整卡片
+ * 排除主角（主角已在Slot-3单独完整注入）
  */
 async function buildCharacterSlotFromDB(
   db: AppDb,
   ragResults: Array<{ score: number; metadata: any }>,
-  budgetTokens: number
+  budgetTokens: number,
+  protagonistIds: string[] = [],
 ): Promise<string[]> {
-  const SCORE_THRESHOLD = 0.38
+  const SCORE_THRESHOLD = 0.45
   const MAX_CHARACTERS = 6
 
   const candidates = ragResults
     .filter(r => r.score >= SCORE_THRESHOLD)
+    .filter(r => !protagonistIds.includes(r.metadata.sourceId))
     .sort((a, b) => b.score - a.score)
     .slice(0, MAX_CHARACTERS)
     .map(r => r.metadata.sourceId)
@@ -387,11 +392,12 @@ async function buildForeshadowingHybrid(
   novelId: string,
   budgetTokens: number
 ): Promise<string[]> {
-  // 路径A: 高重要性未收尾伏笔无条件注入
+  // 路径A: 高重要性未收尾伏笔（按创建时间倒序，近期埋入的优先）
   const highPriority = await db.select({
     title: foreshadowing.title,
     description: foreshadowing.description,
     importance: foreshadowing.importance,
+    createdAt: foreshadowing.createdAt,
   })
   .from(foreshadowing)
   .where(and(
@@ -400,7 +406,8 @@ async function buildForeshadowingHybrid(
     eq(foreshadowing.importance, 'high'),
     sql`${foreshadowing.deletedAt} IS NULL`
   ))
-  .limit(10)
+  .orderBy(desc(foreshadowing.createdAt))
+  .limit(15)
   .all()
 
   // 路径B: 普通 importance → RAG score 过滤
@@ -445,17 +452,13 @@ async function buildSettingsSlotV2(
   chapterTypeHint: string,
   totalBudget: number
 ): Promise<SlottedSettings> {
-  const hasLocation = /地点|场景|地图|城市|宗门|山|洞|界|域/.test(chapterTypeHint)
-  const hasFaction = /门派|势力|宗门|家族|王朝|组织/.test(chapterTypeHint)
-  const hasArtifact = /法宝|功法|秘法|神通|道具|丹药|宝物/.test(chapterTypeHint)
-
   const slotBudgets: Record<keyof SlottedSettings, number> = {
     worldRules:  Math.min(2500, totalBudget * 0.21),
     powerSystem: Math.min(2500, totalBudget * 0.21),
-    geography:   hasLocation ? Math.min(1500, totalBudget * 0.13) : 0,
-    factions:    hasFaction  ? Math.min(1200, totalBudget * 0.10) : 0,
-    artifacts:   hasArtifact ? Math.min(800, totalBudget * 0.07) : 0,
-    misc:        800,
+    geography:   Math.min(1200, totalBudget * 0.10),
+    factions:    Math.min(1000, totalBudget * 0.08),
+    artifacts:   Math.min(700,  totalBudget * 0.06),
+    misc:        600,
   }
 
   const typeMapping: Record<string, keyof SlottedSettings> = {
@@ -687,11 +690,11 @@ async function fetchRecentSummaries(
 }
 
 async function fetchProtagonistCards(db: AppDb, novelId: string): Promise<Array<{
-  name: string; description: string | null; role: string | null; attributes: string | null
+  id: string; name: string; description: string | null; role: string | null; attributes: string | null
 }>> {
   try {
     return await db
-      .select({ name: characters.name, description: characters.description, role: characters.role, attributes: characters.attributes })
+      .select({ id: characters.id, name: characters.name, description: characters.description, role: characters.role, attributes: characters.attributes })
       .from(characters)
       .where(and(eq(characters.novelId, novelId), eq(characters.role, 'protagonist'), sql`${characters.deletedAt} IS NULL`))
       .all()
@@ -767,7 +770,29 @@ async function fetchAllActiveRules(db: AppDb, novelId: string): Promise<string[]
   }
 }
 
-async function fetchChapterTypeRules(db: AppDb, novelId: string, chapterTypeHint: string): Promise<string[]> {
+/**
+ * 获取所有活跃规则的ID列表（用于Slot-8去重）
+ */
+async function fetchAllActiveRuleIds(db: AppDb, novelId: string): Promise<string[]> {
+  try {
+    const rows = await db
+      .select({ id: writingRules.id })
+      .from(writingRules)
+      .where(and(eq(writingRules.novelId, novelId), eq(writingRules.isActive, 1), sql`${writingRules.deletedAt} IS NULL`))
+      .all()
+    return rows.map((r: any) => r.id)
+  } catch (error) {
+    console.error('[contextBuilder] fetchAllActiveRuleIds failed:', error)
+    return []
+  }
+}
+
+async function fetchChapterTypeRules(
+  db: AppDb,
+  novelId: string,
+  chapterTypeHint: string,
+  existingRuleIds: string[] = [],
+): Promise<string[]> {
   const neededCategories: string[] = []
 
   if (/战斗|打斗|对决|厮杀|交手/.test(chapterTypeHint)) neededCategories.push('pacing', 'plot')
@@ -780,13 +805,16 @@ async function fetchChapterTypeRules(db: AppDb, novelId: string, chapterTypeHint
 
   try {
     const rows = await db
-      .select({ category: writingRules.category, title: writingRules.title, content: writingRules.content, priority: writingRules.priority })
+      .select({ id: writingRules.id, category: writingRules.category, title: writingRules.title, content: writingRules.content, priority: writingRules.priority })
       .from(writingRules)
       .where(and(
         eq(writingRules.novelId, novelId),
         eq(writingRules.isActive, 1),
         inArray(writingRules.category, categories),
-        sql`${writingRules.deletedAt} IS NULL`
+        sql`${writingRules.deletedAt} IS NULL`,
+        existingRuleIds.length > 0
+          ? sql`${writingRules.id} NOT IN (${existingRuleIds.map(() => '?').join(',')})`
+          : sql`1=1`
       ))
       .orderBy(writingRules.priority).limit(8).all()
 
@@ -856,6 +884,29 @@ function inferChapterType(eventLine: string, chapterTitle: string): string {
 // ============================================================
 // 工具函数
 // ============================================================
+
+/**
+ * 从整卷eventLine中提取当前章节对应的事件描述
+ * 支持两种格式：
+ * 1. 按行编号：每行以"第X章"或数字序号开头
+ * 2. 整段文本：按当前章在卷内的相对位置截取片段
+ */
+function extractCurrentChapterEvent(
+  eventLine: string,
+  currentSortOrder: number,
+): string {
+  if (!eventLine) return ''
+
+  // 尝试按行匹配章节序号
+  const lines = eventLine.split('\n').filter(l => l.trim())
+  const numbered = lines.find(l =>
+    l.match(new RegExp(`第${currentSortOrder}章|^${currentSortOrder}[.、：:]`))
+  )
+  if (numbered) return numbered.trim().slice(0, 200)
+
+  // fallback：取前500字（整段eventLine的开头通常是本卷主线）
+  return eventLine.slice(0, 500)
+}
 
 export function estimateTokens(text: string): number {
   if (!text) return 0

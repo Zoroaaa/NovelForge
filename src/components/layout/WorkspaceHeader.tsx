@@ -1,12 +1,15 @@
 /**
  * @file WorkspaceHeader.tsx
  * @description 工作台顶部导航栏组件，提供返回、标题显示、阅读器入口和模型配置功能
- * @version 1.0.0
- * @modified 2026-04-21 - 添加规范化注释
+ * @version 1.1.0
+ * @modified 2026-04-26 - 增加小说设置Tab（System Prompt）
  */
 import { Link } from 'react-router-dom'
-import { ArrowLeft, BookOpen, Settings2, Home } from 'lucide-react'
+import { ArrowLeft, BookOpen, Settings2, Home, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
@@ -21,12 +24,32 @@ import { WritingStats } from '@/components/stats/WritingStats'
 import { SearchBar } from '@/components/search/SearchBar'
 import type { Novel } from '@/lib/types'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { api } from '@/lib/api'
 
 interface WorkspaceHeaderProps {
   novel: Novel
 }
 
 export function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
+  const queryClient = useQueryClient()
+  const [systemPrompt, setSystemPrompt] = useState(novel.systemPrompt || '')
+
+  const updateNovelMutation = useMutation({
+    mutationFn: (data: Partial<Novel>) => api.novels.update(novel.id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['novel', novel.id] })
+      toast.success('小说设置已保存')
+    },
+    onError: (error) => toast.error(`保存失败: ${error.message}`),
+  })
+
+  const handleSaveSystemPrompt = () => {
+    updateNovelMutation.mutate({ systemPrompt })
+  }
+
   return (
     <header className="h-14 border-b bg-card/50 backdrop-blur-sm flex items-center px-4 shrink-0">
       <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -65,17 +88,18 @@ export function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Settings2 className="h-5 w-5" />
-                模型配置
+                模型配置与小说设置
               </DialogTitle>
               <DialogDescription>
-                配置AI模型参数和生成设置
+                配置AI模型参数、生成设置和小说专属约束
               </DialogDescription>
             </DialogHeader>
             <Tabs defaultValue="models" className="mt-4">
-              <TabsList className="grid w-full grid-cols-3 h-8">
+              <TabsList className="grid w-full grid-cols-4 h-8">
                 <TabsTrigger value="models" className="text-xs">模型配置</TabsTrigger>
                 <TabsTrigger value="logs" className="text-xs">生成日志</TabsTrigger>
                 <TabsTrigger value="stats" className="text-xs">写作统计</TabsTrigger>
+                <TabsTrigger value="novel-settings" className="text-xs">小说设置</TabsTrigger>
               </TabsList>
               <TabsContent value="models" className="mt-3">
                 <ModelConfig novelId={novel.id} />
@@ -85,6 +109,35 @@ export function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
               </TabsContent>
               <TabsContent value="stats" className="mt-3">
                 <WritingStats novelId={novel.id} />
+              </TabsContent>
+              <TabsContent value="novel-settings" className="mt-3 space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="system-prompt" className="text-sm font-medium">
+                    小说专属 System Prompt（可选）
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    填写后将作为 System Message 注入每次生成，优先级高于通用提示词。
+                    可用于指定世界观名称、主角信息、境界体系权威名称等约束。
+                  </p>
+                  <Textarea
+                    id="system-prompt"
+                    placeholder={`示例：\n本小说世界名：天玄大陆\n主角：林岩\n境界体系：炼气→筑基→金丹→元婴→化神\n任何设定词必须与角色卡和世界设定一字不差`}
+                    value={systemPrompt}
+                    onChange={(e) => setSystemPrompt(e.target.value)}
+                    className="min-h-[120px]"
+                  />
+                  <div className="flex justify-end pt-2">
+                    <Button
+                      size="sm"
+                      onClick={handleSaveSystemPrompt}
+                      disabled={updateNovelMutation.isPending}
+                      className="gap-2"
+                    >
+                      <Save className="h-4 w-4" />
+                      {updateNovelMutation.isPending ? '保存中...' : '保存设置'}
+                    </Button>
+                  </div>
+                </div>
               </TabsContent>
             </Tabs>
           </DialogContent>

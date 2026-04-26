@@ -29,6 +29,7 @@ export interface LLMConfig {
     frequency_penalty?: number
     presence_penalty?: number
     systemPromptOverride?: string
+    novelSystemNote?: string
   }
 }
 
@@ -59,11 +60,11 @@ export interface ModelParams {
 }
 
 const DEFAULT_PARAMS: ModelParams = {
-  temperature: 0.85,
-  max_tokens: 4096,
+  temperature: 0.72,
+  max_tokens: 10000,
   top_p: 0.9,
-  frequency_penalty: 0.3,
-  presence_penalty: 0.3,
+  frequency_penalty: 0,
+  presence_penalty: 0,
   stop: [],
 }
 

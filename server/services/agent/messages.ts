@@ -95,14 +95,20 @@ export function buildMessages(
   contextBundle: ContextBundle | null,
   options: GenerationOptions = {},
   systemPromptOverride?: string,
+  novelSystemNote?: string,
 ): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
   const { mode = 'generate', existingContent, targetWords, issuesContext } = options
 
   // 解析 system prompt：key 命中预设则用预设，否则当作完整 prompt 直接使用，默认 fantasy
-  const systemPrompt =
+  const basePrompt =
     systemPromptOverride && SYSTEM_PROMPTS[systemPromptOverride]
       ? SYSTEM_PROMPTS[systemPromptOverride]
       : (systemPromptOverride || SYSTEM_PROMPTS.fantasy)
+
+  // 如果有小说专属引言，拼在base之后（以system message权重注入）
+  const systemPrompt = novelSystemNote
+    ? `${basePrompt}\n\n【本小说专属约束】\n${novelSystemNote}`
+    : basePrompt
 
   // ── 续写模式 ──────────────────────────────────────────────
   if (mode === 'continue' && existingContent) {

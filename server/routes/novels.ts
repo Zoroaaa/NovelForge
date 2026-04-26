@@ -21,6 +21,7 @@ const CreateSchema = z.object({
   status: z.enum(['draft', 'writing', 'completed', 'archived']).optional(),
   targetWordCount: z.number().optional(),
   targetChapterCount: z.number().optional(),
+  systemPrompt: z.string().optional(),
 })
 
 /**
