@@ -682,7 +682,8 @@ Authorization: Bearer <token>  # 如需认证
   "description": "简介",
   "genre": "玄幻",
   "status": "draft",
-  "targetWordCount": 100000
+  "targetWordCount": 100000,
+  "systemPrompt": "可选的小说专属System Prompt，用于章节生成时的额外约束"
 }
 ```
 
@@ -693,6 +694,7 @@ Authorization: Bearer <token>  # 如需认证
 | genre | string | 否 | 小说类型 |
 | status | string | 否 | 状态：draft/writing/completed/archived |
 | targetWordCount | number | 否 | 目标字数 |
+| systemPrompt | string | 否 | 小说专属System Prompt（v1.10.0新增） |
 
 **成功响应 (201)**:
 ```json
@@ -723,9 +725,21 @@ Authorization: Bearer <token>  # 如需认证
   "title": "新标题",
   "description": "新简介",
   "genre": "仙侠",
-  "status": "completed"
+  "status": "completed",
+  "systemPrompt": "可选的小说专属System Prompt（v1.10.0新增）"
 }
 ```
+
+**更新字段说明**：
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| title | string | 否 | 小说标题 |
+| description | string | 否 | 小说简介 |
+| genre | string | 否 | 小说类型 |
+| status | string | 否 | 状态：draft/writing/completed/archived |
+| targetWordCount | number | 否 | 目标字数 |
+| targetChapterCount | number | 否 | 目标章节数 |
+| systemPrompt | string | 否 | 小说专属System Prompt（v1.10.0新增） |
 
 ---
 
