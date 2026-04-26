@@ -554,7 +554,7 @@ export const api = {
         body: j(body),
       }),
     commitSession: (sessionId: string) =>
-      req<{ ok: boolean; novelId?: string; message?: string }>(`/api/workshop/session/${sessionId}/commit`, { method: 'POST' }),
+      req<{ ok: boolean; novelId?: string; message?: string }>(`/api/workshop/session/${sessionId}/commit`, { method: 'POST', timeout: 240000 }),
   },
 
   // AI 创作工坊数据导入 API
