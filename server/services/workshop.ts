@@ -1511,8 +1511,11 @@ function extractStructuredData(
 ): WorkshopExtractedData {
   const newData: WorkshopExtractedData = {}
 
-  // 尝试从响应中提取 JSON 代码块
-  const jsonMatch = aiResponse.match(/```(?:json)?\s*([\s\S]*?)```/)
+  // 尝试从响应中提取 JSON 代码块（贪婪匹配最后一个，避免被 AI 回复中的示例块干扰）
+  const allJsonMatches = [...aiResponse.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)]
+  
+  // 优先取最后一个 json 块（AI 通常先解释再输出最终 JSON）
+  const jsonMatch = allJsonMatches.length > 0 ? allJsonMatches[allJsonMatches.length - 1] : null
   if (jsonMatch) {
     try {
       const parsed = safeParseJSON(jsonMatch[1].trim()) as Record<string, unknown>
@@ -1520,34 +1523,34 @@ function extractStructuredData(
       // 根据 stage 合并数据
       switch (stage) {
         case 'concept':
-          if (parsed.title) newData.title = parsed.title as string
-          if (parsed.genre) newData.genre = parsed.genre as string
-          if (parsed.description) newData.description = parsed.description as string
-          if (parsed.coreAppeal) newData.coreAppeal = parsed.coreAppeal as string[]
-          if (parsed.targetWordCount) newData.targetWordCount = parsed.targetWordCount as string
-          if (parsed.targetChapters) newData.targetChapters = parsed.targetChapters as string
-          if (parsed.writingRules) newData.writingRules = parsed.writingRules as Array<{ category: string; title: string; content: string; priority?: number }>
+          if (parsed.title) newData.title = parsed.title
+          if (parsed.genre) newData.genre = parsed.genre
+          if (parsed.description) newData.description = parsed.description
+          if (parsed.coreAppeal) newData.coreAppeal = parsed.coreAppeal
+          if (parsed.targetWordCount) newData.targetWordCount = parsed.targetWordCount
+          if (parsed.targetChapters) newData.targetChapters = parsed.targetChapters
+          if (parsed.writingRules) newData.writingRules = parsed.writingRules
           break
 
         case 'worldbuild':
-          if (parsed.worldSettings) newData.worldSettings = parsed.worldSettings as Array<{ type: string; title: string; content: string; importance?: string }>
+          if (parsed.worldSettings) newData.worldSettings = parsed.worldSettings
           break
 
         case 'character_design':
-          if (parsed.characters) newData.characters = parsed.characters as Array<{ name: string; role: string; description: string; aliases?: string[]; powerLevel?: string; attributes?: Record<string, unknown>; relationships?: string[] }>
+          if (parsed.characters) newData.characters = parsed.characters
           break
 
         case 'volume_outline':
-          if (parsed.volumes) newData.volumes = parsed.volumes as Array<{ title: string; outline: string; blueprint: string; chapterCount: number; summary?: string; eventLine?: string[]; notes?: string[]; keyEvents?: string[]; foreshadowingSetup?: string[]; foreshadowingResolve?: string[]; targetWordCount?: number | null; targetChapterCount?: number | null }>
+          if (parsed.volumes) newData.volumes = parsed.volumes
           break
 
         case 'chapter_outline':
-          if (parsed.chapters) newData.chapters = parsed.chapters as Array<{ title: string; outline: string; summary?: string; characters?: string[]; foreshadowingActions?: Array<{ action: string; target: string; description: string }>; keyScenes?: string[] }>
+          if (parsed.chapters) newData.chapters = parsed.chapters
           break
       }
     } catch (e) {
-      console.warn('Failed to parse structured data from AI response:', e)
     }
+  } else {
   }
 
   return newData
