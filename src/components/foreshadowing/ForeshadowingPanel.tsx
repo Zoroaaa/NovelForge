@@ -279,7 +279,7 @@ export function ForeshadowingPanel({ novelId, onChapterSelect }: ForeshadowingPa
           </div>
         ) : (
           foreshadowings.map(item => {
-            const st = STATUS_DOT[item.status]
+            const st = STATUS_DOT[item.status] || { dotClass: 'bg-gray-400', textClass: 'text-gray-500', label: '未知' }
             const imp = IMPORTANCE_MAP[item.importance]
             const plantChapter = item.chapterId ? chapterMap[item.chapterId] : null
             const resolveChapter = item.resolvedChapterId ? chapterMap[item.resolvedChapterId] : null
