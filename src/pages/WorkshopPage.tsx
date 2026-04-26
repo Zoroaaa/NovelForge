@@ -347,11 +347,10 @@ export default function WorkshopPage() {
       return res
     },
     onSuccess: (data) => {
-      if (data.ok && data.novelId) {
-        toast.success('🎉 创作数据已提交！正在跳转到工作区...')
-        setTimeout(() => navigate(`/novels/${data.novelId}`), 1500)
+      if (data.ok) {
+        toast.success('🎉 创作数据已提交到后台处理！')
+        setShowCommitDialog(false)
       }
-      setShowCommitDialog(false)
     },
   })
   const handleStageChange = async (newStage: string) => {

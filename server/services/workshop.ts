@@ -523,324 +523,330 @@ export async function processWorkshopMessage(
 }
 
 /**
- * 提交确认 - 将提取的数据写入正式表
+ * 提交确认 - 将提取的数据写入正式表（供队列调用的核心逻辑）
  */
-export async function commitWorkshopSession(
+export async function commitWorkshopSessionCore(
   env: Env,
   sessionId: string
 ): Promise<{ ok: boolean; novelId?: string; createdItems: any }> {
   const db = drizzle(env.DB)
 
-  try {
-    const session = await getWorkshopSession(env, sessionId)
-    if (!session) {
-      throw new Error('Session not found')
-    }
-
-    const data: WorkshopExtractedData = JSON.parse(session.extractedData || '{}')
-    const createdItems: any = {}
-    let novelId = session.novelId
-    const stage = session.stage || 'concept'
-    const isNewNovel = !novelId
-
-    // 1. 创建/更新小说主表
-    if (data.title && isNewNovel) {
-      const [novel] = await db.insert(novels).values({
-        title: data.title,
-        description: data.description || '',
-        genre: data.genre || '',
-        status: 'draft',
-        wordCount: 0,
-        chapterCount: 0,
-        targetWordCount: data.targetWordCount ? parseInt(data.targetWordCount, 10) : null,
-        targetChapterCount: data.targetChapters ? parseInt(data.targetChapters, 10) : null,
-      }).returning()
-
-      novelId = novel.id
-      createdItems.novel = novel
-    }
-
-    if (!novelId) {
-      throw new Error('No novel ID available')
-    }
-
-    // 1.5 更新已有小说的目标字数和章节数（仅 concept 阶段或新建时更新）
-    if (isNewNovel && (data.targetWordCount || data.targetChapters)) {
-      const updateData: any = {}
-      if (data.targetWordCount) {
-        updateData.targetWordCount = parseInt(data.targetWordCount, 10)
-      }
-      if (data.targetChapters) {
-        updateData.targetChapterCount = parseInt(data.targetChapters, 10)
-      }
-      await db.update(novels).set(updateData).where(eq(novels.id, novelId)).run()
-    }
-
-    // 2. 总纲 - concept 阶段或新建时创建/更新
-    if (data.title && (isNewNovel || stage === 'concept')) {
-      const outlineContent = await buildOutlineContentWithAI(env, data)
-      await db.delete(masterOutline).where(eq(masterOutline.novelId, novelId)).run()
-      const [outline] = await db.insert(masterOutline).values({
-        novelId,
-        title: `${data.title} - 总纲`,
-        content: outlineContent,
-        version: 1,
-        summary: data.description || '',
-        wordCount: outlineContent.length,
-      }).returning()
-
-      createdItems.outline = outline
-    }
-
-    // 3. 世界设定 -> novelSettings - worldbuild 阶段或新建时创建/更新
-    if (data.worldSettings && data.worldSettings.length > 0 && (isNewNovel || stage === 'worldbuild')) {
-      await db.delete(novelSettings).where(eq(novelSettings.novelId, novelId)).run()
-      const createdSettings: any[] = []
-      for (const setting of data.worldSettings) {
-        const [novelSetting] = await db.insert(novelSettings).values({
-          novelId,
-          type: setting.type,
-          category: setting.type,
-          name: setting.title,
-          content: setting.content,
-          importance: setting.importance || 'normal',
-          sortOrder: createdSettings.length,
-        }).returning()
-        createdSettings.push(novelSetting)
-
-        try {
-          const { generateSettingSummary } = await import('./agent/summarizer')
-          await generateSettingSummary(env, novelSetting.id)
-        } catch (err) {
-          console.warn('[workshop] 设定摘要生成失败:', err)
-        }
-
-        try {
-          const updatedSetting = await db.select().from(novelSettings).where(eq(novelSettings.id, novelSetting.id)).get()
-          const indexContent = updatedSetting?.summary || novelSetting.content.slice(0, 500)
-
-          await enqueue(env, {
-            type: 'index_content',
-            payload: {
-              sourceType: 'setting',
-              sourceId: novelSetting.id,
-              novelId: novelSetting.novelId,
-              title: novelSetting.name,
-              content: indexContent,
-            },
-          })
-        } catch (err) {
-          console.warn(`[workshop] 设定向量化失败 ${novelSetting.name}:`, err)
-        }
-      }
-      createdItems.worldSettings = createdSettings
-    }
-
-    // 4. 创作规则 -> writingRules - concept 阶段或新建时创建/更新
-    if (data.writingRules && data.writingRules.length > 0 && (isNewNovel || stage === 'concept')) {
-      await db.delete(writingRules).where(eq(writingRules.novelId, novelId)).run()
-      const createdRules: any[] = []
-      for (const rule of data.writingRules) {
-        const [writingRule] = await db.insert(writingRules).values({
-          novelId,
-          category: rule.category || 'custom',
-          title: rule.title,
-          content: rule.content,
-          priority: rule.priority || 3,
-          isActive: 1,
-          sortOrder: createdRules.length,
-        }).returning()
-        createdRules.push(writingRule)
-      }
-      createdItems.writingRules = createdRules
-    }
-
-    // 5. 角色 -> characters - character_design 阶段或新建时创建/更新
-    if (data.characters && data.characters.length > 0 && (isNewNovel || stage === 'character_design')) {
-      await db.delete(characters).where(eq(characters.novelId, novelId)).run()
-      const createdCharacters = []
-      for (const char of data.characters) {
-        const finalAttributes = {
-          ...(char.attributes || {}),
-          ...(char.relationships ? { relationships: char.relationships } : {}),
-        }
-
-        const [character] = await db.insert(characters).values({
-          novelId,
-          name: char.name,
-          role: char.role || 'supporting',
-          description: char.description || '',
-          aliases: char.aliases ? JSON.stringify(char.aliases) : null,
-          powerLevel: char.powerLevel || null,
-          attributes: Object.keys(finalAttributes).length > 0
-            ? JSON.stringify(finalAttributes)
-            : null,
-        }).returning()
-        createdCharacters.push(character)
-
-        try {
-          const indexText = [
-            `${character.name}${character.role ? ` (${character.role})` : ''}`,
-            (character.description || '').slice(0, 300),
-            character.powerLevel ? `境界：${character.powerLevel}` : '',
-          ].filter(Boolean).join('\n')
-
-          await enqueue(env, {
-            type: 'index_content',
-            payload: {
-              sourceType: 'character',
-              sourceId: character.id,
-              novelId: character.novelId,
-              title: character.name,
-              content: indexText,
-            },
-          })
-        } catch (err) {
-          console.warn(`[workshop] 角色向量化失败 ${character.name}:`, err)
-        }
-      }
-      createdItems.characters = createdCharacters
-    }
-
-    // 6. 卷 -> volumes - volume_outline 阶段或新建时创建/更新
-    if (data.volumes && data.volumes.length > 0 && (isNewNovel || stage === 'volume_outline')) {
-      await db.delete(volumes).where(eq(volumes.novelId, novelId)).run()
-      const createdVolumes: any[] = []
-      for (const vol of data.volumes) {
-        const summaryValue = vol.summary || null
-        const eventLineValue = Array.isArray(vol.eventLine)
-          ? JSON.stringify(vol.eventLine)
-          : null
-        const notesValue = Array.isArray(vol.notes)
-          ? JSON.stringify(vol.notes)
-          : null
-
-        const [volume] = await db.insert(volumes).values({
-          novelId,
-          title: vol.title,
-          summary: summaryValue,
-          blueprint: vol.blueprint || null,
-          eventLine: eventLineValue,
-          notes: notesValue,
-          chapterCount: 0,
-          targetWordCount: vol.targetWordCount || null,
-          targetChapterCount: vol.targetChapterCount || null,
-          sortOrder: createdVolumes.length,
-          status: 'draft',
-        }).returning()
-        createdVolumes.push(volume)
-
-        try {
-          const { generateVolumeSummary } = await import('./agent/summarizer')
-          await generateVolumeSummary(env, volume.id, novelId)
-        } catch (err) {
-          console.warn('[workshop] 卷摘要生成失败:', err)
-        }
-
-        if (notesValue) {
-          try {
-            const notesData = JSON.parse(notesValue)
-            for (const note of notesData) {
-              const noteStr = typeof note === 'string' ? note : note.title || JSON.stringify(note)
-              const noteDesc = typeof note === 'string'
-                ? `来自卷"${vol.title}"的创作注意事项`
-                : note.description || ''
-
-              await db.insert(foreshadowing).values({
-                novelId,
-                title: `[备注] ${noteStr}`,
-                description: noteDesc,
-                status: 'open',
-                importance: 'low',
-              }).run()
-            }
-          } catch (err) {
-            console.warn('[workshop] 备注解析失败:', err)
-          }
-        }
-
-        if (vol.foreshadowingSetup?.length) {
-          for (const item of vol.foreshadowingSetup) {
-            const parenMatch = item.match(/^(.+?)（(.+)）$/)
-            const title = parenMatch ? parenMatch[1].trim() : item.split('（')[0].trim()
-            const desc = parenMatch ? parenMatch[2].trim() : item
-
-            await db.insert(foreshadowing).values({
-              novelId,
-              title,
-              description: `【埋入计划】${desc}\n【所属卷】${vol.title}`,
-              status: 'open',
-              importance: 'normal',
-            }).run()
-          }
-        }
-
-        if (vol.foreshadowingResolve?.length) {
-          for (const item of vol.foreshadowingResolve) {
-            const parenMatch = item.match(/^(.+?)（(.+)）$/)
-            const title = parenMatch ? parenMatch[1].trim() : item.split('（')[0].trim()
-            const desc = parenMatch ? parenMatch[2].trim() : item
-
-            await db.insert(foreshadowing).values({
-              novelId,
-              title,
-              description: `【回收计划】${desc}\n【所属卷】${vol.title}`,
-              status: 'pending_resolve',
-              importance: 'normal',
-            }).run()
-          }
-        }
-      }
-      createdItems.volumes = createdVolumes
-    }
-
-    // 6.5 章节 -> chapters - chapter_outline 阶段或新建时创建/更新
-    if (data.chapters && data.chapters.length > 0 && (isNewNovel || stage === 'chapter_outline')) {
-      await db.delete(chapters).where(eq(chapters.novelId, novelId)).run()
-
-      const volumeIdMap: Map<number, string> = new Map()
-      if (createdItems.volumes && createdItems.volumes.length > 0 && data.volumes) {
-        let chapterIndex = 0
-        for (let v = 0; v < data.volumes.length; v++) {
-          const volChapterCount = data.volumes[v]?.chapterCount || 0
-          for (let c = 0; c < volChapterCount && chapterIndex < data.chapters.length; c++) {
-            volumeIdMap.set(chapterIndex, createdItems.volumes[v].id)
-            chapterIndex++
-          }
-        }
-      }
-
-      const createdChapters: any[] = []
-      for (let i = 0; i < data.chapters.length; i++) {
-        const ch = data.chapters[i]
-        const [chapter] = await db.insert(chapters).values({
-          novelId,
-          volumeId: volumeIdMap.get(i) || null,
-          title: ch.title,
-          sortOrder: i,
-          content: ch.outline || null,
-          wordCount: (ch.outline || '').length,
-          status: 'outline',
-          summary: ch.summary || null,
-        }).returning()
-        createdChapters.push(chapter)
-      }
-      createdItems.chapters = createdChapters
-    }
-
-    // 7. 更新 entityIndex 总索引
-    await rebuildEntityIndex(db, novelId, data)
-
-    // 8. 更新会话状态为已提交
-    await db.update(workshopSessions)
-      .set({ status: 'committed', novelId })
-      .where(eq(workshopSessions.id, sessionId))
-
-    return { ok: true, novelId, createdItems }
-  } catch (error) {
-    console.error('Commit workshop session failed:', error)
-    throw error
+  const session = await getWorkshopSession(env, sessionId)
+  if (!session) {
+    throw new Error('Session not found')
   }
+
+  const data: WorkshopExtractedData = JSON.parse(session.extractedData || '{}')
+  const createdItems: any = {}
+  let novelId = session.novelId
+  const stage = session.stage || 'concept'
+  const isNewNovel = !novelId
+
+  // 1. 创建/更新小说主表
+  if (data.title && isNewNovel) {
+    const [novel] = await db.insert(novels).values({
+      title: data.title,
+      description: data.description || '',
+      genre: data.genre || '',
+      status: 'draft',
+      wordCount: 0,
+      chapterCount: 0,
+      targetWordCount: data.targetWordCount ? parseInt(data.targetWordCount, 10) : null,
+      targetChapterCount: data.targetChapters ? parseInt(data.targetChapters, 10) : null,
+    }).returning()
+
+    novelId = novel.id
+    createdItems.novel = novel
+  }
+
+  if (!novelId) {
+    throw new Error('No novel ID available')
+  }
+
+  // 1.5 更新已有小说的目标字数和章节数（仅 concept 阶段或新建时更新）
+  if (isNewNovel && (data.targetWordCount || data.targetChapters)) {
+    const updateData: any = {}
+    if (data.targetWordCount) {
+      updateData.targetWordCount = parseInt(data.targetWordCount, 10)
+    }
+    if (data.targetChapters) {
+      updateData.targetChapterCount = parseInt(data.targetChapters, 10)
+    }
+    await db.update(novels).set(updateData).where(eq(novels.id, novelId)).run()
+  }
+
+  // 2. 总纲 - concept 阶段或新建时创建/更新
+  if (data.title && (isNewNovel || stage === 'concept')) {
+    const outlineContent = await buildOutlineContentWithAI(env, data)
+    await db.delete(masterOutline).where(eq(masterOutline.novelId, novelId)).run()
+    const [outline] = await db.insert(masterOutline).values({
+      novelId,
+      title: `${data.title} - 总纲`,
+      content: outlineContent,
+      version: 1,
+      summary: data.description || '',
+      wordCount: outlineContent.length,
+    }).returning()
+
+    createdItems.outline = outline
+  }
+
+  // 3. 世界设定 -> novelSettings - worldbuild 阶段或新建时创建/更新
+  if (data.worldSettings && data.worldSettings.length > 0 && (isNewNovel || stage === 'worldbuild')) {
+    await db.delete(novelSettings).where(eq(novelSettings.novelId, novelId)).run()
+    const createdSettings: any[] = []
+    for (const setting of data.worldSettings) {
+      const [novelSetting] = await db.insert(novelSettings).values({
+        novelId,
+        type: setting.type,
+        category: setting.type,
+        name: setting.title,
+        content: setting.content,
+        importance: setting.importance || 'normal',
+        sortOrder: createdSettings.length,
+      }).returning()
+      createdSettings.push(novelSetting)
+
+      try {
+        const { generateSettingSummary } = await import('./agent/summarizer')
+        await generateSettingSummary(env, novelSetting.id)
+      } catch (err) {
+        console.warn('[workshop] 设定摘要生成失败:', err)
+      }
+
+      try {
+        const updatedSetting = await db.select().from(novelSettings).where(eq(novelSettings.id, novelSetting.id)).get()
+        const indexContent = updatedSetting?.summary || novelSetting.content.slice(0, 500)
+
+        await enqueue(env, {
+          type: 'index_content',
+          payload: {
+            sourceType: 'setting',
+            sourceId: novelSetting.id,
+            novelId: novelSetting.novelId,
+            title: novelSetting.name,
+            content: indexContent,
+          },
+        })
+      } catch (err) {
+        console.warn(`[workshop] 设定向量化失败 ${novelSetting.name}:`, err)
+      }
+    }
+    createdItems.worldSettings = createdSettings
+  }
+
+  // 4. 创作规则 -> writingRules - concept 阶段或新建时创建/更新
+  if (data.writingRules && data.writingRules.length > 0 && (isNewNovel || stage === 'concept')) {
+    await db.delete(writingRules).where(eq(writingRules.novelId, novelId)).run()
+    const createdRules: any[] = []
+    for (const rule of data.writingRules) {
+      const [writingRule] = await db.insert(writingRules).values({
+        novelId,
+        category: rule.category || 'custom',
+        title: rule.title,
+        content: rule.content,
+        priority: rule.priority || 3,
+        isActive: 1,
+        sortOrder: createdRules.length,
+      }).returning()
+      createdRules.push(writingRule)
+    }
+    createdItems.writingRules = createdRules
+  }
+
+  // 5. 角色 -> characters - character_design 阶段或新建时创建/更新
+  if (data.characters && data.characters.length > 0 && (isNewNovel || stage === 'character_design')) {
+    await db.delete(characters).where(eq(characters.novelId, novelId)).run()
+    const createdCharacters = []
+    for (const char of data.characters) {
+      const finalAttributes = {
+        ...(char.attributes || {}),
+        ...(char.relationships ? { relationships: char.relationships } : {}),
+      }
+
+      const [character] = await db.insert(characters).values({
+        novelId,
+        name: char.name,
+        role: char.role || 'supporting',
+        description: char.description || '',
+        aliases: char.aliases ? JSON.stringify(char.aliases) : null,
+        powerLevel: char.powerLevel || null,
+        attributes: Object.keys(finalAttributes).length > 0
+          ? JSON.stringify(finalAttributes)
+          : null,
+      }).returning()
+      createdCharacters.push(character)
+
+      try {
+        const indexText = [
+          `${character.name}${character.role ? ` (${character.role})` : ''}`,
+          (character.description || '').slice(0, 300),
+          character.powerLevel ? `境界：${character.powerLevel}` : '',
+        ].filter(Boolean).join('\n')
+
+        await enqueue(env, {
+          type: 'index_content',
+          payload: {
+            sourceType: 'character',
+            sourceId: character.id,
+            novelId: character.novelId,
+            title: character.name,
+            content: indexText,
+          },
+        })
+      } catch (err) {
+        console.warn(`[workshop] 角色向量化失败 ${character.name}:`, err)
+      }
+    }
+    createdItems.characters = createdCharacters
+  }
+
+  // 6. 卷 -> volumes - volume_outline 阶段或新建时创建/更新
+  if (data.volumes && data.volumes.length > 0 && (isNewNovel || stage === 'volume_outline')) {
+    await db.delete(volumes).where(eq(volumes.novelId, novelId)).run()
+    const createdVolumes: any[] = []
+    for (const vol of data.volumes) {
+      const summaryValue = vol.summary || null
+      const eventLineValue = Array.isArray(vol.eventLine)
+        ? JSON.stringify(vol.eventLine)
+        : null
+      const notesValue = Array.isArray(vol.notes)
+        ? JSON.stringify(vol.notes)
+        : null
+
+      const [volume] = await db.insert(volumes).values({
+        novelId,
+        title: vol.title,
+        summary: summaryValue,
+        blueprint: vol.blueprint || null,
+        eventLine: eventLineValue,
+        notes: notesValue,
+        chapterCount: 0,
+        targetWordCount: vol.targetWordCount || null,
+        targetChapterCount: vol.targetChapterCount || null,
+        sortOrder: createdVolumes.length,
+        status: 'draft',
+      }).returning()
+      createdVolumes.push(volume)
+
+      try {
+        const { generateVolumeSummary } = await import('./agent/summarizer')
+        await generateVolumeSummary(env, volume.id, novelId)
+      } catch (err) {
+        console.warn('[workshop] 卷摘要生成失败:', err)
+      }
+
+      if (notesValue) {
+        try {
+          const notesData = JSON.parse(notesValue)
+          for (const note of notesData) {
+            const noteStr = typeof note === 'string' ? note : note.title || JSON.stringify(note)
+            const noteDesc = typeof note === 'string'
+              ? `来自卷"${vol.title}"的创作注意事项`
+              : note.description || ''
+
+            await db.insert(foreshadowing).values({
+              novelId,
+              title: `[备注] ${noteStr}`,
+              description: noteDesc,
+              status: 'open',
+              importance: 'low',
+            }).run()
+          }
+        } catch (err) {
+          console.warn('[workshop] 备注解析失败:', err)
+        }
+      }
+
+      if (vol.foreshadowingSetup?.length) {
+        for (const item of vol.foreshadowingSetup) {
+          const parenMatch = item.match(/^(.+?)（(.+)）$/)
+          const title = parenMatch ? parenMatch[1].trim() : item.split('（')[0].trim()
+          const desc = parenMatch ? parenMatch[2].trim() : item
+
+          await db.insert(foreshadowing).values({
+            novelId,
+            title,
+            description: `【埋入计划】${desc}\n【所属卷】${vol.title}`,
+            status: 'open',
+            importance: 'normal',
+          }).run()
+        }
+      }
+
+      if (vol.foreshadowingResolve?.length) {
+        for (const item of vol.foreshadowingResolve) {
+          const parenMatch = item.match(/^(.+?)（(.+)）$/)
+          const title = parenMatch ? parenMatch[1].trim() : item.split('（')[0].trim()
+          const desc = parenMatch ? parenMatch[2].trim() : item
+
+          await db.insert(foreshadowing).values({
+            novelId,
+            title,
+            description: `【回收计划】${desc}\n【所属卷】${vol.title}`,
+            status: 'pending_resolve',
+            importance: 'normal',
+          }).run()
+        }
+      }
+    }
+    createdItems.volumes = createdVolumes
+  }
+
+  // 6.5 章节 -> chapters - chapter_outline 阶段或新建时创建/更新
+  if (data.chapters && data.chapters.length > 0 && (isNewNovel || stage === 'chapter_outline')) {
+    await db.delete(chapters).where(eq(chapters.novelId, novelId)).run()
+
+    const volumeIdMap: Map<number, string> = new Map()
+    if (createdItems.volumes && createdItems.volumes.length > 0 && data.volumes) {
+      let chapterIndex = 0
+      for (let v = 0; v < data.volumes.length; v++) {
+        const volChapterCount = data.volumes[v]?.chapterCount || 0
+        for (let c = 0; c < volChapterCount && chapterIndex < data.chapters.length; c++) {
+          volumeIdMap.set(chapterIndex, createdItems.volumes[v].id)
+          chapterIndex++
+        }
+      }
+    }
+
+    const createdChapters: any[] = []
+    for (let i = 0; i < data.chapters.length; i++) {
+      const ch = data.chapters[i]
+      const [chapter] = await db.insert(chapters).values({
+        novelId,
+        volumeId: volumeIdMap.get(i) || null,
+        title: ch.title,
+        sortOrder: i,
+        content: ch.outline || null,
+        wordCount: (ch.outline || '').length,
+        status: 'outline',
+        summary: ch.summary || null,
+      }).returning()
+      createdChapters.push(chapter)
+    }
+    createdItems.chapters = createdChapters
+  }
+
+  // 7. 更新 entityIndex 总索引
+  await rebuildEntityIndex(db, novelId, data)
+
+  // 8. 更新会话状态为已提交
+  await db.update(workshopSessions)
+    .set({ status: 'committed', novelId })
+    .where(eq(workshopSessions.id, sessionId))
+
+  return { ok: true, novelId, createdItems }
+}
+
+/**
+ * 提交确认 - 异步模式（通过队列执行）
+ */
+export async function commitWorkshopSession(
+  env: Env,
+  sessionId: string
+): Promise<{ ok: boolean; novelId?: string; createdItems: any }> {
+  await enqueue(env, { type: 'commit_workshop', payload: { sessionId } })
+  return { ok: true, novelId: undefined, createdItems: {} }
 }
 
 // ============================================================

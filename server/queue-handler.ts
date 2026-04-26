@@ -10,6 +10,7 @@ import { checkChapterCoherence } from './services/agent/coherence'
 import { checkVolumeProgress } from './services/agent/volumeProgress'
 import { logGeneration } from './services/agent/logging'
 import { saveCheckLog } from './services/agent/checkLogService'
+import { commitWorkshopSessionCore } from './services/workshop'
 import { drizzle } from 'drizzle-orm/d1'
 import { novelSettings, characters, foreshadowing, chapters, queueTaskLogs, vectorIndex } from './db/schema'
 import { eq, and, sql } from 'drizzle-orm'
@@ -57,6 +58,13 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
         msg.payload.chapterId,
         msg.payload.novelId
       )
+      break
+    }
+
+    case 'commit_workshop': {
+      console.log(`[Queue] 开始处理 commit_workshop task for session ${msg.payload.sessionId}`)
+      const result = await commitWorkshopSessionCore(env, msg.payload.sessionId)
+      console.log(`[Queue] commit_workshop 完成: novelId=${result.novelId}`)
       break
     }
 
@@ -457,5 +465,7 @@ function getNovelId(msg: QueueMessage): string {
       return msg.payload.novelId
     case 'post_process_chapter':
       return msg.payload.novelId
+    case 'commit_workshop':
+      return ''
   }
 }

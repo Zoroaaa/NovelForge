@@ -42,6 +42,12 @@ export type QueueMessage =
         usage?: { prompt_tokens: number; completion_tokens: number }
       }
     }
+  | {
+      type: 'commit_workshop'
+      payload: {
+        sessionId: string
+      }
+    }
 
 export async function enqueue(
   env: Env,
