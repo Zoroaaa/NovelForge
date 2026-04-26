@@ -1479,6 +1479,31 @@ function buildReadonlyContext(stage: string, data: WorkshopExtractedData): strin
   return ''
 }
 
+/**
+ * 容错 JSON 解析：修复 AI 输出中字符串值内未转义的控制字符（换行、回车、制表符）。
+ * blueprint / eventLine 等长文本字段在 AI 直接输出 JSON 时常含真实换行，
+ * 导致 JSON.parse 抛错被 catch 吞掉，整个 extractedData.volumes 丢失。
+ */
+function safeParseJSON(raw: string): unknown {
+  try { return JSON.parse(raw) } catch {}
+  let inString = false
+  let escaped = false
+  let result = ''
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i]
+    if (escaped) { escaped = false; result += ch; continue }
+    if (ch === '\\') { escaped = true; result += ch; continue }
+    if (ch === '"') { inString = !inString; result += ch; continue }
+    if (inString) {
+      if (ch === '\n') { result += '\\n'; continue }
+      if (ch === '\r') { result += '\\r'; continue }
+      if (ch === '\t') { result += '\\t'; continue }
+    }
+    result += ch
+  }
+  return JSON.parse(result)
+}
+
 function extractStructuredData(
   aiResponse: string,
   stage: string,
@@ -1490,7 +1515,7 @@ function extractStructuredData(
   const jsonMatch = aiResponse.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (jsonMatch) {
     try {
-      const parsed = JSON.parse(jsonMatch[1].trim())
+      const parsed = safeParseJSON(jsonMatch[1].trim()) as Record<string, unknown>
 
       // 根据 stage 合并数据
       switch (stage) {
