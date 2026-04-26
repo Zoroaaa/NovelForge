@@ -83,19 +83,21 @@ export async function triggerAutoSummary(
       novelId,
       stage: 'summary_gen',
       systemPrompt: SUMMARY_SYSTEM_PROMPT,
-      userPrompt: `请为以下小说章节生成350-450字的结构化摘要。
+      userPrompt: `请为以下小说章节生成结构化摘要。
 
-章节标题：《${chapter.title}》
+【章节标题】《${chapter.title}》
 
-正文内容：
+【正文内容】
 ${chapter.content}
 
-【输出格式要求】严格按以下结构输出，每项如无内容则写"无"：
-【角色状态变化】本章角色境界突破、能力获得、重要属性变化（精确到具体境界名称）
-【关键事件】本章主线剧情，2-3句话
-【道具/功法】本章出现、获得或使用的重要道具、功法、丹药（名称+简述）
-【人物关系】本章新出现的角色关系变化或重要互动（如有）
-【章末状态】主角当前所在位置、处境、下一步明确方向`,
+【输出格式】严格按以下四个标签输出，每项如确实没有内容则写"无"，不得省略标签：
+
+【角色状态变化】本章中角色的境界突破、能力获得、重要属性变化。必须包含具体境界名称，如"林岩从炼气三层突破至炼气四层"。
+【关键事件】本章主线剧情，2-3句话，包含起因、过程、结果。
+【道具/功法】本章新出现、获得或使用的重要道具、功法、丹药（名称+一句话说明）。
+【章末状态】本章结束时主角的：所在位置·当前处境·下一步明确方向或悬念。
+
+字数要求：总计300-400字（四个标签合计）`,
       maxTokens: 1000,
     })
 
@@ -143,13 +145,22 @@ export async function generateMasterOutlineSummary(
       novelId,
       stage: 'summary_gen',
       systemPrompt: SUMMARY_SYSTEM_PROMPT,
-      userPrompt: `请为以下小说总纲生成一段简洁的摘要（200–300字），概括核心世界观、主线剧情和关键设定。
+      userPrompt: `请为以下小说总纲生成结构化摘要，用于AI创作章节时的宏观参考。
 
-总纲标题：《${outline.title}》
+【总纲标题】《${outline.title}》
 
-总纲内容：
-${outline.content}`,
-      maxTokens: 600,
+【总纲内容】
+${outline.content}
+
+【输出格式】严格按以下四个标签输出：
+
+【世界与主角】一句话概括：世界背景 + 主角的初始身份和核心驱动力（50字以内）
+【核心冲突】贯穿全书的主要矛盾是什么，涉及哪些主要势力或对立力量（100字以内）
+【主线弧线】主角从起点到终局的大致成长路径，按"卷1→卷N"或"阶段"描述（150字以内）
+【创作禁忌】从总纲中提炼的最高优先级约束（如：主角不得无故杀无辜/不得在XXX之前泄露身份），最多5条
+
+字数：总计300-400字`,
+      maxTokens: 1000,
     })
 
     await db
@@ -187,22 +198,46 @@ export async function generateVolumeSummary(
       return { ok: false, error: `${ERROR_MESSAGES.EMPTY_RESULT}: 卷蓝图和事件线都为空` }
     }
 
-    const contentParts = [
-      volume.blueprint ? `【卷蓝图】\n${volume.blueprint}` : '',
-      volume.eventLine ? `【事件线】\n${volume.eventLine}` : '',
-    ].filter(Boolean).join('\n\n')
+    const blueprintSummary = volume.blueprint
+      ? extractBlueprintCore(volume.blueprint)
+      : ''
+
+    const eventLineSummary = volume.eventLine
+      ? (() => {
+          try {
+            const items: string[] = JSON.parse(volume.eventLine)
+            const keyItems = items.filter(l => /高潮|转折|揭秘|突破|决战/.test(l))
+            const head = items.slice(0, 3)
+            const tail = items.slice(-3)
+            const sample = [...new Set([...head, ...keyItems, ...tail])].slice(0, 8)
+            return sample.join('\n')
+          } catch { return volume.eventLine.slice(0, 500) }
+        })()
+      : ''
 
     const summaryText = await callSummaryLLM({
       db,
       novelId,
       stage: 'summary_gen',
       systemPrompt: SUMMARY_SYSTEM_PROMPT,
-      userPrompt: `请为以下卷的蓝图和事件线生成一段简洁的摘要（150–200字），概括本卷的核心情节和关键事件。
+      userPrompt: `请为以下卷生成摘要，用于AI创作时定位当前卷的叙事方向。
 
-卷标题：《${volume.title}》
+【卷标题】《${volume.title}》
 
-${contentParts}`,
-      maxTokens: 500,
+【卷蓝图核心】
+${blueprintSummary || '（无蓝图）'}
+
+【关键事件采样】
+${eventLineSummary || '（无事件线）'}
+
+【输出格式】严格按以下三个标签输出：
+
+【本卷主题】一句话：本卷解决什么核心冲突，主角完成什么转变（30字以内）
+【关键节点】本卷中改变走向的3-5个关键事件，每条一行（包含大致章节位置）
+【卷末状态】本卷结束时主角的境界·位置·与下卷的衔接点
+
+字数：总计300-400字`,
+      maxTokens: 1000,
     })
 
     await db
@@ -243,12 +278,21 @@ export async function generateSettingSummary(
   if (!row.content?.trim()) return { ok: false, error: ERROR_MESSAGES.CHAPTER_CONTENT_EMPTY }
 
   try {
+    const typeSpecificHint: Record<string, string> = {
+      power_system: `摘要必须包含完整的境界名称列表（从低到高），这是全书一致性的基础。其次包含突破条件和跨境界战力规则。境界名称一字不差，这是最高优先级。`,
+      faction: `摘要必须包含：势力名称、与主角的关系（敌/友/中立）、势力的核心矛盾、重要人物（姓名+境界）。省略地理描述和历史背景。`,
+      geography: `摘要必须包含：地点名称、特殊规则或危险、对主角的意义（主角会在此发生什么）。省略气候描述等无关信息。`,
+      item_skill: `摘要必须包含：名称、效果（精确描述）、使用限制或副作用、当前归属（主角是否拥有）。省略来历故事。`,
+      worldview: `摘要必须包含：世界核心法则（影响所有角色行为的规律）、当前格局（主要势力分布）、世界危机（如有）。`,
+      misc: `摘要保留对AI写章节时有直接参考价值的内容，省略背景故事和描述性文字。`,
+    }
+
     const summaryText = await callSummaryLLM({
       db,
       novelId: row.novelId,
       stage: 'summary_gen',
       systemPrompt: SETTING_SUMMARY_SYSTEM_PROMPT,
-      userPrompt: `请为以下小说设定生成一段简洁的摘要。
+      userPrompt: `请为以下小说设定生成用于RAG检索的摘要。
 
 【设定名称】：${row.name}
 【设定类型】：${row.type}
@@ -256,12 +300,14 @@ export async function generateSettingSummary(
 【设定内容】：
 ${row.content}
 
-【要求】：
-1. 摘要长度控制在 200–400 字之间
-2. 保留核心概念、关键数值、重要关系和独特规则
-3. 省略细节描述和举例说明
-4. 使用与原文一致的术语体系
-5. 输出纯文本，不要任何格式标记`,
+【本类型摘要重点】：
+${typeSpecificHint[row.type] || '保留核心概念和关键规则，省略描述性文字。'}
+
+【通用要求】：
+1. 摘要长度：200-350字
+2. 使用与原文完全一致的术语（特别是专有名词）
+3. 信息密度高，每句话都有意义
+4. 纯文本输出，不加任何格式标记`,
       maxTokens: 800,
     })
 
@@ -276,4 +322,14 @@ ${row.content}
     LOG_STYLES.ERROR(`[generateSettingSummary] 失败: ${error}`)
     return { ok: false, error: (error as Error).message }
   }
+}
+
+function extractBlueprintCore(blueprint: string): string {
+  const tags = ['本卷主题', '核心冲突', '关键节点', '卷末状态', '开卷状态']
+  const parts: string[] = []
+  for (const tag of tags) {
+    const match = blueprint.match(new RegExp(`【${tag}】([\\s\\S]*?)(?=【|$)`))
+    if (match) parts.push(`【${tag}】${match[1].trim().slice(0, 150)}`)
+  }
+  return parts.length > 0 ? parts.join('\n') : blueprint.slice(0, 500)
 }

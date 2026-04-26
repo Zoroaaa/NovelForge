@@ -919,19 +919,29 @@ export function estimateTokens(text: string): number {
 // assemblePromptContext v4
 // ============================================================
 
-export function assemblePromptContext(bundle: ContextBundle): string {
+export interface AssembleOptions {
+  slotFilter?: Array<'masterOutline' | 'volume' | 'prevChapter' | 'protagonist' | 'rules' | 'summaryChain' | 'characters' | 'foreshadowing' | 'worldSettings' | 'chapterTypeRules' | 'rhythmStats'>
+}
+
+export function assemblePromptContext(bundle: ContextBundle, options?: AssembleOptions): string {
+  const { slotFilter } = options || {}
   const sections: string[] = []
 
-  if (bundle.core.masterOutlineContent) sections.push(`## 总纲\n${bundle.core.masterOutlineContent}`)
+  const shouldInclude = (slotName: string): boolean => {
+    if (!slotFilter || slotFilter.length === 0) return true
+    return slotFilter.includes(slotName as any)
+  }
 
-  if (bundle.core.volumeBlueprint || bundle.core.volumeEventLine) {
+  if (shouldInclude('masterOutline') && bundle.core.masterOutlineContent) sections.push(`## 总纲\n${bundle.core.masterOutlineContent}`)
+
+  if (shouldInclude('volume') && (bundle.core.volumeBlueprint || bundle.core.volumeEventLine)) {
     const parts = []
     if (bundle.core.volumeBlueprint) parts.push(`【卷蓝图】\n${bundle.core.volumeBlueprint}`)
     if (bundle.core.volumeEventLine) parts.push(`【事件线】\n${bundle.core.volumeEventLine}`)
     sections.push(`## 当前卷规划\n${parts.join('\n\n')}`)
   }
 
-  if (bundle.core.rhythmStats) {
+  if (shouldInclude('rhythmStats') && bundle.core.rhythmStats) {
     const r = bundle.core.rhythmStats
     const volumeProgress = r.volumeTargetWordCount
       ? `（已写 ${r.volumeWordCount} / ${r.volumeTargetWordCount} 字）`
@@ -956,29 +966,31 @@ export function assemblePromptContext(bundle: ContextBundle): string {
     sections.push(`## 创作节奏把控\n${rhythmParts.join('\n')}`)
   }
 
-  if (bundle.core.prevChapterContent) sections.push(`## 上一章正文\n${bundle.core.prevChapterContent}`)
+  if (shouldInclude('prevChapter') && bundle.core.prevChapterContent) sections.push(`## 上一章正文\n${bundle.core.prevChapterContent}`)
 
-  if (bundle.core.protagonistStateCards.length > 0) sections.push(`## 主角状态\n${bundle.core.protagonistStateCards.join('\n\n')}`)
+  if (shouldInclude('protagonist') && bundle.core.protagonistStateCards.length > 0) sections.push(`## 主角状态\n${bundle.core.protagonistStateCards.join('\n\n')}`)
 
-  if (bundle.core.allActiveRules.length > 0) sections.push(`## 创作准则\n${bundle.core.allActiveRules.join('\n\n')}`)
+  if (shouldInclude('rules') && bundle.core.allActiveRules.length > 0) sections.push(`## 创作准则\n${bundle.core.allActiveRules.join('\n\n')}`)
 
-  if (bundle.dynamic.summaryChain.length > 0) sections.push(`## 近期剧情摘要\n${bundle.dynamic.summaryChain.join('\n')}`)
+  if (shouldInclude('summaryChain') && bundle.dynamic.summaryChain.length > 0) sections.push(`## 近期剧情摘要\n${bundle.dynamic.summaryChain.join('\n')}`)
 
-  if (bundle.dynamic.characterCards.length > 0) sections.push(`## 本章出场角色\n${bundle.dynamic.characterCards.join('\n\n')}`)
+  if (shouldInclude('characters') && bundle.dynamic.characterCards.length > 0) sections.push(`## 本章出场角色\n${bundle.dynamic.characterCards.join('\n\n')}`)
 
-  if (bundle.dynamic.relevantForeshadowing.length > 0) sections.push(`## 待回收伏笔\n${bundle.dynamic.relevantForeshadowing.join('\n\n')}`)
+  if (shouldInclude('foreshadowing') && bundle.dynamic.relevantForeshadowing.length > 0) sections.push(`## 待回收伏笔\n${bundle.dynamic.relevantForeshadowing.join('\n\n')}`)
 
   const s = bundle.dynamic.relevantSettings
-  const settingParts: string[] = []
-  if (s.worldRules.length > 0) settingParts.push(`【世界法则】\n${s.worldRules.join('\n')}`)
-  if (s.powerSystem.length > 0) settingParts.push(`【境界体系】\n${s.powerSystem.join('\n')}`)
-  if (s.geography.length > 0) settingParts.push(`【场景地理】\n${s.geography.join('\n')}`)
-  if (s.factions.length > 0) settingParts.push(`【相关势力】\n${s.factions.join('\n')}`)
-  if (s.artifacts.length > 0) settingParts.push(`【相关法宝】\n${s.artifacts.join('\n')}`)
-  if (s.misc.length > 0) settingParts.push(`【其他设定】\n${s.misc.join('\n')}`)
-  if (settingParts.length > 0) sections.push(`## 相关世界设定\n${settingParts.join('\n\n')}`)
+  if (shouldInclude('worldSettings')) {
+    const settingParts: string[] = []
+    if (s.worldRules.length > 0) settingParts.push(`【世界法则】\n${s.worldRules.join('\n')}`)
+    if (s.powerSystem.length > 0) settingParts.push(`【境界体系】\n${s.powerSystem.join('\n')}`)
+    if (s.geography.length > 0) settingParts.push(`【场景地理】\n${s.geography.join('\n')}`)
+    if (s.factions.length > 0) settingParts.push(`【相关势力】\n${s.factions.join('\n')}`)
+    if (s.artifacts.length > 0) settingParts.push(`【相关法宝】\n${s.artifacts.join('\n')}`)
+    if (s.misc.length > 0) settingParts.push(`【其他设定】\n${s.misc.join('\n')}`)
+    if (settingParts.length > 0) sections.push(`## 相关世界设定\n${settingParts.join('\n\n')}`)
+  }
 
-  if (bundle.dynamic.chapterTypeRules.length > 0) sections.push(`## 本章创作指引\n${bundle.dynamic.chapterTypeRules.join('\n\n')}`)
+  if (shouldInclude('chapterTypeRules') && bundle.dynamic.chapterTypeRules.length > 0) sections.push(`## 本章创作指引\n${bundle.dynamic.chapterTypeRules.join('\n\n')}`)
 
   return sections.join('\n\n---\n\n')
 }

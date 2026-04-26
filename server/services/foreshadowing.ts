@@ -10,6 +10,7 @@ import type { Env } from '../lib/types'
 import { resolveConfig } from './llm'
 import { enqueue } from '../lib/queue'
 import { embedText, searchSimilarMulti, ACTIVE_SOURCE_TYPES } from './embedding'
+import { JSON_OUTPUT_PROMPT } from './agent/constants'
 
 export interface ForeshadowingExtractResult {
   newForeshadowing: Array<{
@@ -103,6 +104,7 @@ export async function extractForeshadowingFromChapter(
         id: foreshadowing.id,
         title: foreshadowing.title,
         description: foreshadowing.description,
+        importance: foreshadowing.importance,
       })
       .from(foreshadowing)
       .where(
@@ -122,11 +124,12 @@ export async function extractForeshadowingFromChapter(
       throw new Error(`❌ 未配置"智能分析"模型！请在全局配置中设置 analysis 阶段的模型（用于伏笔提取、境界检测等分析任务）`)
     }
 
+    const openCount = existingOpen.length
     const existingForeshadowingText = existingOpen.length > 0
-      ? `\n\n【当前未收尾的伏笔列表】\n${existingOpen.map((f, i) => `${i + 1}. [ID:${f.id}] ${f.title}: ${f.description || ''}`).join('\n')}`
+      ? `\n\n【当前未收尾的伏笔（共${openCount}个）】\n${existingOpen.map((f, i) => `${i + 1}. [ID:${f.id}] [${f.importance}] ${f.title}: ${f.description || ''}`).join('\n')}`
       : ''
 
-    const extractPrompt = `你是一个专业的小说伏笔分析助手。请分析以下小说章节内容，提取其中的伏笔信息。
+    const extractPrompt = `你是专业的小说伏笔分析助手。请分析章节内容，准确识别伏笔操作。
 
 【章节标题】：《${chapter.title}》
 
@@ -134,36 +137,48 @@ export async function extractForeshadowingFromChapter(
 ${chapter.content}
 ${existingForeshadowingText}
 
-请以JSON格式输出分析结果（不要输出其他内容）：
+【判断标准——严格执行】
+
+新伏笔（newForeshadowing）：
+- 必须是：明确的悬念、未解释的神秘元素、有意为之的暗示（作者刻意不说明的内容）
+- 不算新伏笔：普通的场景描写、角色心理活动、已知信息的重复
+- importance 判断（标准要严格，不要轻易标 high）：
+  * high：直接影响主线剧情走向，如主角身世之谜、核心反派的真实身份、决定故事终局的秘密
+  * normal：影响支线或角色关系发展，如某角色的隐藏目的、道具的特殊来历
+  * low：细节装饰性伏笔，如某个奇异现象、NPC的神秘举动
+- 当前已有${openCount}个未收尾伏笔，新伏笔应该是真正有价值的新内容，不要重复已有伏笔
+
+已收尾伏笔（resolvedForeshadowingIds）：
+- 必须是：伏笔的核心悬念在本章得到了明确的解答或揭示
+- 不算收尾："提及了这个伏笔"或"推进了一步"不算收尾，只有"核心谜底揭开"才算
+- 如果不确定，宁可放入 progresses 而不是 resolvedForeshadowingIds
+
+推进中（progresses）：
+- hint：背景式提及，侧面暗示，不直接推进
+- advance：直接增加新线索，情节推进明显
+- partial_reveal：揭露部分真相但核心悬念仍在
+- 注意：已收尾的伏笔不要同时出现在 progresses 中
+
+请以JSON格式输出（不要其他内容）：
 {
   "newForeshadowing": [
     {
-      "title": "伏笔标题（简短描述）",
-      "description": "详细说明",
+      "title": "伏笔标题（简短，5-15字，如：林岩左手黑色印记）",
+      "description": "详细说明：这个伏笔是什么？在本章如何出现？为什么算伏笔？（50-100字）",
       "importance": "high|normal|low"
     }
   ],
-  "resolvedForeshadowingIds": ["已收尾的伏笔ID列表"],
+  "resolvedForeshadowingIds": ["只填已明确收尾的伏笔ID"],
   "progresses": [
     {
-      "foreshadowingId": "被推进的伏笔ID",
+      "foreshadowingId": "伏笔ID",
       "progressType": "hint|advance|partial_reveal",
-      "summary": "本轮推进的简要描述"
+      "summary": "本章对此伏笔做了什么（20-40字）"
     }
   ]
 }
 
-判断标准：
-1. 新伏笔：本章中出现的、尚未解决的悬念、暗示、隐藏线索、神秘人物/物品等
-2. 收尾伏笔：之前埋下的伏笔在本章得到了解答或明确进展（status变为resolved）
-3. 推进中的伏笔（既不是全新埋设，也不是完全收尾）：
-   - hint: 间接提及、侧面描写、氛围暗示、背景板出现
-   - advance: 直接推进情节、增加新线索、角色主动触及
-   - partial_reveal: 揭露部分真相但核心悬念仍在
-   注意：如果一个伏笔在本章被收尾了（resolved），不要同时出现在progresses中
-4. 重要性判断：high=影响主线剧情/核心秘密；normal=影响支线/角色发展；low=细节装饰
-
-如果本章没有新伏笔、没有收尾伏笔、也没有推进中的伏笔，对应数组为空数组[]。`
+如果本章确实没有相关内容，对应数组为空[]。`
 
     const base = extractConfig.apiBase || getDefaultBase(extractConfig.provider)
     const resp = await fetch(`${base}/chat/completions`, {
@@ -175,7 +190,7 @@ ${existingForeshadowingText}
       body: JSON.stringify({
         model: extractConfig.modelId,
         messages: [
-          { role: 'system', content: '你是一个JSON生成助手，只输出JSON，不要其他内容。' },
+          { role: 'system', content: JSON_OUTPUT_PROMPT },
           { role: 'user', content: extractPrompt },
         ],
         stream: false,
@@ -330,7 +345,7 @@ export async function checkForeshadowingHealth(
         id: chapters.id,
         title: chapters.title,
         sortOrder: chapters.sortOrder,
-        content: chapters.content,
+        summary: chapters.summary,
       })
       .from(chapters)
       .where(
@@ -344,6 +359,10 @@ export async function checkForeshadowingHealth(
       .all()
 
     const recentChapterIds = recentChapters.map(c => c.id)
+
+    const recentContent = recentChapters
+      .map(c => `《${c.title}》摘要：${c.summary || '（无摘要）'}`)
+      .join('\n\n')
 
     for (const fs of allOpen) {
       const lastProgress = await db
@@ -424,50 +443,47 @@ export async function checkForeshadowingHealth(
           return report
         }
 
-        const recentContent = recentChapters
-          .map(c => `【${c.title}】\n${c.content || ''}`)
-          .join('\n\n---\n\n')
-
         const staleForPrompt = report.staleItems.slice(0, 8).map(item =>
           `- [${item.importance}] ${item.title}（已${item.chaptersSinceLastProgress}章未推进）`
         ).join('\n')
 
         const highImportanceOpen = allOpen.filter(f => f.importance === 'high').slice(0, 5)
 
-        const healthPrompt = `你是小说伏笔健康审计助手。基于以下信息生成审计建议。
+        const healthPrompt = `你是小说伏笔健康审计助手。基于最近章节的摘要，评估伏笔状态并给出建议。
 
-【最近${recentCount}章内容摘要】：
-${recentContent.slice(0, 8000)}
+【最近${recentCount}章摘要】：
+${recentContent}
 
-【沉寂伏笔（可能遗忘）】：
+【沉寂伏笔（长期未推进）】：
 ${staleForPrompt || '无'}
 
 【高重要性未收尾伏笔】：
-${highImportanceOpen.map(f => `- [ID:${f.id}] ${f.title}: ${f.description || ''}`).join('\n') || '无'}
+${highImportanceOpen.map(f => `- [ID:${f.id}] [high] ${f.title}: ${f.description || ''}`).join('\n') || '无'}
 
 请以JSON格式输出（不要其他内容）：
 {
   "suggestions": [
     {
       "foreshadowingId": "伏笔ID",
-      "suggestion": "为什么可能遗忘了，以及如何自然地重新引入这个伏笔的建议（50字内）"
+      "urgency": "high|normal|low",
+      "suggestion": "为什么建议现在处理，以及具体的引入方式建议（40-80字）"
     }
   ],
   "contradictions": [
     {
       "foreshadowingId": "伏笔ID",
-      "reason": "最近章节内容与此伏笔存在潜在矛盾的原因（50字内）"
+      "reason": "最近章节内容与此伏笔存在什么潜在矛盾（40字以内）"
     }
   ],
   "resolutionIdeas": [
     {
       "foreshadowingId": "伏笔ID",
-      "idea": "基于当前剧情走向，建议的收尾方向（50字内）"
+      "idea": "基于当前剧情，建议的收尾方向和方式（40-60字）"
     }
   ]
 }
 
-如果没有相关问题，对应数组为空[]。`
+如果没有问题，对应数组为空[]。`
 
         const base = checkConfig.apiBase || getDefaultBase(checkConfig.provider)
         const resp = await fetch(`${base}/chat/completions`, {
@@ -621,32 +637,36 @@ export async function suggestForeshadowingForChapter(
         `${i + 1}. [ID:${c.id}] [${c.importance}] ${c.title}: ${c.description || ''}`
       ).join('\n')
 
-      const suggestPrompt = `你是小说创作助手。作者正在写一个新章节，需要知道应该呼应哪些已有的伏笔。
+      const suggestPrompt = `你是小说创作顾问。作者正在计划创作一个新章节，需要决定在本章中如何呼应已有的伏笔。
 
-【当前创作场景/意图】：
+【本章创作意图/场景描述】：
 ${chapterContext.slice(0, 1000)}
 
-【可呼应的候选伏笔（按相关度排序）】：
+【候选伏笔（按相关度排序）】：
 ${candidateText}
 
-请以JSON格式输出（不要其他内容）：
+对每个候选伏笔，判断以下内容：
+1. 当前场景下是否适合处理这个伏笔？（不适合则不要输出）
+2. 建议的处理方式：
+   - weave_in：自然穿插，不作为重点，读者感觉到存在即可
+   - hint：侧面暗示，为后续收尾做铺垫，但不直接推进
+   - advance：作为本章的支线推进，增加新线索
+   - resolve：本章可以完整收尾这个伏笔
+3. 具体的操作建议：如何在章节中自然地引入这个伏笔？
+
+请以JSON格式输出（只包含适合在本章处理的伏笔）：
 {
   "suggestions": [
     {
       "foreshadowingId": "伏笔ID",
-      "action": "weave_in|advance|resolve|hint",
-      "reason": "为什么现在适合处理这个伏笔，以及具体如何处理的简要建议（50字内）"
+      "action": "weave_in|hint|advance|resolve",
+      "reason": "为什么现在适合处理（20字以内）",
+      "howTo": "具体如何在章节中引入这个伏笔的操作建议（40-60字，越具体越好）"
     }
   ]
 }
 
-判断标准：
-- weave_in: 自然穿插提及，不作为重点
-- advance: 推进情节，增加新线索或转折
-- hint: 侧面暗示，为后续收尾做铺垫
-- resolve: 本章适合直接收尾该伏笔
-
-如果某个伏笔不适合在当前场景中处理，不要包含在结果中。`
+如果没有候选伏笔适合在当前场景处理，输出空数组：{"suggestions": []}`
 
       const base = suggestConfig.apiBase || getDefaultBase(suggestConfig.provider)
       const resp = await fetch(`${base}/chat/completions`, {

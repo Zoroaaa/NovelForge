@@ -20,6 +20,7 @@ export interface VolumeProgressResult {
   healthStatus: 'healthy' | 'ahead' | 'behind' | 'critical'
   risk: 'early_ending' | 'late_ending' | null
   suggestion: string
+  diagnosis?: string
   raw?: string
 }
 
@@ -93,37 +94,34 @@ export async function checkVolumeProgress(
     }
   }
 
-  const checkPrompt = `你是一个小说卷完成程度评估助手。请根据以下数据评估当前卷的进度是否健康。
+  const chapterProgressPct = targetChapter ? Math.round((currentChapterInVolume / targetChapter) * 100) : null
+  const wordProgressPct = targetWordCount ? Math.round(((volumeData.wordCount || 0) / targetWordCount) * 100) : null
 
-【卷信息】
-- 卷标题：${volumeData.title}
-- 当前章节：第 ${currentChapterInVolume} 章 / 共 ${volumeData.chapterCount} 章
-- 目标章节数：${targetChapter || '未设定'}
-- 当前字数：${volumeData.wordCount} 字
-- 目标字数：${targetWordCount || '未设定'}
-- 当前章节标题：${chapter.title}
+  const checkPrompt = `你是小说卷进度评估助手。请根据数据评估当前卷的创作进度并给出具体建议。
 
-【评估标准】
-1. 健康范围：
-   - 章节进度偏差：目标章节数 ±5章（如目标70章，65-75章范围内收尾算正常）
-   - 字数进度偏差：目标字数 ±15%
-2. 风险判断：
-   - early_ending：当前章节已接近或超过目标，可能提前收尾
-   - late_ending：按当前节奏推算会大幅超出目标，可能延期收尾
-3. 整体评估要考虑小说创作的灵活性，允许一定幅度的偏差
+【卷数据】
+卷标题：${volumeData.title}
+章节进度：第${currentChapterInVolume}章 / 目标${targetChapter || '未设定'}章（${chapterProgressPct !== null ? chapterProgressPct + '%' : '无法计算'}）
+字数进度：${volumeData.wordCount || 0}字 / 目标${targetWordCount || '未设定'}字（${wordProgressPct !== null ? wordProgressPct + '%' : '无法计算'}）
+当前章节：《${chapter.title}》
 
-请以JSON格式输出评估结果：
+【健康状态判断标准】
+- healthy：章节进度和字数进度均在目标的85%-110%范围内
+- ahead：进度超过目标110%，有提前收尾风险
+- behind：进度低于目标70%，有拖延收尾风险
+- critical：进度超过目标130%或低于50%，需要立即调整
+
+【风险判断】
+- early_ending：当前章节进度≥90%但字数进度<80%，说明情节铺展过快，可能提前耗尽内容
+- late_ending：当前章节进度<60%但字数进度≥80%，说明字数已消耗较多但情节推进缓慢
+
+请以JSON格式输出：
 {
   "healthStatus": "healthy|ahead|behind|critical",
   "risk": "early_ending|late_ending|null",
-  "suggestion": "详细的评估建议和调整意见（中文，50-200字）"
-}
-
-healthStatus 说明：
-- healthy：进度正常，在合理范围内
-- ahead：进度稍快，但风险可控
-- behind：进度偏慢，需要关注
-- critical：严重偏离规划，需要立即调整`
+  "diagnosis": "当前进度的问题诊断，1-2句话说明哪里出了偏差",
+  "suggestion": "接下来3-5章的具体调整建议，如：加快情节推进/增加场景细节/压缩某类描写，60-100字"
+}`
 
   const overrideConfig = {
     ...analysisConfig,
@@ -150,6 +148,7 @@ healthStatus 说明：
       wordProgress: Math.round(wordProgress * 10) / 10,
       healthStatus: aiResult.healthStatus || 'healthy',
       risk: aiResult.risk || null,
+      diagnosis: aiResult.diagnosis || '',
       suggestion: aiResult.suggestion || '无法获取AI评估建议',
       raw: text,
     }

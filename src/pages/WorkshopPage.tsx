@@ -46,6 +46,16 @@ import {
   PanelLeftClose,
   PanelLeft,
   Upload,
+  Sword,
+  MapPin,
+  Zap,
+  ShieldAlert,
+  Eye,
+  Heart,
+  Target,
+  MessageCircle,
+  Lightbulb,
+  Link2,
 } from 'lucide-react'
 
 interface WorkshopMessage {
@@ -83,6 +93,8 @@ interface ExtractedData {
     blueprint?: string
     eventLine?: string[]
     notes?: string[]
+    foreshadowingSetup?: string[]
+    foreshadowingResolve?: string[]
     chapterCount?: number
     targetWordCount?: number | null
     targetChapterCount?: number | null
@@ -647,22 +659,26 @@ export default function WorkshopPage() {
                     )}
                     {extractedData.genre && <PreviewField label="流派" value={extractedData.genre} />}
                     {extractedData.description && (
-                      <PreviewField label="简介" value={extractedData.description} multiline />
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-muted-foreground">简介</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">四要素格式</span>
+                        </div>
+                        <pre className="text-sm whitespace-pre-wrap bg-muted/50 p-2 rounded text-xs max-h-28 overflow-auto">{extractedData.description}</pre>
+                      </div>
                     )}
                     {extractedData.targetWordCount && (
-                      <PreviewField label="预计字数" value={extractedData.targetWordCount} />
+                      <PreviewField label="预计字数" value={`${extractedData.targetWordCount}万字`} />
                     )}
                     {extractedData.targetChapters && (
-                      <PreviewField label="预计章节" value={extractedData.targetChapters} />
+                      <PreviewField label="预计章节" value={`${extractedData.targetChapters}章`} />
                     )}
                     {extractedData.coreAppeal && (
                       <div className="space-y-1">
-                        <span className="text-xs text-muted-foreground">核心看点</span>
+                        <span className="text-xs text-muted-foreground flex items-center gap-1"><Zap className="h-3 w-3" />核心爽点</span>
                         <div className="flex flex-wrap gap-1">
                           {extractedData.coreAppeal.map((item, i) => (
-                            <Badge key={i} variant="secondary" className="text-xs">
-                              {item}
-                            </Badge>
+                            <Badge key={i} variant="secondary" className="text-xs">{item}</Badge>
                           ))}
                         </div>
                       </div>
@@ -671,139 +687,352 @@ export default function WorkshopPage() {
                 )}
 
                 {(extractedData.writingRules && extractedData.writingRules.length > 0) && (
-                  <PreviewCard title="创作规则" icon={BookOpen}>
-                    {extractedData.writingRules.map((rule, i) => (
-                      <div key={i} className="mb-3 last:mb-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className="font-medium text-sm">{rule.title}</span>
-                          <Badge
-                            variant={rule.category === 'taboo' ? 'destructive' : 'outline'}
-                            className="text-[10px]"
-                          >
-                            {rule.category === 'style' ? '文风' :
-                             rule.category === 'pacing' ? '节奏' :
-                             rule.category === 'character' ? '角色' :
-                             rule.category === 'plot' ? '情节' :
-                             rule.category === 'world' ? '世界观' :
-                             rule.category === 'taboo' ? '禁忌' : '自定义'}
-                          </Badge>
-                          {rule.priority && (
-                            <Badge
-                              variant={rule.priority <= 1 ? 'destructive' : rule.priority >= 3 ? 'secondary' : 'outline'}
-                              className="text-[10px]"
-                            >
-                              {rule.priority === 1 ? '最高' : rule.priority === 2 ? '高' : rule.priority === 3 ? '中' : '低'}
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground whitespace-pre-wrap line-clamp-3">{rule.content}</p>
-                      </div>
-                    ))}
+                  <PreviewCard title="创作规则" icon={ShieldAlert}>
+                    <div className="grid gap-2">
+                      {extractedData.writingRules.map((rule, i) => {
+                        const categoryMap: Record<string, { label: string; color: string; icon: React.ComponentType<{ className?: string }> }> = {
+                          style: { label: '文风', color: 'bg-blue-500/10 text-blue-600', icon: BookOpen },
+                          pacing: { label: '节奏', color: 'bg-green-500/10 text-green-600', icon: Zap },
+                          character: { label: '角色', color: 'bg-purple-500/10 text-purple-600', icon: Users },
+                          plot: { label: '情节', color: 'bg-orange-500/10 text-orange-600', icon: Target },
+                          world: { label: '世界观', color: 'bg-cyan-500/10 text-cyan-600', icon: Globe },
+                          taboo: { label: '禁忌', color: 'bg-red-500/10 text-red-600', icon: ShieldAlert },
+                          custom: { label: '自定义', color: 'bg-gray-500/10 text-gray-600', icon: Lightbulb },
+                        }
+                        const cat = categoryMap[rule.category] || categoryMap.custom
+                        const CatIcon = cat.icon
+                        const contentLen = rule.content?.length || 0
+                        const isQualityRule = contentLen >= 50
+
+                        return (
+                          <div key={i} className={`rounded-md border p-2.5 space-y-1 ${isQualityRule ? 'border-primary/30 bg-primary/[0.02]' : 'border-muted'}`}>
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <CatIcon className={`h-3.5 w-3.5 ${cat.color.split(' ')[1]}`} />
+                              <span className="font-medium text-sm">{rule.title}</span>
+                              <Badge variant="outline" className={`text-[10px] ${cat.color}`}>{cat.label}</Badge>
+                              {rule.priority != null && (
+                                <Badge
+                                  variant={rule.priority <= 1 ? 'destructive' : rule.priority === 2 ? 'default' : 'secondary'}
+                                  className="text-[10px]"
+                                >
+                                  P{rule.priority}
+                                </Badge>
+                              )}
+                              {isQualityRule && (
+                                <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-300">
+                                  ✓ 有效规则
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground whitespace-pre-wrap line-clamp-4">{rule.content}</p>
+                            {!isQualityRule && (
+                              <p className="text-[10px] text-amber-500/70">⚠ 规则内容偏短，建议补充具体约束条件</p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
                   </PreviewCard>
                 )}
 
                 {extractedData.worldSettings && extractedData.worldSettings.length > 0 && (
                   <PreviewCard title="世界观设定" icon={Globe}>
-                    {extractedData.worldSettings.map((ws, i) => (
-                      <div key={i} className="mb-3 last:mb-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <p className="font-medium text-sm">{ws.title}</p>
-                          {ws.importance && (
-                            <Badge
-                              variant={ws.importance === 'high' ? 'destructive' : ws.importance === 'low' ? 'secondary' : 'outline'}
-                              className="text-[10px]"
-                            >
-                              {ws.importance === 'high' ? '🔥 重要' : ws.importance === 'low' ? '💤 次要' : '📖 一般'}
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground whitespace-pre-wrap line-clamp-3">{ws.content}</p>
-                      </div>
-                    ))}
+                    {(() => {
+                      const typeConfig: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
+                        power_system: { label: '境界体系', icon: Sword, color: 'text-red-500 bg-red-50 dark:bg-red-950/30' },
+                        worldview: { label: '世界观', icon: Globe, color: 'text-blue-500 bg-blue-50 dark:bg-blue-950/30' },
+                        faction: { label: '势力组织', icon: ShieldAlert, color: 'text-purple-500 bg-purple-50 dark:bg-purple-950/30' },
+                        geography: { label: '地理环境', icon: MapPin, color: 'text-green-500 bg-green-50 dark:bg-green-950/30' },
+                        item_skill: { label: '功法宝物', icon: Zap, color: 'text-orange-500 bg-orange-50 dark:bg-orange-950/30' },
+                        misc: { label: '其他设定', icon: Lightbulb, color: 'text-gray-500 bg-gray-50 dark:bg-gray-900/30' },
+                      }
+
+                      const grouped = extractedData.worldSettings!.reduce((acc, ws) => {
+                        const t = ws.type || 'misc'
+                        if (!acc[t]) acc[t] = []
+                        acc[t].push(ws)
+                        return acc
+                      }, {} as Record<string, typeof extractedData.worldSettings>)
+
+                      return Object.entries(grouped).map(([type, settings]) => {
+                        const config = typeConfig[type] || typeConfig.misc
+                        const TypeIcon = config.icon
+
+                        return (
+                          <div key={type} className="mb-3 last:mb-0">
+                            <div className="flex items-center gap-1.5 mb-2 pb-1 border-b border-border/50">
+                              <TypeIcon className={`h-3.5 w-3.5 ${config.color.split(' ')[0]}`} />
+                              <span className="text-xs font-semibold uppercase tracking-wider">{config.label}</span>
+                              <Badge variant="secondary" className="text-[10px] ml-auto">{settings.length}条</Badge>
+                            </div>
+                            <div className="space-y-2 pl-1">
+                              {settings.map((ws, j) => (
+                                <div key={j} className="rounded-md border border-border/60 p-2.5 space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium text-sm">{ws.title}</span>
+                                    {ws.importance && (
+                                      <Badge
+                                        variant={ws.importance === 'high' ? 'destructive' : ws.importance === 'low' ? 'secondary' : 'outline'}
+                                        className="text-[10px]"
+                                      >
+                                        {ws.importance === 'high' ? '🔥 高频召回' : ws.importance === 'low' ? '💤 背景' : '📖 按需'}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-muted-foreground whitespace-pre-wrap line-clamp-4 leading-relaxed">{ws.content}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })
+                    })()}
                   </PreviewCard>
                 )}
 
                 {extractedData.characters && extractedData.characters.length > 0 && (
                   <PreviewCard title="角色设计" icon={Users}>
-                    {extractedData.characters.map((char, i) => (
-                      <div key={i} className="mb-3 last:mb-0 pb-3 border-b last:border-b-0 last:pb-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className="font-medium text-sm">{char.name}</span>
-                          {char.aliases && char.aliases.length > 0 && (
-                            <span className="text-xs text-muted-foreground">({char.aliases.join(', ')})</span>
-                          )}
-                          <Badge
-                            variant={char.role === 'protagonist' ? 'default' : char.role === 'antagonist' ? 'destructive' : 'secondary'}
-                            className="text-[10px]"
-                          >
-                            {char.role === 'protagonist' ? '⭐ 主角' : char.role === 'antagonist' ? '💀 反派' : char.role === 'minor' ? '🌙 次要' : '👤 配角'}
-                          </Badge>
-                          {char.powerLevel && (
-                            <Badge variant="outline" className="text-[10px]">
-                              ⚔️ {char.powerLevel}
+                    {extractedData.characters.map((char, i) => {
+                      const roleConfig: Record<string, { label: string; badgeVariant: 'default' | 'destructive' | 'secondary'; emoji: string }> = {
+                        protagonist: { label: '主角', badgeVariant: 'default', emoji: '⭐' },
+                        supporting: { label: '配角', badgeVariant: 'secondary', emoji: '👤' },
+                        antagonist: { label: '反派', badgeVariant: 'destructive', emoji: '💀' },
+                        minor: { label: 'NPC', badgeVariant: 'secondary', emoji: '🌙' },
+                      }
+                      const rc = roleConfig[char.role] || roleConfig.supporting
+
+                      const standardAttrLabels: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; hint: string }> = {
+                        personality: { label: '性格', icon: Heart, hint: '关键词描述' },
+                        speechPattern: { label: '说话方式', icon: MessageCircle, hint: '章节对话关键约束' },
+                        appearance: { label: '外貌', icon: Eye, hint: '辨识特征' },
+                        background: { label: '背景', icon: BookOpen, hint: '影响剧情的关键经历' },
+                        goal: { label: '目标', icon: Target, hint: '当前阶段核心目标' },
+                        weakness: { label: '弱点', icon: ShieldAlert, hint: '决策影响因素' },
+                        relationships: { label: '关系', icon: Link2, hint: '角色间关系网络' },
+                      }
+
+                      const standardAttrs = Object.entries(char.attributes || {}).filter(
+                        ([key]) => key in standardAttrLabels
+                      )
+                      const customAttrs = Object.entries(char.attributes || {}).filter(
+                        ([key]) => !(key in standardAttrLabels)
+                      )
+
+                      return (
+                        <div key={i} className="mb-3 last:mb-0 pb-4 border-b last:border-b-0 last:pb-0">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            <span className="font-bold text-base">{char.name}</span>
+                            {char.aliases && char.aliases.length > 0 && (
+                              <span className="text-xs text-muted-foreground">({char.aliases.join(' / ')})</span>
+                            )}
+                            <Badge variant={rc.badgeVariant} className="text-[10px]">
+                              {rc.emoji} {rc.label}
                             </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground line-clamp-2">{char.description}</p>
-                        {char.attributes && Object.keys(char.attributes).length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {Object.entries(char.attributes).slice(0, 4).map(([key, val]) => (
-                              <Badge key={key} variant="outline" className="text-[10px]">
-                                {key}: {String(val)}
-                              </Badge>
-                            ))}
-                            {Object.keys(char.attributes).length > 4 && (
+                            {char.powerLevel && (
                               <Badge variant="outline" className="text-[10px]">
-                                +{Object.keys(char.attributes).length - 4}
+                                <Sword className="h-3 w-3 mr-0.5" />{char.powerLevel}
                               </Badge>
                             )}
                           </div>
-                        )}
-                      </div>
-                    ))}
+
+                          {char.description && (
+                            <p className="text-xs text-muted-foreground line-clamp-2 mb-2 italic">{char.description}</p>
+                          )}
+
+                          {standardAttrs.length > 0 && (
+                            <div className="space-y-1.5 mt-2">
+                              {standardAttrs.map(([key, val]) => {
+                                const attr = standardAttrLabels[key]
+                                if (!attr) return null
+                                const AttrIcon = attr.icon
+                                const isSpeechPattern = key === 'speechPattern'
+                                return (
+                                  <div key={key} className={`rounded-md p-2 border ${isSpeechPattern ? 'border-amber-300/60 bg-amber-50/40 dark:bg-amber-950/20' : 'border-border/50 bg-muted/20'}`}>
+                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                      <AttrIcon className={`h-3 w-3 ${isSpeechPattern ? 'text-amber-600' : 'text-muted-foreground'}`} />
+                                      <span className="text-[11px] font-medium text-muted-foreground">{attr.label}</span>
+                                      {isSpeechPattern && (
+                                        <Badge variant="outline" className="text-[9px] text-amber-600 border-amber-300 ml-auto">
+                                          关键字段
+                                        </Badge>
+                                      )}
+                                      <span className="text-[9px] text-muted-foreground ml-auto">{attr.hint}</span>
+                                    </div>
+                                    <p className={`text-xs whitespace-pre-wrap line-clamp-3 ${isSpeechPattern ? 'text-amber-800/80 dark:text-amber-200/80 font-medium' : ''}`}>
+                                      {String(val)}
+                                    </p>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+
+                          {customAttrs.length > 0 && (
+                            <div className="mt-2">
+                              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">其他属性</span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {customAttrs.slice(0, 6).map(([key, val]) => (
+                                  <Badge key={key} variant="outline" className="text-[10px]" title={`${key}: ${String(val)}`}>
+                                    {key}
+                                  </Badge>
+                                ))}
+                                {customAttrs.length > 6 && (
+                                  <Badge variant="outline" className="text-[10px]">+{customAttrs.length - 6}</Badge>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </PreviewCard>
                 )}
 
                 {extractedData.volumes && extractedData.volumes.length > 0 && (
                   <PreviewCard title="卷纲规划" icon={Layers}>
-                    {extractedData.volumes.map((vol, i) => (
-                      <div key={i} className="mb-3 last:mb-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <Badge variant="outline" className="text-[10px]">第{i + 1}卷</Badge>
-                          <span className="font-medium text-sm">{vol.title}</span>
-                          {(vol.targetWordCount || vol.targetChapterCount) && (
-                            <span className="text-[10px] text-muted-foreground">
-                              {vol.targetWordCount ? `${vol.targetWordCount}字` : ''}
-                              {vol.targetWordCount && vol.targetChapterCount ? ' / ' : ''}
-                              {vol.targetChapterCount ? `${vol.targetChapterCount}章` : ''}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground line-clamp-2 mb-1">{vol.summary || '暂无概述'}</p>
-                        {vol.blueprint && (
-                          <p className="text-xs text-muted-foreground/70 whitespace-pre-wrap line-clamp-2 mb-1 italic">
-                            📋 {vol.blueprint}
-                          </p>
-                        )}
-                        {vol.eventLine && vol.eventLine.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {vol.eventLine.slice(0, 3).map((event, idx) => (
-                              <Badge key={idx} variant="secondary" className="text-[10px]">📍 {event}</Badge>
-                            ))}
-                            {vol.eventLine.length > 3 && (
-                              <Badge variant="secondary" className="text-[10px]">+{vol.eventLine.length - 3}</Badge>
+                    {extractedData.volumes.map((vol, i) => {
+                      const parseEventLine = (line: string) => {
+                        const match = line.match(/第(\d+)章[：:]\s*(\[.*?\])?\s*(.+)/)
+                        if (match) {
+                          return { chapterNum: parseInt(match[1], 10), sceneTag: match[2]?.replace(/^\[|\]$/g, '') || '', event: match[3].trim() }
+                        }
+                        return null
+                      }
+
+                      const parseBlueprintTags = (bp: string) => {
+                        const tags: Array<{ tag: string; content: string }> = []
+                        const regex = /【([^】]+)】([\s\S]*?)(?=【|$)/g
+                        let m
+                        while ((m = regex.exec(bp)) !== null) {
+                          tags.push({ tag: m[1], content: m[2].trim() })
+                        }
+                        return tags
+                      }
+
+                      const parsedEvents = (vol.eventLine || []).map(parseEventLine).filter(Boolean) as Array<{ chapterNum: number; sceneTag: string; event: string }>
+                      const blueprintTags = vol.blueprint ? parseBlueprintTags(vol.blueprint) : []
+
+                      return (
+                        <div key={i} className="mb-4 last:mb-0 rounded-lg border border-border overflow-hidden">
+                          <div className="bg-muted/40 px-3 py-2 flex items-center gap-2 flex-wrap">
+                            <Badge variant="default" className="text-[10px]">第{i + 1}卷</Badge>
+                            <span className="font-bold text-sm">{vol.title}</span>
+                            {(vol.targetWordCount || vol.targetChapterCount) && (
+                              <span className="text-[10px] text-muted-foreground ml-auto">
+                                {vol.targetWordCount ? `${Math.round(vol.targetWordCount / 10000)}万字` : ''}
+                                {vol.targetWordCount && vol.targetChapterCount ? ' · ' : ''}
+                                {vol.targetChapterCount ? `${vol.targetChapterCount}章` : ''}
+                              </span>
                             )}
                           </div>
-                        )}
-                        {vol.notes && vol.notes.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {vol.notes.slice(0, 2).map((note, idx) => (
-                              <Badge key={idx} variant="outline" className="text-[10px]">📌 {note}</Badge>
-                            ))}
+
+                          <div className="p-3 space-y-2.5">
+                            {vol.summary && (
+                              <div className="text-xs text-muted-foreground leading-relaxed">
+                                <span className="font-medium text-foreground">概述：</span>{vol.summary}
+                              </div>
+                            )}
+
+                            {blueprintTags.length > 0 && (
+                              <div className="space-y-1.5">
+                                <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
+                                  <BookOpen className="h-3 w-3" />蓝图结构
+                                </span>
+                                <div className="grid grid-cols-1 gap-1">
+                                  {blueprintTags.map((tag, ti) => (
+                                    <div key={ti} className="text-[11px] border-l-2 border-primary/30 pl-2 py-0.5">
+                                      <span className="font-medium text-primary/80">【{tag.tag}】</span>
+                                      <span className="text-muted-foreground line-clamp-1 ml-1">{tag.content}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {parsedEvents.length > 0 && (
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
+                                    <MapPin className="h-3 w-3" />事件线（{parsedEvents.length}章）
+                                  </span>
+                                  {vol.targetChapterCount && parsedEvents.length !== vol.targetChapterCount && (
+                                    <span className="text-[9px] text-amber-500">
+                                      ⚠ 需{vol.targetChapterCount}章，当前{parsedEvents.length}条
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="max-h-48 overflow-y-auto pr-1 space-y-0.5">
+                                  {parsedEvents.map((ev, ei) => (
+                                    <div key={ei} className="flex items-start gap-2 text-[11px] py-1 px-1.5 rounded hover:bg-muted/40 transition-colors">
+                                      <Badge variant="secondary" className="text-[9px] shrink-0 mt-0.5 min-w-[48px] justify-center">
+                                        第{ev.chapterNum}章
+                                      </Badge>
+                                      {ev.sceneTag && (
+                                        <Badge variant="outline" className="text-[9px] shrink-0 mt-0.5">
+                                          {ev.sceneTag}
+                                        </Badge>
+                                      )}
+                                      <span className="text-muted-foreground line-clamp-1">{ev.event}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {(vol.foreshadowingSetup && vol.foreshadowingSetup.length > 0) && (
+                              <div className="space-y-1">
+                                <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
+                                  <Lightbulb className="h-3 w-3" />埋入伏笔（{vol.foreshadowingSetup.length}条）
+                                </span>
+                                <div className="flex flex-wrap gap-1">
+                                  {vol.foreshadowingSetup.map((fs, fi) => {
+                                    const name = fs.match(/^(.+?)（/)?.[1] || fs
+                                    return (
+                                      <Badge key={fi} variant="outline" className="text-[10px] border-emerald-300/60 text-emerald-700 dark:text-emerald-400" title={fs}>
+                                        📥 {name.trim()}
+                                      </Badge>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {(vol.foreshadowingResolve && vol.foreshadowingResolve.length > 0) && (
+                              <div className="space-y-1">
+                                <span className="text-[11px] font-semibold text-orange-600 flex items-center gap-1">
+                                  <Zap className="h-3 w-3" />回收伏笔（{vol.foreshadowingResolve.length}条）
+                                </span>
+                                <div className="flex flex-wrap gap-1">
+                                  {vol.foreshadowingResolve.map((fr, fri) => {
+                                    const name = fr.match(/^(.+?)（/)?.[1] || fr
+                                    return (
+                                      <Badge key={fri} variant="outline" className="text-[10px] border-orange-300/60 text-orange-700 dark:text-orange-400" title={fr}>
+                                        📤 {name.trim()}
+                                      </Badge>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {vol.notes && vol.notes.length > 0 && (
+                              <div className="space-y-1">
+                                <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
+                                  <FileText className="h-3 w-3" />创作备注（{vol.notes.length}条）
+                                </span>
+                                <div className="flex flex-wrap gap-1">
+                                  {vol.notes.map((note, ni) => (
+                                    <Badge key={ni} variant="secondary" className="text-[10px]" title={note}>
+                                      📝 {note}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    ))}
+                        </div>
+                      )
+                    })}
                   </PreviewCard>
                 )}
 

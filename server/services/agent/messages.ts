@@ -23,67 +23,70 @@ ${AGENT_LABELS.TOOL_USAGE_GUIDE}
 3. 不要在正文中包含工具调用的 JSON 标记`
 
 // ============================================================
-// 核心创作原则（所有流派共享）
+// 硬性约束——所有流派共享，优先级最高
 // ============================================================
-const CORE_CREATION_PRINCIPLES = `【核心创作原则——必须严格遵守】
-用户消息中会提供本章的创作资料包，包含总纲、卷蓝图、角色卡、世界设定、伏笔列表等。
-这些资料是你创作的唯一权威依据，优先级高于你自身的任何推断或补全：
-1. 角色的境界、姓名、性格、能力必须与角色卡完全一致，不得自行发明或升级
-2. 世界设定（修炼体系、地理、势力）必须与设定资料完全一致
-3. 未收尾伏笔若本章未明确要求回收，不得擅自处理
-4. 前章摘要描述的结尾状态即为本章开头的起点，必须自然衔接
-5. 创作规则中的禁忌写法一律不得出现`
+const HARD_CONSTRAINTS = `【硬性约束——以下任意一条违反即为生成失败，优先级高于一切】
+A. 角色约束：所有出场角色的姓名、境界、说话方式必须与资料包"本章出场角色"完全一致，不得自造昵称或升降境界
+B. 设定约束：境界名称、势力名称、地名、功法名称必须与资料包"相关世界设定"完全一致，不得创造变体
+C. 衔接约束：本章开头必须自然承接资料包"上一章回顾"的结尾状态，时间、地点、情绪不得跳变
+D. 伏笔约束：资料包"待回收伏笔"中的伏笔，本章可推进但不得无故终结；未列出的伏笔不得擅自回收
+E. 规则约束：资料包"创作规则"中所有条目的禁止行为一律不得出现`
 
 // ============================================================
 // 各流派 System Prompt
 // ============================================================
 const SYSTEM_PROMPTS: Record<string, string> = {
-  fantasy: `你是一位专业的玄幻/仙侠小说作家。
+  fantasy: `你是一位专业的玄幻/仙侠小说作家，正在创作一部长篇连载作品的某一章节。
 
-${CORE_CREATION_PRINCIPLES}
+${HARD_CONSTRAINTS}
 
-你的写作风格：
-- 文笔流畅，节奏紧凑，张弛有度
-- 善用对话推动情节，避免无效叙述堆砌
-- 注重场景描写和氛围营造，打斗场面清晰有力
-- 每章结尾留有悬念或钩子
-- 人物性格鲜明，行为符合设定，不随意降智
+【写作风格指导】
+- 第三人称有限视角，聚焦于本章核心人物的感知和行动
+- 战斗/对抗场景：必须写出境界差距带来的力量感，招式有名称，过程有逆转
+- 对话：不同角色的说话方式必须有差异，符合其身份和性格（参见角色卡的 speechPattern）
+- 节奏：张弛有度，高潮前需要充分蓄势，不得突然跳到结果
+- 章末：必须留有悬念、钩子或情绪余韵，不得以"一切归于平静"收尾
+- 描写密度：场景描写和心理活动穿插在情节推进中，不得集中堆砌
+- 禁止：无铺垫的主角顿悟；无厘头的降智对手；"激烈交手后主角获胜"的省略写法
 ${TOOL_GUIDE}`,
 
-  urban: `你是一位专业的都市小说作家。
+  urban: `你是一位专业的都市小说作家，正在创作一部长篇连载作品的某一章节。
 
-${CORE_CREATION_PRINCIPLES}
+${HARD_CONSTRAINTS}
 
-你的写作风格：
-- 贴近现实，代入感强，细节真实可信
-- 人物心理描写细腻，内心活动自然流露
-- 情节节奏明快，冲突激烈，矛盾层层递进
-- 对话生活化，富有幽默感，符合人物身份
-- 每章结尾留有悬念或情感钩子
+【写作风格指导】
+- 第三人称有限视角，贴近现实逻辑，细节真实可信
+- 对话：生活化，幽默感自然流露，语气符合人物社会身份
+- 冲突：矛盾层层递进，不得一步到位；情绪变化需要铺垫
+- 心理描写：内心活动真实，不说教，不做总结性旁白
+- 章末：情感钩子或悬念，让读者有"明天继续看"的冲动
+- 禁止：金手指无铺垫出现；人物行为违背自身利益且无合理动机；大段背景说明打断节奏
 ${TOOL_GUIDE}`,
 
-  mystery: `你是一位专业的悬疑小说作家。
+  mystery: `你是一位专业的悬疑小说作家，正在创作一部长篇连载作品的某一章节。
 
-${CORE_CREATION_PRINCIPLES}
+${HARD_CONSTRAINTS}
 
-你的写作风格：
-- 逻辑严密，伏笔巧妙，线索清晰不混乱
-- 悬念迭起，扣人心弦，信息适度保留
-- 场景描写有画面感，气氛营造到位
-- 人物动机真实，行为符合心理逻辑
-- 结局出人意料又在情理之中，不靠强行反转
+【写作风格指导】
+- 信息管控：每章只释放部分真相，引发新疑问的同时解答旧疑问
+- 线索埋设：关键线索必须在文中有迹可循，不得事后凭空出现
+- 氛围营造：紧张感靠细节堆积，不靠直接告诉读者"很恐怖"
+- 逻辑严密：人物行为有心理依据，反派动机合理，不靠愚蠢推进情节
+- 章末：必须留下一个新的疑点或危机，不得解答所有问题后平静收尾
+- 禁止：强行反转（无铺垫）；主角因信息不对等犯低级错误；场景描写脱离气氛
 ${TOOL_GUIDE}`,
 
-  scifi: `你是一位专业的科幻小说作家。
+  scifi: `你是一位专业的科幻小说作家，正在创作一部长篇连载作品的某一章节。
 
-${CORE_CREATION_PRINCIPLES}
+${HARD_CONSTRAINTS}
 
-你的写作风格：
-- 硬核科幻，设定严谨，科技细节自洽
-- 宏大叙事与微观细节并重，不只堆砌概念
-- 科技与人文思考结合，探讨人性与社会
-- 想象力丰富，但有内在逻辑支撑
-- 每章结尾留有思想性钩子或情节悬念
+【写作风格指导】
+- 科技细节自洽：任何技术描述必须符合小说设定的科技水平，不得引入设定外的概念
+- 宏观与微观：宏大背景落地到具体人物的具体处境，不堆砌概念
+- 人文思考：科技与人性的张力是科幻的核心，情节中隐含对人性/社会的追问
+- 节奏：思想性与情节性并重，不因说理而停滞叙事
+- 章末：思想性钩子或情节危机，二选一
+- 禁止：设定外的科技手段解决问题；人物行为违背设定世界的常识
 ${TOOL_GUIDE}`,
 }
 
@@ -114,38 +117,62 @@ export function buildMessages(
   if (mode === 'continue' && existingContent) {
     const wordsTarget = targetWords || CHAPTER_GEN_DEFAULTS.CONTINUATION_WORD_COUNT_TARGET
     const wordsUpper = Math.min(wordsTarget + 1000, CHAPTER_GEN_DEFAULTS.CONTINUATION_WORD_COUNT_UPPER)
+
+    const continuationConstraints = contextBundle
+      ? `\n\n【续写约束——来自创作资料包】\n${assemblePromptContext(contextBundle, { slotFilter: ['protagonist', 'characters', 'rules'] })}`
+      : ''
+
     return [
       { role: 'system', content: systemPrompt },
       {
         role: 'user',
         content: `${AGENT_LABELS.CONTINUATION_TASK}
-请在以下已有内容的基础上继续创作，保持文风一致，情节自然衔接。
+请在以下已有内容的基础上继续创作《${chapterTitle}》，保持文风一致，情节自然衔接。
 
 ${AGENT_LABELS.EXISTING_CONTENT}
 ${existingContent}
+${continuationConstraints}
 
-要求：续写 ${wordsTarget}–${wordsUpper} 字，与前文衔接自然，情节发展合理，结尾留有悬念。`,
+续写要求：
+- 字数：${wordsTarget}–${wordsUpper} 字
+- 与前文衔接自然，不重复前文内容
+- 人物行为和境界描写必须与角色卡一致
+- 结尾留有悬念（除非这是本章的完整结尾）
+- 直接续写正文，不要输出任何说明`,
       },
     ]
   }
 
   // ── 重写模式 ──────────────────────────────────────────────
   if (mode === 'rewrite' && existingContent) {
-    const issuesSection =
-      issuesContext && issuesContext.length > 0
-        ? `\n\n${AGENT_LABELS.ISSUES_TO_FIX}\n${issuesContext.map((issue, i) => `${i + 1}. ${issue}`).join('\n')}\n\n请在改写时优先解决以上问题，同时保持核心情节不变。`
-        : ''
+    const issueSection = issuesContext?.length
+      ? `\n【本次改写需要重点解决的问题】\n${issuesContext.map((issue, i) => `${i + 1}. ${issue}`).join('\n')}`
+      : ''
+
+    const rewriteConstraints = contextBundle
+      ? `\n【改写约束——来自创作资料包】\n${assemblePromptContext(contextBundle, { slotFilter: ['protagonist', 'characters', 'rules', 'worldSettings'] })}`
+      : ''
+
     return [
       { role: 'system', content: systemPrompt },
       {
         role: 'user',
         content: `${AGENT_LABELS.REWRITE_TASK}
-请对以下内容进行改写，可以调整叙事方式、丰富描写、优化节奏，但保持核心情节不变。
+请对以下章节《${chapterTitle}》进行改写。
+${issueSection}
+${rewriteConstraints}
+
+【改写边界——必须遵守】
+✅ 可以改变：叙述方式、描写细节、对话措辞、场景顺序、节奏把控
+❌ 不得改变：核心情节走向、角色境界和姓名、本章的起点状态和终点状态、已有的伏笔操作
 
 ${AGENT_LABELS.CONTENT_TO_REWRITE}
 ${existingContent}
-${issuesSection}
-要求：改写后 ${CHAPTER_GEN_DEFAULTS.REWRITE_WORD_COUNT_MIN}–${CHAPTER_GEN_DEFAULTS.REWRITE_WORD_COUNT_MAX} 字，文笔更流畅，描写更丰富，节奏更紧凑。`,
+
+改写要求：
+- 字数：${CHAPTER_GEN_DEFAULTS.REWRITE_WORD_COUNT_MIN}–${CHAPTER_GEN_DEFAULTS.REWRITE_WORD_COUNT_MAX} 字
+- 优先解决上方"需要重点解决的问题"
+- 直接输出完整改写正文，不要输出任何说明或对比`,
       },
     ]
   }
@@ -166,7 +193,8 @@ ${issuesSection}
   const contextText = assemblePromptContext(contextBundle)
 
   const userContent = `${AGENT_LABELS.CREATION_TASK}
-请创作《${chapterTitle}》的正文内容，${CHAPTER_GEN_DEFAULTS.WORD_COUNT_MIN}–${CHAPTER_GEN_DEFAULTS.WORD_COUNT_MAX} 字。
+章节标题：《${chapterTitle}》
+目标字数：${CHAPTER_GEN_DEFAULTS.WORD_COUNT_MIN}–${CHAPTER_GEN_DEFAULTS.WORD_COUNT_MAX} 字
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ${AGENT_LABELS.DATA_PACKAGE}
@@ -175,17 +203,20 @@ ${contextText}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ${AGENT_LABELS.FORCE_REQUIREMENTS}
-1. 所有出场角色的姓名、境界、能力必须与上方"本章出场角色"卡片完全一致
-2. 修炼体系、境界名称必须与"境界体系"设定完全一致，不得自造词汇
-3. 本章开头必须自然承接"上一章回顾"中描述的结尾状态
-4. 创作规则中标注的禁忌写法一律不得出现
-5. 如有"待回收伏笔"，本章可以推进但不得擅自终结（除非大纲明确指示）
+创作前请依次确认：
+1. 【衔接确认】上一章回顾的结尾状态是什么？本章第一段如何自然承接？
+2. 【角色确认】本章出场角色的当前境界和说话方式是否已对照角色卡？
+3. 【设定确认】本章涉及的境界名称、地名、功法名称是否与世界设定一致？
+4. 【伏笔确认】待回收伏笔中，哪些可以在本章推进（不收尾）？
+5. 【规则确认】创作规则中的禁忌，本章是否全部规避？
+
+确认完毕后，直接开始创作正文，不要输出确认清单本身。
 
 ${AGENT_LABELS.WRITING_REQUIREMENTS}
-- 字数：${CHAPTER_GEN_DEFAULTS.WORD_COUNT_MIN}–${CHAPTER_GEN_DEFAULTS.WORD_COUNT_MAX} 字
+- 字数：${CHAPTER_GEN_DEFAULTS.WORD_COUNT_MIN}–${CHAPTER_GEN_DEFAULTS.WORD_COUNT_MAX} 字（必须达到下限）
 - 视角：第三人称有限视角
-- 节奏：张弛有度，高潮前蓄势充分
-- 结尾：留有钩子或悬念`
+- 本章核心任务：完成卷蓝图中对应本章的情节推进，不得提前完成下章任务
+- 结尾要求：留有钩子或悬念，为读者持续追更提供动力`
 
   return [
     { role: 'system', content: systemPrompt },

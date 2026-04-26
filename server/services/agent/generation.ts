@@ -397,25 +397,43 @@ export async function generateNextChapter(
       ? `- 从卷蓝图/事件线的起始处开始，做好开篇铺垫\n- 开篇要引人入胜，建立故事基调和主要人物`
       : `- 章节要与已有章节连贯，承接上一章的结尾状态`
 
-    const userPrompt = `请为小说的某一卷生成${chapterOrdinal}章的标题和摘要。
+    const nextChapterIndex = recentChapters.length
+    const eventLineItems: string[] = (() => {
+      try { return volume.eventLine ? JSON.parse(volume.eventLine) : [] } catch { return [] }
+    })()
+    const nextChapterEvent = eventLineItems[nextChapterIndex] || ''
+    const nextChapterEventSection = nextChapterEvent
+      ? `\n【下一章对应的事件线任务】\n${nextChapterEvent}`
+      : (volume.eventLine ? `\n【卷事件线（参考）】\n${eventLineItems.slice(nextChapterIndex, nextChapterIndex + 3).join('\n')}` : '')
+
+    const userPrompt = `请为小说卷《${volume.title}》生成${chapterOrdinal}章的标题和摘要。
 
 【卷信息】
-- 标题：《${volume.title}》
-${volume.blueprint ? `- 卷蓝图：\n${volume.blueprint}` : ''}
-${volume.eventLine ? `- 事件线：\n${volume.eventLine}` : ''}
-${volume.summary ? `- 卷摘要：${volume.summary}` : ''}
+- 卷标题：《${volume.title}》
+${volume.blueprint ? `- 卷蓝图摘要：${volume.summary || volume.blueprint.slice(0, 300)}` : ''}
+${nextChapterEventSection}
 ${recentChaptersSection}
 
 【生成要求】
-- 生成${chapterOrdinal}章的章节标题（要有吸引力，符合小说风格）
-- 生成章节摘要（150–200字，概括本章核心情节）
-${continuationRequirement}
-- 节奏：适当铺垫→情节推进→结尾悬念
+标题要求：
+- 2-10个字，有吸引力，符合玄幻/仙侠风格
+- 不得出现"的""了""和"等虚词结尾
+- 不得直白剧透（如"主角突破金丹"），要有悬念感
+- 示例风格："剑意锋芒""天地为证""旧人重逢""局中局"
 
-请以 JSON 格式输出，不要输出其他内容：
+摘要要求（重要，这是AI生成正文时的核心任务描述）：
+- 字数：200-300字
+- 必须包含以下四个部分：
+  【开篇状态】本章从什么场景/状态开始（承接上章结尾）
+  【核心事件】本章发生的1-2个主要事件（包含起因和走向）
+  【角色动态】主要角色的行为、情绪或境界变化
+  【章末状态】本章以什么状态/悬念结束
+${continuationRequirement}
+
+请以 JSON 格式输出：
 {
-  "chapterTitle": "章节标题",
-  "summary": "章节摘要（150–200字）"
+  "chapterTitle": "章节标题（2-10字）",
+  "summary": "章节摘要（200-300字，包含上方四个部分）"
 }`
 
     const overrideConfig = {
