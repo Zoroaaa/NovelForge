@@ -8,7 +8,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { drizzle } from 'drizzle-orm/d1'
 import { foreshadowing, foreshadowingProgress, chapters } from '../db/schema'
-import { eq, and, desc, sql, count, isNull, inArray } from 'drizzle-orm'
+import { eq, and, desc, sql, count, isNull, inArray, asc } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { enqueue } from '../lib/queue'
 import { deindexContent } from '../services/embedding'
@@ -201,10 +201,6 @@ router.get('/:id/progress', async (c) => {
     return c.json({ error: '获取推进记录失败', details: (error as Error).message }, 500)
   }
 })
-
-function asc(col: any) {
-  return { asc: col } as any
-}
 
 /**
  * GET /:novelId/stale - 获取可能遗忘的伏笔（N章无推进）

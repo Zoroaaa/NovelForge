@@ -1583,7 +1583,7 @@ async function buildOutlineContentWithAI(
   env: Env,
   data: WorkshopExtractedData
 ): Promise<string> {
-  const { generate } = await import('./llm')
+  const { streamGenerate } = await import('./llm')
 
   let llmConfig: any
   try {
@@ -1623,27 +1623,43 @@ async function buildOutlineContentWithAI(
   }
   const outlineRange = calcOutlineRange(data.targetWordCount)
 
-  try {
-    const result = await generate(llmConfig, [
-      {
-        role: 'system',
-        content: '你是专业的小说策划编辑，擅长将创作素材整合为简洁有力的总纲文档。只输出总纲正文，不加JSON或代码块标记。',
-      },
-      {
-        role: 'user',
-        content: `基于以下创作数据，生成一份${outlineRange}字的小说总纲。
+  return new Promise(async (resolve) => {
+    let fullText = ''
+    try {
+      await streamGenerate(
+        llmConfig,
+        [
+          {
+            role: 'system',
+            content: '你是专业的小说策划编辑，擅长将创作素材整合为简洁有力的总纲文档。只输出总纲正文，不加JSON或代码块标记。',
+          },
+          {
+            role: 'user',
+            content: `基于以下创作数据，生成一份${outlineRange}字的小说总纲。
 总纲需要体现：1）故事的核心吸引力；2）主角的成长弧线；3）各卷之间的承接逻辑；4）创作边界约束。
 用叙事性文字组织，不要机械罗列。
 
 数据：\n${JSON.stringify(briefData, null, 2)}`,
-      },
-    ])
-
-    return result.text || buildOutlineContent(data)
-  } catch (err) {
-    console.warn('[workshop] AI生成总纲失败，使用 fallback:', err)
-    return buildOutlineContent(data)
-  }
+          },
+        ],
+        {
+          onChunk: (text) => {
+            fullText += text
+          },
+          onDone: () => {
+            resolve(fullText || buildOutlineContent(data))
+          },
+          onError: (err) => {
+            console.warn('[workshop] AI生成总纲失败，使用 fallback:', err)
+            resolve(buildOutlineContent(data))
+          },
+        }
+      )
+    } catch (err) {
+      console.warn('[workshop] AI生成总纲失败，使用 fallback:', err)
+      resolve(buildOutlineContent(data))
+    }
+  })
 }
 
 function buildOutlineContent(data: WorkshopExtractedData): string {

@@ -230,6 +230,7 @@ export function ForeshadowingPanel({ novelId, onChapterSelect }: ForeshadowingPa
             <DialogContent className="max-w-lg">
               <DialogHeader>
                 <DialogTitle>{editingId ? '编辑伏笔' : '新增伏笔'}</DialogTitle>
+                <DialogDescription>填写伏笔的基本信息，包括标题、重要性和埋设章节</DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
@@ -396,6 +397,7 @@ export function ForeshadowingPanel({ novelId, onChapterSelect }: ForeshadowingPa
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Stethoscope className="h-5 w-5" />伏笔健康报告</DialogTitle>
+            <DialogDescription>查看伏笔的推进状态，包括沉寂伏笔、矛盾预警和收尾建议</DialogDescription>
           </DialogHeader>
           {healthReport && (
             <div className="space-y-4">
