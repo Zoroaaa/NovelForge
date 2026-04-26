@@ -1523,29 +1523,29 @@ function extractStructuredData(
       // 根据 stage 合并数据
       switch (stage) {
         case 'concept':
-          if (parsed.title) newData.title = parsed.title
-          if (parsed.genre) newData.genre = parsed.genre
-          if (parsed.description) newData.description = parsed.description
-          if (parsed.coreAppeal) newData.coreAppeal = parsed.coreAppeal
-          if (parsed.targetWordCount) newData.targetWordCount = parsed.targetWordCount
-          if (parsed.targetChapters) newData.targetChapters = parsed.targetChapters
-          if (parsed.writingRules) newData.writingRules = parsed.writingRules
+          if (parsed.title) newData.title = parsed.title as string
+          if (parsed.genre) newData.genre = parsed.genre as string
+          if (parsed.description) newData.description = parsed.description as string
+          if (parsed.coreAppeal) newData.coreAppeal = parsed.coreAppeal as string[]
+          if (parsed.targetWordCount) newData.targetWordCount = parsed.targetWordCount as string
+          if (parsed.targetChapters) newData.targetChapters = parsed.targetChapters as string
+          if (parsed.writingRules) newData.writingRules = parsed.writingRules as Array<{ category: string; title: string; content: string; priority?: number }>
           break
 
         case 'worldbuild':
-          if (parsed.worldSettings) newData.worldSettings = parsed.worldSettings
+          if (parsed.worldSettings) newData.worldSettings = parsed.worldSettings as Array<{ type: string; title: string; content: string; importance?: string }>
           break
 
         case 'character_design':
-          if (parsed.characters) newData.characters = parsed.characters
+          if (parsed.characters) newData.characters = parsed.characters as Array<{ name: string; role: string; description: string; aliases?: string[]; powerLevel?: string; attributes?: Record<string, unknown>; relationships?: string[] }>
           break
 
         case 'volume_outline':
-          if (parsed.volumes) newData.volumes = parsed.volumes
+          if (parsed.volumes) newData.volumes = parsed.volumes as Array<{ title: string; outline: string; blueprint: string; chapterCount: number; summary?: string; eventLine?: string[]; notes?: string[]; keyEvents?: string[]; foreshadowingSetup?: string[]; foreshadowingResolve?: string[]; targetWordCount?: number | null; targetChapterCount?: number | null }>
           break
 
         case 'chapter_outline':
-          if (parsed.chapters) newData.chapters = parsed.chapters
+          if (parsed.chapters) newData.chapters = parsed.chapters as Array<{ title: string; outline: string; summary?: string; characters?: string[]; foreshadowingActions?: Array<{ action: string; target: string; description: string }>; keyScenes?: string[] }>
           break
       }
     } catch (e) {
