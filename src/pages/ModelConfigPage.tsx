@@ -58,6 +58,8 @@ export default function ModelConfigPage() {
   const [modelId, setModelId] = useState('')
   const [apiBase, setApiBase] = useState('')
   const [apiKey, setApiKey] = useState('')
+  const [params, setParams] = useState('')
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null)
 
@@ -126,6 +128,8 @@ export default function ModelConfigPage() {
     setModelId('')
     setApiBase('')
     setApiKey('')
+    setParams('')
+    setShowAdvanced(false)
     setTestResult(null)
   }
 
@@ -136,6 +140,7 @@ export default function ModelConfigPage() {
     setModelId(config.modelId)
     setApiBase(config.apiBase || '')
     setApiKey(config.apiKey || '')
+    setParams(config.params || '')
     setShowForm(true)
   }
 
@@ -150,6 +155,7 @@ export default function ModelConfigPage() {
       scope: 'global' as const,
       apiBase: apiBase || selectedProvider?.apiBase || undefined,
       apiKey: apiKey || undefined,
+      params: params || undefined,
     }
 
     if (editingConfig) {
@@ -381,6 +387,119 @@ export default function ModelConfigPage() {
                       测试连接
                     </Button>
                   </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvanced(!showAdvanced)}
+                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Settings2 className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-90' : ''}`} />
+                    高级参数配置 {showAdvanced ? '（收起）' : ''}
+                  </button>
+
+                  {showAdvanced && (
+                    <div className="mt-4 space-y-4 bg-muted/30 rounded-lg p-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="params" className="flex items-center gap-2">
+                          模型参数 (JSON)
+                          <Badge variant="outline" className="text-xs font-normal">可选</Badge>
+                        </Label>
+                        <Input
+                          id="params"
+                          value={params}
+                          onChange={(e) => setParams(e.target.value)}
+                          placeholder='{"temperature": 0.72, "max_tokens": 10000}'
+                          className="h-10 font-mono text-sm"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          填写 JSON 格式，用于控制 AI 输出的质量和长度
+                        </p>
+                      </div>
+
+                      <details className="space-y-2">
+                        <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                          📋 查看配置示例与参数说明
+                        </summary>
+                        <div className="mt-3 space-y-4 text-xs bg-background rounded-lg p-4 border">
+                          <div>
+                            <p className="font-semibold mb-2">快速复制配置：</p>
+                            <div className="space-y-2">
+                              <div>
+                                <p className="text-muted-foreground mb-1">创作工坊（长对话）：</p>
+                                <code className="block bg-muted px-2 py-1 rounded text-[11px] overflow-x-auto">
+                                  {`{"temperature": 0.72, "max_tokens": 15000, "top_p": 0.9}`}
+                                </code>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground mb-1">章节生成（长内容）：</p>
+                                <code className="block bg-muted px-2 py-1 rounded text-[11px] overflow-x-auto">
+                                  {`{"temperature": 0.72, "max_tokens": 10000, "top_p": 0.9}`}
+                                </code>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground mb-1">智能分析（精准）：</p>
+                                <code className="block bg-muted px-2 py-1 rounded text-[11px] overflow-x-auto">
+                                  {`{"temperature": 0.3, "max_tokens": 4000, "top_p": 0.8}`}
+                                </code>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground mb-1">摘要生成（简洁）：</p>
+                                <code className="block bg-muted px-2 py-1 rounded text-[11px] overflow-x-auto">
+                                  {`{"temperature": 0.5, "max_tokens": 3000, "top_p": 0.85}`}
+                                </code>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="border-t pt-3 space-y-2">
+                            <p className="font-semibold">参数说明：</p>
+                            <div className="grid grid-cols-1 gap-x-4 gap-y-2">
+                              <div>
+                                <span className="font-medium text-blue-600">temperature</span>
+                                <span className="text-muted-foreground"> - 随机性 (0~1)</span>
+                                <div className="text-muted-foreground mt-0.5">
+                                  较低（0.3~0.5）：输出更稳定一致，适合分析/摘要<br />
+                                  较高（0.7~0.9）：输出更有创意，适合创作/对话
+                                </div>
+                              </div>
+                              <div>
+                                <span className="font-medium text-blue-600">max_tokens</span>
+                                <span className="text-muted-foreground"> - 最大生成 tokens 数</span>
+                                <div className="text-muted-foreground mt-0.5">
+                                  控制单次回复最大长度。10000 tokens ≈ 7000-8000 中文字<br />
+                                  章节生成建议 ≥10000，摘要建议 3000-6000
+                                </div>
+                              </div>
+                              <div>
+                                <span className="font-medium text-blue-600">top_p</span>
+                                <span className="text-muted-foreground"> - 核采样 (0~1)</span>
+                                <div className="text-muted-foreground mt-0.5">
+                                  控制候选词范围。较低（0.8）更精准，较高（0.95）更有创意<br />
+                                  通常与 temperature 二选一使用
+                                </div>
+                              </div>
+                              <div>
+                                <span className="font-medium text-blue-600">frequency_penalty</span>
+                                <span className="text-muted-foreground"> - 频率惩罚 (-2~2)</span>
+                                <div className="text-muted-foreground mt-0.5">
+                                  减少重复。小说创作建议 0（需要高频复用角色名/境界词）
+                                </div>
+                              </div>
+                              <div>
+                                <span className="font-medium text-blue-600">presence_penalty</span>
+                                <span className="text-muted-foreground"> - 存在惩罚 (-2~2)</span>
+                                <div className="text-muted-foreground mt-0.5">
+                                  鼓励话题扩展。小说创作建议 0（避免制造变体词）
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </details>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex justify-end gap-3 pt-2">
