@@ -64,6 +64,7 @@ export interface ContextBundle {
     masterOutlineSummary: string
     volumeBlueprint: string
     volumeEventLine: string
+    volumeNotes: string
     prevChapterContent: string
     protagonistStateCards: string[]
     highPriorityRules: string[]
@@ -242,7 +243,7 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
             )}
 
             {/* v3: Core层 - 固定注入 */}
-            {(core.masterOutlineSummary || core.volumeBlueprint || core.volumeEventLine || core.prevChapterContent) && (
+            {(core.masterOutlineSummary || core.volumeBlueprint || core.volumeEventLine || core.volumeNotes || core.prevChapterContent) && (
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                   <FileText className="h-3 w-3" />
@@ -252,6 +253,7 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
                       {(debug.slotBreakdown.masterOutlineSummary || 0) +
                        (debug.slotBreakdown.volumeBlueprint || 0) +
                        (debug.slotBreakdown.volumeEventLine || 0) +
+                       (debug.slotBreakdown.volumeNotes || 0) +
                        (debug.slotBreakdown.prevChapterContent || 0)}t
                     </Badge>
                   )}
@@ -277,6 +279,13 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
                       label="卷事件线"
                       content={core.volumeEventLine}
                       type="event_line"
+                    />
+                  )}
+                  {core.volumeNotes && (
+                    <ContextItem
+                      label="卷备注"
+                      content={core.volumeNotes}
+                      type="volume_notes"
                     />
                   )}
                   {core.prevChapterContent && (
@@ -535,6 +544,7 @@ function ContextItem({
     master_outline: { label: '总纲', color: 'bg-blue-100 text-blue-800' },
     volume_blueprint: { label: '蓝图', color: 'bg-indigo-100 text-indigo-800' },
     event_line: { label: '事件线', color: 'bg-violet-100 text-violet-800' },
+    volume_notes: { label: '备注', color: 'bg-amber-100 text-amber-800' },
     chapter_summary: { label: '摘要', color: 'bg-green-100 text-green-800' },
   }
 

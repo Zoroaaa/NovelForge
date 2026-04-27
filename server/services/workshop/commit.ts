@@ -310,6 +310,12 @@ export async function commitWorkshopSessionCore(
       const notesValue = Array.isArray(vol.notes)
         ? JSON.stringify(vol.notes)
         : null
+      const foreshadowingSetupValue = Array.isArray(vol.foreshadowingSetup)
+        ? JSON.stringify(vol.foreshadowingSetup)
+        : null
+      const foreshadowingResolveValue = Array.isArray(vol.foreshadowingResolve)
+        ? JSON.stringify(vol.foreshadowingResolve)
+        : null
 
       const existing = volumeMap.get(vol.title)
       let volume: any
@@ -321,6 +327,8 @@ export async function commitWorkshopSessionCore(
             blueprint: vol.blueprint || null,
             eventLine: eventLineValue,
             notes: notesValue,
+            foreshadowingSetup: foreshadowingSetupValue,
+            foreshadowingResolve: foreshadowingResolveValue,
             targetWordCount: vol.targetWordCount || null,
             targetChapterCount: vol.targetChapterCount || null,
             sortOrder: createdVolumes.length,
@@ -334,6 +342,8 @@ export async function commitWorkshopSessionCore(
           blueprint: vol.blueprint || null,
           eventLine: eventLineValue,
           notes: notesValue,
+          foreshadowingSetup: foreshadowingSetupValue,
+          foreshadowingResolve: foreshadowingResolveValue,
         }
       } else {
         const [newVolume] = await db.insert(volumes).values({
@@ -343,6 +353,8 @@ export async function commitWorkshopSessionCore(
           blueprint: vol.blueprint || null,
           eventLine: eventLineValue,
           notes: notesValue,
+          foreshadowingSetup: foreshadowingSetupValue,
+          foreshadowingResolve: foreshadowingResolveValue,
           chapterCount: 0,
           targetWordCount: vol.targetWordCount || null,
           targetChapterCount: vol.targetChapterCount || null,
@@ -360,28 +372,6 @@ export async function commitWorkshopSessionCore(
         console.warn('[workshop] 卷摘要生成失败:', err)
       }
 
-      if (notesValue) {
-        try {
-          const notesData = JSON.parse(notesValue)
-          for (const note of notesData) {
-            const noteStr = typeof note === 'string' ? note : note.title || JSON.stringify(note)
-            const noteDesc = typeof note === 'string'
-              ? `来自卷"${vol.title}"的创作注意事项`
-              : note.description || ''
-
-            await db.insert(foreshadowing).values({
-              novelId,
-              title: `[备注] ${noteStr}`,
-              description: noteDesc,
-              status: 'open',
-              importance: 'low',
-            }).run()
-          }
-        } catch (err) {
-          console.warn('[workshop] 备注解析失败:', err)
-        }
-      }
-
       if (vol.foreshadowingSetup?.length) {
         for (const item of vol.foreshadowingSetup) {
           const parenMatch = item.match(/^(.+?)（(.+)）$/)
@@ -390,6 +380,7 @@ export async function commitWorkshopSessionCore(
 
           await db.insert(foreshadowing).values({
             novelId,
+            volumeId: volume.id,
             title,
             description: `【埋入计划】${desc}\n【所属卷】${vol.title}`,
             status: 'open',
@@ -406,6 +397,7 @@ export async function commitWorkshopSessionCore(
 
           await db.insert(foreshadowing).values({
             novelId,
+            volumeId: volume.id,
             title,
             description: `【回收计划】${desc}\n【所属卷】${vol.title}`,
             status: 'open',

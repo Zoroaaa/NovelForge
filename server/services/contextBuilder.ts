@@ -63,6 +63,7 @@ export interface ContextBundle {
     masterOutlineContent: string
     volumeBlueprint: string
     volumeEventLine: string
+    volumeNotes: string
     prevChapterContent: string
     protagonistStateCards: string[]
     allActiveRules: string[]
@@ -275,6 +276,7 @@ export async function buildChapterContext(
     outlineContent,
     volumeInfo.blueprint,
     volumeInfo.eventLine,
+    volumeInfo.notes,
     prevContent,
     ...protagonistStateCards,
     ...allActiveRules,
@@ -297,6 +299,7 @@ export async function buildChapterContext(
     masterOutlineContent: estimateTokens(outlineContent),
     volumeBlueprint: estimateTokens(volumeInfo.blueprint),
     volumeEventLine: estimateTokens(volumeInfo.eventLine),
+    volumeNotes: estimateTokens(volumeInfo.notes),
     prevChapterContent: estimateTokens(prevContent),
     protagonistCards: protagonistStateCards.reduce((s, t) => s + estimateTokens(t), 0),
     activeRules: mutableRules.reduce((s, t) => s + estimateTokens(t), 0),
@@ -341,6 +344,7 @@ export async function buildChapterContext(
       masterOutlineContent: outlineContent,
       volumeBlueprint: volumeInfo.blueprint,
       volumeEventLine: volumeInfo.eventLine,
+      volumeNotes: volumeInfo.notes,
       prevChapterContent: prevContent,
       protagonistStateCards,
       allActiveRules: mutableRules,
@@ -643,17 +647,17 @@ async function fetchMasterOutlineContent(db: AppDb, novelId: string): Promise<st
 }
 
 async function fetchVolumeInfo(db: AppDb, volumeId: string | null): Promise<{
-  blueprint: string; eventLine: string
+  blueprint: string; eventLine: string; notes: string
 }> {
-  if (!volumeId) return { blueprint: '', eventLine: '' }
+  if (!volumeId) return { blueprint: '', eventLine: '', notes: '' }
   try {
     const row = await db
-      .select({ blueprint: volumes.blueprint, eventLine: volumes.eventLine })
+      .select({ blueprint: volumes.blueprint, eventLine: volumes.eventLine, notes: volumes.notes })
       .from(volumes).where(eq(volumes.id, volumeId)).get()
-    return { blueprint: row?.blueprint || '', eventLine: row?.eventLine || '' }
+    return { blueprint: row?.blueprint || '', eventLine: row?.eventLine || '', notes: row?.notes || '' }
   } catch (error) {
     console.error('[contextBuilder] fetchVolumeInfo failed:', error)
-    return { blueprint: '', eventLine: '' }
+    return { blueprint: '', eventLine: '', notes: '' }
   }
 }
 
@@ -996,10 +1000,11 @@ export function assemblePromptContext(bundle: ContextBundle, options?: AssembleO
 
   if (shouldInclude('masterOutline') && bundle.core.masterOutlineContent) sections.push(`## 总纲\n${bundle.core.masterOutlineContent}`)
 
-  if (shouldInclude('volume') && (bundle.core.volumeBlueprint || bundle.core.volumeEventLine)) {
+  if (shouldInclude('volume') && (bundle.core.volumeBlueprint || bundle.core.volumeEventLine || bundle.core.volumeNotes)) {
     const parts = []
     if (bundle.core.volumeBlueprint) parts.push(`【卷蓝图】\n${bundle.core.volumeBlueprint}`)
     if (bundle.core.volumeEventLine) parts.push(`【事件线】\n${bundle.core.volumeEventLine}`)
+    if (bundle.core.volumeNotes) parts.push(`【卷备注】\n${bundle.core.volumeNotes}`)
     sections.push(`## 当前卷规划\n${parts.join('\n\n')}`)
   }
 

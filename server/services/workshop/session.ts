@@ -213,11 +213,15 @@ export async function loadNovelContextData(
       extractedData.volumes = vols.map((v: typeof vols[number]) => {
         let eventLine: string[] = []
         let notes: string[] = []
+        let foreshadowingSetup: string[] = []
+        let foreshadowingResolve: string[] = []
         try {
           if (v.eventLine) eventLine = JSON.parse(v.eventLine)
           if (v.notes) notes = JSON.parse(v.notes)
+          if (v.foreshadowingSetup) foreshadowingSetup = JSON.parse(v.foreshadowingSetup)
+          if (v.foreshadowingResolve) foreshadowingResolve = JSON.parse(v.foreshadowingResolve)
         } catch (e) {
-          console.warn('[workshop] 解析卷eventLine/notes失败:', e)
+          console.warn('[workshop] 解析卷字段失败:', e)
         }
 
         return {
@@ -227,6 +231,8 @@ export async function loadNovelContextData(
           chapterCount: v.chapterCount || 0,
           eventLine,
           notes,
+          foreshadowingSetup,
+          foreshadowingResolve,
           targetWordCount: v.targetWordCount || null,
           targetChapterCount: v.targetChapterCount || null,
         }

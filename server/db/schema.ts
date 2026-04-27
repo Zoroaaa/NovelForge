@@ -124,7 +124,9 @@ export const volumes = sqliteTable('volumes', {
   targetWordCount: integer('target_word_count'),
   targetChapterCount: integer('target_chapter_count'),
   notes: text('notes'),
-  
+  foreshadowingSetup: text('foreshadowing_setup'),
+  foreshadowingResolve: text('foreshadowing_resolve'),
+
   ...timestamps,
   deletedAt: integer('deleted_at'),
 }, (table) => [
@@ -188,6 +190,7 @@ export const characters = sqliteTable('characters', {
 export const foreshadowing = sqliteTable('foreshadowing', {
   id: id(),
   novelId: text('novel_id').notNull(),
+  volumeId: text('volume_id'),
   chapterId: text('chapter_id'),
   title: text('title').notNull(),
   description: text('description'),
