@@ -11,6 +11,7 @@ import { drizzle } from 'drizzle-orm/d1'
 import { novels as t, chapters, characters, novelSettings, masterOutline, volumes, foreshadowing, writingRules } from '../db/schema'
 import { eq, isNull, desc, and, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
+import { deindexContent } from '../services/embedding'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -382,6 +383,18 @@ router.delete('/:id/trash', async (c) => {
           `DELETE FROM generation_logs WHERE chapter_id IN (SELECT id FROM chapters WHERE novel_id = ? AND deleted_at IS NOT NULL)`
         ).bind(novelId).run()
       }
+
+      if (tbl === 'characters' || tbl === 'settings' || tbl === 'foreshadowing') {
+        const sourceType = tbl === 'characters' ? 'character' : tbl === 'settings' ? 'setting' : 'foreshadowing'
+        const query = tbl === 'settings'
+          ? `SELECT id FROM novel_settings WHERE novel_id = ? AND deleted_at IS NOT NULL`
+          : `SELECT id FROM ${tableName} WHERE novel_id = ? AND deleted_at IS NOT NULL`
+        const deletedRows = await c.env.DB.prepare(query).bind(novelId).all()
+        for (const row of deletedRows.results ?? []) {
+          await deindexContent(c.env, sourceType as any, String(row.id), 1).catch((e: any) => console.warn(`[trash] Failed to deindex ${sourceType} ${row.id}:`, e))
+        }
+      }
+
       const result = await c.env.DB.prepare(
         `DELETE FROM ${tableName} WHERE novel_id = ? AND deleted_at IS NOT NULL`
       ).bind(novelId).run()
