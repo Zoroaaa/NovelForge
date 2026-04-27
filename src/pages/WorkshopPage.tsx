@@ -349,7 +349,7 @@ export default function WorkshopPage() {
           )}
         </div>
 
-        <PreviewPanel extractedData={extractedData} />
+        <PreviewPanel extractedData={extractedData} stage={stage} isGenerating={isGenerating} sessionId={sessionId ?? undefined} onReExtractSuccess={setExtractedData} />
       </div>
 
       <CommitDialog

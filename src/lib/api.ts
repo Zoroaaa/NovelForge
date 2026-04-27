@@ -549,6 +549,8 @@ export const api = {
       }),
     commitSession: (sessionId: string) =>
       req<{ ok: boolean; novelId?: string; message?: string }>(`/api/workshop/session/${sessionId}/commit`, { method: 'POST' }),
+    reExtract: (sessionId: string) =>
+      req<{ ok: boolean; extractedData: Record<string, unknown>; message: string }>(`/api/workshop/session/${sessionId}/re-extract`, { method: 'POST' }),
   },
 
   // AI 创作工坊数据导入 API

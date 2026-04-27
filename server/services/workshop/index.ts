@@ -10,7 +10,7 @@ import { resolveConfig } from '../llm'
 import type { WorkshopExtractedData } from './types'
 import { createWorkshopSession, getWorkshopSession, updateSession, loadNovelContextData, WorkshopMessage } from './session'
 import { buildSystemPrompt } from './prompt'
-import { safeParseJSON, extractStructuredData } from './extract'
+import { extractStructuredData } from './extract'
 import { commitWorkshopSession, commitWorkshopSessionCore } from './commit'
 
 const { workshopSessions } = schema
@@ -112,7 +112,20 @@ export async function processWorkshopMessage(
         onChunk(text)
       },
       onDone: async () => {
+        if (activeStage === 'volume_outline' && fullResponse.length > 0) {
+          const hasClosingBlock = fullResponse.trimEnd().endsWith('```')
+          if (!hasClosingBlock) {
+            console.warn('[workshop] ⚠️ 卷纲输出疑似被截断（未找到 JSON 代码块结束标记），回复长度:', fullResponse.length)
+            onChunk('\n\n⚠️ **输出可能被截断**：卷纲内容较长，AI 回复可能因模型输出长度限制（max_tokens）而被截断，导致右侧预览无法显示。建议：1) 在模型配置中增大 max_tokens（推荐 32000 以上）；2) 要求 AI 分卷输出；3) 确认后重新生成。')
+          }
+        }
+
         const newExtractedData = extractStructuredData(fullResponse, activeStage, currentData)
+
+        if (activeStage === 'volume_outline' && !newExtractedData.volumes) {
+          console.warn('[workshop] ⚠️ 卷纲数据提取失败，AI 回复长度:', fullResponse.length, '| 末尾100字符:', fullResponse.slice(-100))
+          onChunk('\n\n⚠️ **卷纲数据提取失败**：AI 输出的 JSON 格式可能不完整或被截断，右侧预览无法显示卷纲。请尝试：1) 在模型配置中增大 max_tokens（推荐 32000 以上）；2) 要求 AI 分卷逐个输出。')
+        }
 
         messages[messages.length - 1] = {
           role: 'assistant',
@@ -125,7 +138,7 @@ export async function processWorkshopMessage(
           extractedData: { ...currentData, ...newExtractedData },
         })
 
-        console.log('[workshop] ✅ Assistant message saved to DB, length:', fullResponse.length)
+        console.log('[workshop] ✅ Assistant message saved to DB, length:', fullResponse.length, '| stage:', activeStage, '| extractedKeys:', Object.keys(newExtractedData))
 
         if (!session.title && messages.length >= 2) {
           console.log('[workshop] 📝 Auto-generating title for session:', sessionId)
@@ -185,6 +198,50 @@ export async function processWorkshopMessage(
     console.error('Workshop message processing failed:', error)
     onError(error as Error)
   }
+}
+
+export async function reExtractSessionData(
+  env: Env,
+  sessionId: string
+): Promise<{ extractedData: WorkshopExtractedData }> {
+  const db = drizzle(env.DB)
+
+  const session = await getWorkshopSession(env, sessionId)
+  if (!session) {
+    throw new Error('Session not found')
+  }
+
+  const messages: WorkshopMessage[] = JSON.parse(session.messages || '[]')
+  const currentData: WorkshopExtractedData = JSON.parse(session.extractedData || '{}')
+  const stage = session.stage
+
+  const assistantMessages = messages.filter(m => m.role === 'assistant' && m.content)
+
+  console.log('[workshop/re-extract] 开始重新提取, sessionId:', sessionId, '| stage:', stage, '| assistant消息数:', assistantMessages.length)
+
+  const mergedData: WorkshopExtractedData = { ...currentData }
+
+  for (const msg of assistantMessages) {
+    try {
+      const extracted = extractStructuredData(msg.content, stage, currentData)
+      for (const [key, value] of Object.entries(extracted)) {
+        if (value !== undefined && value !== null) {
+          (mergedData as Record<string, unknown>)[key] = value
+        }
+      }
+    } catch (e) {
+      console.warn('[workshop/re-extract] 单条消息提取失败, 跳过, 错误:', (e as Error).message)
+    }
+  }
+
+  await updateSession(db, sessionId, {
+    messages,
+    extractedData: mergedData,
+  })
+
+  console.log('[workshop/re-extract] 提取完成, 字段:', Object.keys(mergedData).join(', '))
+
+  return { extractedData: mergedData }
 }
 
 export {

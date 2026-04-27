@@ -11,6 +11,7 @@ import {
   getWorkshopSession,
   processWorkshopMessage,
   commitWorkshopSession,
+  reExtractSessionData,
 } from '../services/workshop'
 
 const router = new Hono<{ Bindings: Env }>()
@@ -128,6 +129,23 @@ router.post('/session/:id/message', async (c) => {
     })
   } catch (error) {
     console.error('Workshop message failed:', error)
+    return c.json({ ok: false, error: (error as Error).message }, 500)
+  }
+})
+
+// POST /api/workshop/session/:id/re-extract - 从已有消息中手动重新提取数据
+router.post('/session/:id/re-extract', async (c) => {
+  try {
+    const sessionId = c.req.param('id')
+    const result = await reExtractSessionData(c.env, sessionId)
+
+    return c.json({
+      ok: true,
+      extractedData: result.extractedData,
+      message: `重新提取完成，提取到字段: ${Object.keys(result.extractedData).join(', ') || '无'}`,
+    })
+  } catch (error) {
+    console.error('Re-extract workshop session failed:', error)
     return c.json({ ok: false, error: (error as Error).message }, 500)
   }
 })

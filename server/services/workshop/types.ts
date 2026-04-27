@@ -30,13 +30,11 @@ export interface WorkshopExtractedData {
   }>
   volumes?: Array<{
     title: string
-    outline: string
-    blueprint: string
-    chapterCount: number
     summary?: string
+    blueprint?: string
+    chapterCount?: number
     eventLine?: string[]
     notes?: string[]
-    keyEvents?: string[]
     foreshadowingSetup?: string[]
     foreshadowingResolve?: string[]
     targetWordCount?: number | null
