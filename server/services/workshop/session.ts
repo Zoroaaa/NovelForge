@@ -146,25 +146,13 @@ export async function loadNovelContextData(
 
     if (settings.length > 0) {
       const worldSettings: Array<{ type: string; title: string; content: string; importance: string }> = []
-      const settingTypes = ['geography', 'power_system', 'faction', 'worldview', 'item_skill', 'misc']
-      for (const type of settingTypes) {
-        const typeSettings = settings.filter((s: typeof settings[number]) => s.type === type)
-        if (typeSettings.length > 0) {
-          const typeLabel = {
-            geography: '地理环境',
-            power_system: '境界体系',
-            faction: '势力组织',
-            worldview: '世界观',
-            item_skill: '宝物功法',
-            misc: '其他设定'
-          }[type] || type
-          worldSettings.push({
-            type,
-            title: typeLabel,
-            content: typeSettings.map((s: typeof settings[number]) => `- ${s.name}: ${s.content}`).join('\n'),
-            importance: typeSettings[0]?.importance || 'normal',
-          })
-        }
+      for (const s of settings) {
+        worldSettings.push({
+          type: s.type,
+          title: s.name,
+          content: s.content,
+          importance: s.importance || 'normal',
+        })
       }
 
       if (worldSettings.length > 0) {
