@@ -5,8 +5,6 @@
  * @created 2026-04-21 - Phase 3 对话式创作引擎
  */
 import { Hono } from 'hono'
-import { zValidator } from '@hono/zod-validator'
-import { z } from 'zod'
 import type { Env } from '../lib/types'
 import {
   createWorkshopSession,
@@ -14,9 +12,6 @@ import {
   processWorkshopMessage,
   commitWorkshopSession,
 } from '../services/workshop'
-import { drizzle } from 'drizzle-orm/d1'
-import { eq, isNull, and } from 'drizzle-orm'
-import { volumes } from '../db/schema'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -52,84 +47,6 @@ router.get('/session/:id', async (c) => {
 
     const messages = JSON.parse(session.messages || '[]')
     const extractedData = JSON.parse(session.extractedData || '{}')
-
-    // 如果 extractedData 里没有 volumes，尝试从 volumes 表补充（仅限 volume_outline / chapter_outline 阶段）
-    if (!extractedData.volumes && session.stage && ['volume_outline', 'chapter_outline'].includes(session.stage)) {
-      if (session.novelId) {
-        try {
-          const db = drizzle(c.env.DB)
-          const vols = await db
-            .select()
-            .from(volumes)
-            .where(and(eq(volumes.novelId, session.novelId), isNull(volumes.deletedAt)))
-            .all()
-          if (vols.length > 0) {
-            extractedData.volumes = vols.map((v) => {
-              let eventLine: string[] = []
-              let notes: string[] = []
-              let foreshadowingSetup: string[] = []
-              let foreshadowingResolve: string[] = []
-              try {
-                if (v.eventLine) eventLine = JSON.parse(v.eventLine)
-                if (v.notes) notes = JSON.parse(v.notes)
-                if ((v as any).foreshadowingSetup) foreshadowingSetup = JSON.parse((v as any).foreshadowingSetup)
-                if ((v as any).foreshadowingResolve) foreshadowingResolve = JSON.parse((v as any).foreshadowingResolve)
-              } catch {}
-              return {
-                title: v.title,
-                summary: v.summary || '',
-                blueprint: v.blueprint || '',
-                eventLine,
-                notes,
-                foreshadowingSetup,
-                foreshadowingResolve,
-                targetWordCount: v.targetWordCount || null,
-                targetChapterCount: v.targetChapterCount || null,
-              }
-            })
-          }
-        } catch (e) {
-          console.warn('[workshop GET] failed to supplement volumes from DB:', e)
-        }
-      }
-
-      // 途径2：从历史消息里扫描（仅限 volume_outline / chapter_outline 阶段）
-      if (!extractedData.volumes && session.stage && ['volume_outline', 'chapter_outline'].includes(session.stage)) {
-        try {
-          const assistantMessages = messages
-            .filter((m: { role: string }) => m.role === 'assistant')
-            .map((m: { content: string }) => m.content)
-          // 倒序扫描，取最后一条含 volumes 的 json 块
-          for (let i = assistantMessages.length - 1; i >= 0; i--) {
-            const allBlocks = [...(assistantMessages[i] as string).matchAll(/```(?:json)?\s*([\s\S]*?)```/g)]
-            for (let j = allBlocks.length - 1; j >= 0; j--) {
-              try {
-                const raw = allBlocks[j][1].trim()
-                // 修复 AI 输出的未转义换行
-                let inStr = false, esc = false, fixed = ''
-                for (const ch of raw) {
-                  if (esc) { esc = false; fixed += ch; continue }
-                  if (ch === '\\') { esc = true; fixed += ch; continue }
-                  if (ch === '"') { inStr = !inStr; fixed += ch; continue }
-                  if (inStr && ch === '\n') { fixed += '\\n'; continue }
-                  if (inStr && ch === '\r') { fixed += '\\r'; continue }
-                  fixed += ch
-                }
-                const parsed = JSON.parse(fixed)
-                if (parsed.volumes && Array.isArray(parsed.volumes) && parsed.volumes.length > 0) {
-                  extractedData.volumes = parsed.volumes
-                  console.log(`[workshop GET] recovered volumes from message history, count=${parsed.volumes.length}`)
-                  break
-                }
-              } catch {}
-            }
-            if (extractedData.volumes) break
-          }
-        } catch (e) {
-          console.warn('[workshop GET] failed to recover volumes from messages:', e)
-        }
-      }
-    }
 
     return c.json({
       ok: true,
