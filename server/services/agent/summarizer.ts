@@ -118,6 +118,63 @@ ${chapter.content}
   }
 }
 
+export async function triggerChapterSummary(
+  env: Env,
+  chapterId: string,
+  novelId: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const db = drizzle(env.DB)
+
+    const chapter = await db
+      .select({ title: chapters.title, content: chapters.content })
+      .from(chapters)
+      .where(eq(chapters.id, chapterId))
+      .get()
+
+    if (!chapter) return { ok: false, error: 'Chapter not found' }
+    if (!chapter?.content) return { ok: false, error: ERROR_MESSAGES.CHAPTER_CONTENT_EMPTY }
+
+    const summaryText = await callSummaryLLM({
+      db,
+      novelId,
+      stage: 'summary_gen',
+      systemPrompt: SUMMARY_SYSTEM_PROMPT,
+      userPrompt: `请为以下小说章节生成结构化摘要。
+
+【章节标题】《${chapter.title}》
+
+【正文内容】
+${chapter.content}
+
+【输出格式】严格按以下四个标签输出，每项如确实没有内容则写"无"，不得省略标签：
+
+【角色状态变化】本章中角色的境界突破、能力获得、重要属性变化。必须包含具体境界名称，如"林岩从炼气三层突破至炼气四层"。
+【关键事件】本章主线剧情，2-3句话，包含起因、过程、结果。
+【道具/功法】本章新出现、获得或使用的重要道具、功法、丹药（名称+一句话说明）。
+【章末状态】本章结束时主角的：所在位置·当前处境·下一步明确方向或悬念。
+
+字数要求：总计300-400字（四个标签合计）`,
+      maxTokens: 1000,
+    })
+
+    await db
+      .update(chapters)
+      .set({
+        summary: summaryText,
+        summaryAt: Math.floor(Date.now() / 1000),
+        summaryModel: 'manual',
+      })
+      .where(eq(chapters.id, chapterId))
+
+    LOG_STYLES.SUCCESS(`章节 ${chapterId} 摘要生成成功: ${summaryText.slice(0, 100)}`)
+    return { ok: true }
+  } catch (error) {
+    LOG_STYLES.ERROR(`${ERROR_MESSAGES.SUMMARY_FAILED}: ${error}`)
+    return { ok: false, error: (error as Error).message }
+  }
+}
+
 // ============================================================
 // 总纲摘要
 // ============================================================

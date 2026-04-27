@@ -239,6 +239,7 @@ export const api = {
     update: (id: string, body: Partial<ChapterInput>) =>
                                    req<Chapter>(`/api/chapters/${id}`, { method: 'PATCH', body: j(body) }),
     delete: (id: string)          => req(`/api/chapters/${id}`, { method: 'DELETE' }),
+    generateSummary: (id: string) => req<{ ok: boolean; error?: string }>(`/api/chapters/${id}/generate-summary`, { method: 'POST', timeout: 120000 }),
   },
 
   volumes: {
@@ -370,13 +371,6 @@ export const api = {
 
   generate: {
     chapter: (): (() => void) => { return () => {} },
-    nextChapter: (body: { volumeId: string; novelId: string }) =>
-      req<{
-        ok: boolean
-        chapterTitle?: string
-        summary?: string
-        error?: string
-      }>('/api/generate/next-chapter', { method: 'POST', body: j(body), timeout: 300000 }),
     masterOutlineSummary: (body: { novelId: string }) =>
       req<{
         ok: boolean

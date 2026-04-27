@@ -18,7 +18,7 @@ import { checkVolumeProgress } from './volumeProgress'
 import { runReActLoop } from './reactLoop'
 import { buildMessages } from './messages'
 import { DEFAULT_AGENT_CONFIG } from './types'
-import { ERROR_MESSAGES, LOG_STYLES, NEXT_CHAPTER_SYSTEM_PROMPT } from './constants'
+import { ERROR_MESSAGES, LOG_STYLES } from './constants'
 import type { AgentConfig, GenerationOptions, ToolCallEvent } from './types'
 import { saveCheckLog } from './checkLogService'
 import { logGeneration } from './logging'
@@ -340,127 +340,5 @@ export async function generateChapter(
   } catch (error) {
     console.error('Generation failed:', error)
     onError(error as Error)
-  }
-}
-
-function parseJsonResponse<T>(content: string): T {
-  const jsonMatch = content.match(/[\[{][\s\S]*[\]}]/)
-  if (jsonMatch) return JSON.parse(jsonMatch[0]) as T
-  return JSON.parse(content) as T
-}
-
-async function resolveChapterGenConfig(db: any, novelId: string) {
-  const config = await resolveConfig(db, 'chapter_gen', novelId)
-  config.apiKey = config.apiKey || ''
-  return config
-}
-
-export async function generateNextChapter(
-  env: Env,
-  data: { volumeId: string; novelId: string }
-): Promise<{ ok: boolean; chapterTitle?: string; summary?: string; error?: string }> {
-  const { volumeId, novelId } = data
-  const db = drizzle(env.DB)
-
-  try {
-    const volume = await db
-      .select({ id: volumesTable.id, title: volumesTable.title, blueprint: volumesTable.blueprint, eventLine: volumesTable.eventLine, summary: volumesTable.summary })
-      .from(volumesTable)
-      .where(eq(volumesTable.id, volumeId))
-      .get()
-
-    if (!volume) return { ok: false, error: ERROR_MESSAGES.VOLUME_NOT_FOUND }
-
-    const recentChapters = await db
-      .select({ title: chapters.title, summary: chapters.summary })
-      .from(chapters)
-      .where(and(eq(chapters.volumeId, volumeId), sql`${chapters.deletedAt} IS NULL`))
-      .orderBy(desc(chapters.sortOrder))
-      .limit(3)
-      .all()
-
-    let llmConfig
-    try {
-      llmConfig = await resolveChapterGenConfig(db, novelId)
-    } catch {
-      return { ok: false, error: ERROR_MESSAGES.MODEL_NOT_CONFIGED('章节生成') }
-    }
-
-    const isFirstChapter = recentChapters.length === 0
-    const chapterOrdinal = isFirstChapter ? '第一' : '下一'
-
-    const recentChaptersSection = isFirstChapter
-      ? '\n\n【当前状态】该卷目前没有任何章节，这是本卷的第一章。'
-      : `\n\n【最近章节（倒序）】\n${recentChapters.map((ch, i) => `${i + 1}. 《${ch.title}》\n   摘要：${ch.summary || '无'}`).join('\n\n')}`
-
-    const continuationRequirement = isFirstChapter
-      ? `- 从卷蓝图/事件线的起始处开始，做好开篇铺垫\n- 开篇要引人入胜，建立故事基调和主要人物`
-      : `- 章节要与已有章节连贯，承接上一章的结尾状态`
-
-    const nextChapterIndex = recentChapters.length
-    const eventLineItems: string[] = (() => {
-      try { return volume.eventLine ? JSON.parse(volume.eventLine) : [] } catch { return [] }
-    })()
-    const nextChapterEvent = eventLineItems[nextChapterIndex] || ''
-    const nextChapterEventSection = nextChapterEvent
-      ? `\n【下一章对应的事件线任务】\n${nextChapterEvent}`
-      : (volume.eventLine ? `\n【卷事件线（参考）】\n${eventLineItems.slice(nextChapterIndex, nextChapterIndex + 3).join('\n')}` : '')
-
-    const userPrompt = `请为小说卷《${volume.title}》生成${chapterOrdinal}章的标题和摘要。
-
-【卷信息】
-- 卷标题：《${volume.title}》
-${volume.blueprint ? `- 卷蓝图摘要：${volume.summary || volume.blueprint.slice(0, 300)}` : ''}
-${nextChapterEventSection}
-${recentChaptersSection}
-
-【生成要求】
-标题要求：
-- 2-10个字，有吸引力，符合玄幻/仙侠风格
-- 不得出现"的""了""和"等虚词结尾
-- 不得直白剧透（如"主角突破金丹"），要有悬念感
-- 示例风格："剑意锋芒""天地为证""旧人重逢""局中局"
-
-摘要要求（重要，这是AI生成正文时的核心任务描述）：
-- 字数：200-300字
-- 必须包含以下四个部分：
-  【开篇状态】本章从什么场景/状态开始（承接上章结尾）
-  【核心事件】本章发生的1-2个主要事件（包含起因和走向）
-  【角色动态】主要角色的行为、情绪或境界变化
-  【章末状态】本章以什么状态/悬念结束
-${continuationRequirement}
-
-请以 JSON 格式输出：
-{
-  "chapterTitle": "章节标题（2-10字）",
-  "summary": "章节摘要（200-300字，包含上方四个部分）"
-}`
-
-    const overrideConfig = {
-      ...llmConfig,
-      params: { ...(llmConfig.params || {}), temperature: llmConfig.params?.temperature ?? 0.85, max_tokens: 1000 },
-    }
-
-    const { text } = await generate(overrideConfig, [
-      { role: 'system', content: NEXT_CHAPTER_SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt },
-    ])
-
-    let parsedResult: any
-    try {
-      parsedResult = parseJsonResponse<any>(text)
-    } catch {
-      LOG_STYLES.WARN(`下一章解析失败`)
-      return { ok: false, error: ERROR_MESSAGES.NEXT_CHAPTER_PARSE_FAILED }
-    }
-
-    if (!parsedResult.chapterTitle || !parsedResult.summary) {
-      return { ok: false, error: ERROR_MESSAGES.NEXT_CHAPTER_RESULT_INCOMPLETE }
-    }
-
-    return { ok: true, chapterTitle: parsedResult.chapterTitle, summary: parsedResult.summary }
-  } catch (error) {
-    LOG_STYLES.ERROR(`生成下一章失败: ${error}`)
-    return { ok: false, error: '生成下一章异常' }
   }
 }

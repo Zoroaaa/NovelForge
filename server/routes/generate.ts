@@ -19,11 +19,14 @@ import {
   repairChapterByIssues,
   generateMasterOutlineSummary,
   generateVolumeSummary,
-  generateNextChapter,
   checkVolumeProgress,
 } from '../services/agent'
 import { saveCheckLog, getLatestCheckLog, getCheckLogHistory } from '../services/agent/checkLogService'
 import { buildChapterContext } from '../services/contextBuilder'
+import { buildMessages } from '../services/agent/messages'
+import { drizzle } from 'drizzle-orm/d1'
+import { novels, chapters } from '../db/schema'
+import { eq } from 'drizzle-orm'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -326,26 +329,12 @@ router.post('/volume-summary', zValidator('json', z.object({
   return c.json({ ok: true, summary: result.summary })
 })
 
-router.post('/next-chapter', zValidator('json', z.object({
-  volumeId: z.string().min(1),
-  novelId: z.string().min(1),
-})), async (c) => {
-  const { volumeId, novelId } = c.req.valid('json')
-  const result = await generateNextChapter(c.env, { volumeId, novelId })
-  
-  if (!result.ok) {
-    return c.json({ error: result.error }, 500)
-  }
-  
-  return c.json(result)
-})
-
 /**
- * POST /preview-context - 预览章节生成的上下文信息
- * @description 查看指定章节生成时会注入的上下文各层内容，用于调试和诊断
+ * POST /preview-context - 预览章节生成的上下文信息和最终Prompt
+ * @description 查看指定章节生成时会注入的上下文各层内容，以及最终发送给AI的完整Prompt，用于调试和诊断
  * @param {string} novelId - 小说ID
  * @param {string} chapterId - 章节ID
- * @returns {Object} { contextBundle, debugInfo }
+ * @returns {Object} { contextBundle, finalPrompt, debugInfo }
  */
 router.post('/preview-context', zValidator('json', z.object({
   novelId: z.string().min(1),
@@ -361,12 +350,17 @@ router.post('/preview-context', zValidator('json', z.object({
 
   try {
     const startTime = Date.now()
+    const db = drizzle(c.env.DB)
 
-    const contextBundle = await Promise.race([
-      buildChapterContext(c.env, novelId, chapterId),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Context building timeout')), TIMEOUT_MS)
-      ),
+    const [contextBundle, chapterRow, novelRow] = await Promise.all([
+      Promise.race([
+        buildChapterContext(c.env, novelId, chapterId),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Context building timeout')), TIMEOUT_MS)
+        ),
+      ]),
+      db.select({ title: chapters.title }).from(chapters).where(eq(chapters.id, chapterId)).get(),
+      db.select({ systemPrompt: novels.systemPrompt }).from(novels).where(eq(novels.id, novelId)).get(),
     ])
 
     const buildTimeMs = Date.now() - startTime
@@ -378,9 +372,29 @@ router.post('/preview-context', zValidator('json', z.object({
       }, 500)
     }
 
+    if (!chapterRow) {
+      return c.json({
+        ok: false,
+        error: 'Chapter not found',
+      }, 404)
+    }
+
+    const finalMessages = buildMessages(
+      chapterRow.title,
+      contextBundle,
+      {},
+      undefined,
+      novelRow?.systemPrompt ?? undefined
+    )
+
+    const finalPrompt = finalMessages.map(m => `[${m.role.toUpperCase()}]\n${m.content}`).join('\n\n')
+
     return c.json({
       ok: true,
       contextBundle,
+      finalPrompt,
+      messages: finalMessages,
+      chapterTitle: chapterRow.title,
       buildTimeMs,
       summary: {
         totalLayers: Object.keys(contextBundle.core).filter(k => contextBundle.core[k as keyof typeof contextBundle.core]).length +
@@ -394,7 +408,12 @@ router.post('/preview-context', zValidator('json', z.object({
           return Array.isArray(val) ? val.length > 0 : false
         }).length,
         ragResultCount: contextBundle.debug.ragQueriesCount,
-        ragQueryTimeMs: 0,
+        ragRawResultCount: {
+          characters: contextBundle.debug.ragRawResults.characters.length,
+          foreshadowing: contextBundle.debug.ragRawResults.foreshadowing.length,
+          settings: contextBundle.debug.ragRawResults.settings.length,
+        },
+        promptTokenEstimate: Math.ceil(finalPrompt.length * 1.3),
       },
     })
   } catch (error) {

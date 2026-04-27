@@ -50,6 +50,14 @@ export interface SlotResult {
   skippedCount: number
 }
 
+export interface RagRawResult {
+  sourceType: string
+  sourceId: string
+  score: number
+  content: string
+  metadata: Record<string, any>
+}
+
 export interface ContextBundle {
   core: {
     masterOutlineContent: string
@@ -74,6 +82,12 @@ export interface ContextBundle {
     buildTimeMs: number
     budgetTier: BudgetTier
     chapterTypeHint: string
+    queryText: string
+    ragRawResults: {
+      characters: RagRawResult[]
+      foreshadowing: RagRawResult[]
+      settings: RagRawResult[]
+    }
   }
 }
 
@@ -207,11 +221,14 @@ export async function buildChapterContext(
   }
   let chapterTypeRules: string[] = []
   let actualRagQueriesCount = 0
+  let characterResults: Array<{ score: number; metadata: any }> = []
+  let foreshadowingResults: Array<{ score: number; metadata: any }> = []
+  let settingResults: Array<{ score: number; metadata: any }> = []
 
   if (queryText && env.VECTORIZE) {
     const queryVector = await embedText(env.AI, queryText)
 
-    const [characterResults, foreshadowingResults, settingResults] = await Promise.all([
+    const ragResults = await Promise.all([
       searchSimilar(env.VECTORIZE, queryVector, {
         topK: 15,
         filter: { novelId, sourceType: 'character' },
@@ -227,6 +244,9 @@ export async function buildChapterContext(
         filter: { novelId, sourceType: 'setting' },
       }).catch(() => []),
     ])
+    characterResults = ragResults[0]
+    foreshadowingResults = ragResults[1]
+    settingResults = ragResults[2]
 
     actualRagQueriesCount = 3
 
@@ -292,6 +312,30 @@ export async function buildChapterContext(
   }
   const totalTokenEstimate = Object.values(slotBreakdown).reduce((a, b) => a + b, 0)
 
+  const ragRawResults = {
+    characters: characterResults.map((r: any) => ({
+      sourceType: 'character',
+      sourceId: r.metadata?.sourceId || '',
+      score: r.score,
+      content: r.metadata?.content || '',
+      metadata: r.metadata || {},
+    })),
+    foreshadowing: foreshadowingResults.map((r: any) => ({
+      sourceType: 'foreshadowing',
+      sourceId: r.metadata?.sourceId || '',
+      score: r.score,
+      content: r.metadata?.content || '',
+      metadata: r.metadata || {},
+    })),
+    settings: settingResults.map((r: any) => ({
+      sourceType: 'setting',
+      sourceId: r.metadata?.sourceId || '',
+      score: r.score,
+      content: r.metadata?.content || '',
+      metadata: r.metadata || {},
+    })),
+  }
+
   return {
     core: {
       masterOutlineContent: outlineContent,
@@ -316,6 +360,8 @@ export async function buildChapterContext(
       buildTimeMs: Date.now() - startTime,
       budgetTier: budget,
       chapterTypeHint,
+      queryText,
+      ragRawResults,
     },
   }
 }

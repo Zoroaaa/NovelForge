@@ -12,6 +12,7 @@ import { chapters as t } from '../db/schema'
 import { eq, and, isNull, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { enqueue } from '../lib/queue'
+import { triggerChapterSummary } from '../services/agent/summarizer'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -215,5 +216,34 @@ async function saveSnapshot(env: Env, novelId: string, chapterId: string, conten
 
   return key
 }
+
+/**
+ * POST /:id/generate-summary - AI 生成章节摘要
+ * @description 调用 LLM 为章节生成结构化摘要
+ * @param {string} id - 章节ID
+ * @returns {Object} { ok: boolean, error?: string }
+ */
+router.post('/:id/generate-summary', async (c) => {
+  const id = c.req.param('id')
+
+  try {
+    const db = drizzle(c.env.DB)
+    const chapter = await db.select({ id: t.id, novelId: t.novelId, content: t.content }).from(t).where(eq(t.id, id)).get()
+
+    if (!chapter) return c.json({ error: 'Chapter not found' }, 404)
+    if (!chapter.content?.trim()) return c.json({ error: '章节内容为空，无法生成摘要' }, 400)
+
+    const result = await triggerChapterSummary(c.env, chapter.id, chapter.novelId)
+
+    if (!result.ok) {
+      return c.json({ error: result.error }, 500)
+    }
+
+    return c.json({ ok: true })
+  } catch (error) {
+    console.error('Generate chapter summary failed:', error)
+    return c.json({ error: (error as Error).message }, 500)
+  }
+})
 
 export { router as chapters }
