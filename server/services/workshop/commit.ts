@@ -431,7 +431,7 @@ export async function commitWorkshopSessionCore(
     if (createdItems.volumes && createdItems.volumes.length > 0 && data.volumes) {
       let chapterIndex = 0
       for (let v = 0; v < data.volumes.length; v++) {
-        const volChapterCount = data.volumes[v]?.chapterCount || 0
+        const volChapterCount = data.volumes[v]?.targetChapterCount || 0
         for (let c = 0; c < volChapterCount && chapterIndex < data.chapters.length; c++) {
           volumeIdMap.set(chapterIndex, createdItems.volumes[v].id)
           chapterIndex++

@@ -53,11 +53,8 @@ router.get('/session/:id', async (c) => {
     const messages = JSON.parse(session.messages || '[]')
     const extractedData = JSON.parse(session.extractedData || '{}')
 
-    // 如果 extractedData 里没有 volumes，尝试两种补充途径：
-    // 1. 关联了 novelId 时从 volumes 表读
-    // 2. 从历史消息里扫描最后一条含 volumes 的 json 块（兼容纯工坊构思、未关联小说的场景）
-    if (!extractedData.volumes) {
-      // 途径1：从 volumes 表补充
+    // 如果 extractedData 里没有 volumes，尝试从 volumes 表补充（仅限 volume_outline / chapter_outline 阶段）
+    if (!extractedData.volumes && session.stage && ['volume_outline', 'chapter_outline'].includes(session.stage)) {
       if (session.novelId) {
         try {
           const db = drizzle(c.env.DB)
@@ -96,8 +93,8 @@ router.get('/session/:id', async (c) => {
         }
       }
 
-      // 途径2：从历史消息里扫描（适用于全新构思、未关联小说的场景）
-      if (!extractedData.volumes) {
+      // 途径2：从历史消息里扫描（仅限 volume_outline / chapter_outline 阶段）
+      if (!extractedData.volumes && session.stage && ['volume_outline', 'chapter_outline'].includes(session.stage)) {
         try {
           const assistantMessages = messages
             .filter((m: { role: string }) => m.role === 'assistant')
