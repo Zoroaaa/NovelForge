@@ -3,8 +3,8 @@
 <div align="center">
 
 ![NovelForge Logo](https://img.shields.io/badge/NovelForge-AI%20Writing%20Studio-blue?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-1.10.0-success?style=for-the-badge)
-![Phase](https://img.shields.io/badge/Phase-10%20Complete-success?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-1.11.0-success?style=for-the-badge)
+![Phase](https://img.shields.io/badge/Phase-11%20Complete-success?style=for-the-badge)
 ![Cloudflare](https://img.shields.io/badge/Cloudflare-Pages%2BWorkers-orange?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
@@ -584,6 +584,6 @@ novelforge/
 
 <div align="center">
 
-**Made with ❤️ by the NovelForge Team · Version 1.9.0**
+**Made with ❤️ by the NovelForge Team · Version 1.11.0**
 
 </div>

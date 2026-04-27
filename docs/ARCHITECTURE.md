@@ -2,7 +2,7 @@
 
 > 完整的技术架构、数据流设计和模块依赖关系图。
 >
-> **版本**: 1.10.0 | **最后更新**: 2026-04-26
+> **版本**: 1.11.0 | **最后更新**: 2026-04-27
 
 ---
 
@@ -202,9 +202,22 @@ src/
 │   │   ├── StreamOutput.tsx
 │   │   └── ContextPreview.tsx
 │   ├── character/             # 角色管理
-│   ├── workshop/              # 创意工坊
+│   ├── workshop/              # 创意工坊 (v1.11.0 全新重构)
 │   │   ├── WorkshopSidebar.tsx
-│   │   └── ImportDataDialog.tsx # 导入对话框 (v1.8.0)
+│   │   ├── ChatInput.tsx              # 聊天输入 (v1.11.0)
+│   │   ├── ChatMessageList.tsx         # 消息列表 (v1.11.0)
+│   │   ├── CommitDialog.tsx            # 提交确认 (v1.11.0)
+│   │   ├── PreviewPanel.tsx            # 预览面板 (v1.11.0)
+│   │   ├── PreviewBasicInfo.tsx        # 基本信息预览 (v1.11.0)
+│   │   ├── PreviewChapters.tsx         # 章节预览 (v1.11.0)
+│   │   ├── PreviewCharacters.tsx        # 角色预览 (v1.11.0)
+│   │   ├── PreviewVolumes.tsx          # 卷预览 (v1.11.0)
+│   │   ├── PreviewWorldSettings.tsx    # 世界设定预览 (v1.11.0)
+│   │   ├── PreviewWritingRules.tsx     # 规则预览 (v1.11.0)
+│   │   ├── WelcomeView.tsx             # 欢迎视图 (v1.11.0)
+│   │   ├── WorkshopHeaderActions.tsx   # 头部操作 (v1.11.0)
+│   │   ├── ImportDataDialog.tsx        # 导入对话框 (v1.8.0)
+│   │   └── types.ts                    # 类型定义 (v1.11.0)
 │   ├── entitytree/            # 实体树面板 (v1.6.0)
 │   ├── trash/                 # 回收站面板 (v1.6.0)
 │   ├── chapter-health/        # 质量检查组件 (v1.6.0)
@@ -366,7 +379,7 @@ server/
 │   │   ├── summarizer.ts       # 摘要生成
 │   │   ├── logging.ts          # 日志记录
 │   │   ├── checkLogService.ts  # 检查日志服务
-│   │   ├── coherence.ts        # 连贯性检查
+│   │   ├── coherence.ts         # 连贯性检查
 │   │   ├── consistency.ts      # 一致性检查
 │   │   └── volumeProgress.ts   # 卷进度检查
 │   ├── contextBuilder.ts       # 上下文组装 (v4.0)
@@ -377,7 +390,14 @@ server/
 │   ├── powerLevel.ts           # 境界追踪服务
 │   ├── entity-index.ts         # 实体索引服务
 │   ├── formatImport.ts         # 格式导入服务 (v1.7.0)
-│   └── workshop.ts             # 创意工坊服务
+│   └── workshop/               # Workshop 服务模块化 (v1.11.0)
+│       ├── index.ts            # 统一导出 (198行)
+│       ├── commit.ts           # commit逻辑 (580行)
+│       ├── extract.ts          # 数据提取 (100行)
+│       ├── helpers.ts          # 辅助函数 (116行)
+│       ├── prompt.ts           # 分阶段Prompt (660行)
+│       ├── session.ts          # 会话管理 (264行)
+│       └── types.ts            # 类型定义 (65行)
 ├── lib/
 │   ├── auth.ts                 # 认证与安全模块
 │   ├── queue.ts                # 队列操作库 (v1.6.0)
@@ -1213,11 +1233,13 @@ CLOUDFLARE_API_TOKEN=xxx      # Cloudflare API Token
 | **v1.7.0** | 目标管理 + 伏笔进度 + 工坊导入 + 检查日志增强 |
 | **v1.8.0** | 格式化导入 + 数据导入对话框 |
 | **v1.9.0** | 质量检查系统重构 + 卷进度检查 + 上下文v4.1优化 |
+| **v1.10.0** | Agent工具v2 + 上下文构建优化 + 摘要质量提升 |
+| **v1.11.0** | Workshop架构模块化拆分 + 10+前端组件全新设计 |
 
 ---
 
 <div align="center">
 
-**Architecture Version: 1.9.0 · 最后更新: 2026-04-25**
+**Architecture Version: 1.11.0 · 最后更新: 2026-04-27**
 
 </div>

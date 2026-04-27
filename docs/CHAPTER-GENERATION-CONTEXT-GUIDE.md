@@ -1,8 +1,8 @@
 # NovelForge 章节生成上下文构建 — 完整执行指南
 
-> 版本: v4.2.0 | 模块: `server/services/contextBuilder.ts` + `server/routes/generate.ts`
+> 版本: v4.3.0 | 模块: `server/services/contextBuilder.ts` + `server/routes/generate.ts`
 > 前端页面: [NovelWorkspacePage.tsx](file:///d:/开发项目/NovelForge/src/pages/NovelWorkspacePage.tsx)（小说工作台）
-> 创建日期: 2026-04-25 | 最后更新: 2026-04-26
+> 创建日期: 2026-04-25 | 最后更新: 2026-04-27
 
 ---
 
@@ -255,7 +255,15 @@ POST /api/generate/preview-context
       "ragQueriesCount": 3,
       "buildTimeMs": 450,
       "budgetTier": {...},
-      "chapterTypeHint": "战斗,修炼"
+      "chapterTypeHint": "战斗,修炼",
+      "queryText": "第42章 突破\n从炼气境三层突破至四层，丹田真气充盈...\n林岩",
+      "ragRawResults": {
+        "characters": [
+          {"sourceType": "character", "sourceId": "xxx", "score": 0.89, "content": "林岩...", "metadata": {...}}
+        ],
+        "foreshadowing": [...],
+        "settings": [...]
+      }
     }
   },
   "buildTimeMs": 450,
@@ -286,9 +294,9 @@ export interface ContextBundle {
   dynamic: {
     summaryChain: string[]            // 近期剧情摘要链
     characterCards: string[]          // 本章出场角色
-    relevantForeshadowing: string[]    // 待回收伏笔
+    relevantForeshadowing: string[]   // 待回收伏笔
     relevantSettings: SlottedSettings // 分槽世界设定
-    chapterTypeRules: string[]        // 本章类型规则
+    chapterTypeRules: string[]       // 本章类型规则
   }
   debug: {
     totalTokenEstimate: number         // 总 token 估算
@@ -297,7 +305,21 @@ export interface ContextBundle {
     buildTimeMs: number               // 构建耗时
     budgetTier: BudgetTier            // 使用的预算配置
     chapterTypeHint: string           // 推断的章节类型
+    queryText: string                 // RAG 查询文本 (v4.3 新增)
+    ragRawResults: {                  // RAG 原始结果 (v4.3 新增)
+      characters: RagRawResult[]
+      foreshadowing: RagRawResult[]
+      settings: RagRawResult[]
+    }
   }
+}
+
+export interface RagRawResult {
+  sourceType: string
+  sourceId: string
+  score: number
+  content: string
+  metadata: Record<string, any>
 }
 
 export interface SlottedSettings {
@@ -888,6 +910,8 @@ debug: {
   buildTimeMs: number             // 构建耗时
   budgetTier: BudgetTier          // 使用的预算配置
   chapterTypeHint: string         // 推断的章节类型关键词
+  queryText: string               // RAG 查询文本 (v4.3 新增)
+  ragRawResults: RagRawResult[]   // RAG 原始结果，包含 score/metadata (v4.3 新增)
 }
 ```
 
@@ -927,24 +951,25 @@ CREATE INDEX idx_novel_settings_importance
 
 ---
 
-## 十二、v3 → v4 → v4.1 → v4.2 迁移对照
+## 十二、v3 → v4 → v4.1 → v4.2 → v4.3 迁移对照
 
-| 维度 | v3 | v4 | v4.1 | v4.2 | 变化原因 |
-|------|----|----|------|------|---------|
-| 总纲 | 可能空的 summary | content 全文（≤12k） | **不变** | **不变** | 256k 够用 |
-| 上一章 | context 摘要 | context 摘要 | **正文完整内容（≤8k）** | **不变** | 摘要信息不足 |
-| 角色 | RAG 返回 500字碎片 | RAG 返回 ID → DB 完整卡片 | **阈值 0.50→0.38, MAX 8→6** | **阈值 0.38→0.45, 排除主角** | 优化检索+避免重复 |
-| 设定 | RAG 返回全文切块 | RAG 返回 summary（≤400字） | **阈值全面下调 0.55-0.72→0.42-0.48** | **Slot预算精细化** | 适应更大预算 |
-| 伏笔 | 仅 RAG 过滤 | 高优 DB 兜底 + RAG | **阈值 0.55→0.42** | **按创建时间排序，高优限制10→15** | 优先召回近期插入 |
-| 规则 | priority≤2 前5条 | 全部 isActive 规则 | **不变** | **新增fetchAllActiveRuleIds，Slot-8自动排除已注入规则** | 避免重复注入 |
-| 摘要链 | 默认 5 章 | 默认 20 章 | **不变** | **不变** | 连贯性 |
-| **创作节奏** | 无 | 无 | **新增 Slot-10** | **不变** | 帮助 AI 均衡节奏 |
-| 预算 | total=14k | total=55k | **total=128k** | **不变** | 利用窗口 |
-| RAG查询 | 整卷eventLine+整章正文 | 整卷eventLine+整章正文 | **不变** | **聚焦当前章节语义，≤800字** | 提升检索精度 |
-| RAG 次数 | 3 次 | **3 次** | **不变** | **不变** | character/setting/foreshadowing 均保留 |
-| 向量类型 | 6 种 | **3 种** | **不变** | **不变** | 聚焦上下文构建 |
-| 单任务最大 chunks | 12+（超时） | **≤1** | **不变** | **不变** | 安全 |
-| Slot过滤 | 无 | 无 | 无 | **新增slotFilter选项** | 按需组合不同Slot |
+| 维度 | v3 | v4 | v4.1 | v4.2 | v4.3 | 变化原因 |
+|------|----|----|------|------|------|---------|
+| 总纲 | 可能空的 summary | content 全文（≤12k） | **不变** | **不变** | **不变** | 256k 够用 |
+| 上一章 | context 摘要 | context 摘要 | **正文完整内容（≤8k）** | **不变** | **不变** | 摘要信息不足 |
+| 角色 | RAG 返回 500字碎片 | RAG 返回 ID → DB 完整卡片 | **阈值 0.50→0.38, MAX 8→6** | **阈值 0.38→0.45, 排除主角** | **不变** | 优化检索+避免重复 |
+| 设定 | RAG 返回全文切块 | RAG 返回 summary（≤400字） | **阈值全面下调 0.55-0.72→0.42-0.48** | **Slot预算精细化** | **不变** | 适应更大预算 |
+| 伏笔 | 仅 RAG 过滤 | 高优 DB 兜底 + RAG | **阈值 0.55→0.42** | **按创建时间排序，高优限制10→15** | **不变** | 优先召回近期插入 |
+| 规则 | priority≤2 前5条 | 全部 isActive 规则 | **不变** | **新增fetchAllActiveRuleIds，Slot-8自动排除已注入规则** | **不变** | 避免重复注入 |
+| 摘要链 | 默认 5 章 | 默认 20 章 | **不变** | **不变** | **不变** | 连贯性 |
+| **创作节奏** | 无 | 无 | **新增 Slot-10** | **不变** | **不变** | 帮助 AI 均衡节奏 |
+| 预算 | total=14k | total=55k | **total=128k** | **不变** | **不变** | 利用窗口 |
+| RAG查询 | 整卷eventLine+整章正文 | 整卷eventLine+整章正文 | **不变** | **不变** | **聚焦当前章节语义，≤800字** | 提升检索精度 |
+| RAG 次数 | 3 次 | **3 次** | **不变** | **不变** | **不变** | character/setting/foreshadowing 均保留 |
+| 向量类型 | 6 种 | **3 种** | **不变** | **不变** | **不变** | 聚焦上下文构建 |
+| 单任务最大 chunks | 12+（超时） | **≤1** | **不变** | **不变** | **不变** | 安全 |
+| Slot过滤 | 无 | 无 | 无 | **新增slotFilter选项** | **不变** | 按需组合不同Slot |
+| **调试信息** | 无 | 无 | 无 | 无 | **新增queryText+ragRawResults** | 诊断RAG召回质量 |
 
 ---
 
@@ -1045,6 +1070,6 @@ POST /api/generate/preview-context
 
 ---
 
-> 文档版本：v4.2.0
-> 最后更新：2026-04-26
+> 文档版本：v4.3.0
+> 最后更新：2026-04-27
 > 维护者：NovelForge 开发团队

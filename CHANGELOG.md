@@ -7,6 +7,77 @@
 
 ---
 
+## [1.11.0] - 2026-04-27
+
+### 🎉 重大更新：Phase 11 · Workshop架构深度重构与上下文优化
+
+#### 架构重构
+
+##### Workshop服务模块化拆分 🔧
+- **原`server/services/workshop.ts`拆分为7个独立模块**
+  - `commit.ts` (580行) - commit逻辑增强，根据不同阶段创建/更新不同数据
+  - `extract.ts` (100行) - 数据提取服务
+  - `helpers.ts` (116行) - 辅助函数
+  - `index.ts` (198行) - 统一导出接口
+  - `prompt.ts` (660行) - 分阶段Prompt体系
+  - `session.ts` (264行) - 会话管理
+  - `types.ts` (65行) - 类型定义
+
+##### 前端Workshop组件全新设计 🎨
+- **新增10+组件，重构原有 monolithic WorkshopPage**
+  - `ChatInput.tsx` - 聊天输入组件
+  - `ChatMessageList.tsx` - 消息列表组件
+  - `CommitDialog.tsx` (184行) - 提交确认对话框
+  - `PreviewBasicInfo.tsx` (69行) - 基本信息预览
+  - `PreviewChapters.tsx` - 章节预览组件
+  - `PreviewCharacters.tsx` (122行) - 角色预览组件
+  - `PreviewPanel.tsx` - 预览面板
+  - `PreviewVolumes.tsx` (179行) - 卷预览组件
+  - `PreviewWorldSettings.tsx` (69行) - 世界观设定预览
+  - `PreviewWritingRules.tsx` (71行) - 创作规则预览
+  - `WelcomeView.tsx` (72行) - 欢迎视图
+  - `WorkshopHeaderActions.tsx` (79行) - 头部操作按钮
+  - `types.ts` (107行) - 前端类型定义
+
+- **WorkshopPage.tsx大幅精简**
+  - 从约1500行精简到约500行
+  - 组件职责单一化
+  - 更好的可维护性
+
+#### 功能增强
+
+##### 章节摘要标签页 📝
+- **新增`ChapterSummaryTab`组件** (198行)
+  - 独立标签页展示章节摘要
+  - 更好的摘要查看体验
+  - 增强工作区页面导航
+
+##### ChapterList组件重构 📋
+- **组件重构增强** (187行新增，140行修改)
+  - 更好的列表展示
+  - 交互体验优化
+  - 状态管理改进
+
+##### 上下文构建器优化 🚀
+- **上下文组装增强** (38行修改)
+  - Slot预算精细化
+  - 向量召回优化
+  - 更好的上下文字段构建
+
+##### 伏笔系统优化 🪝
+- **伏笔路由优化** - 更高效的伏笔管理
+- **伏笔面板优化** - UI/UX改进
+- **队列任务优化** - 后台任务处理增强
+
+#### 性能提升
+
+- ⚡ Workshop代码模块化，首页加载速度提升
+- ⚡ 组件懒加载支持
+- ⚡ 预览组件按需渲染
+- ⚡ 队列任务处理优化
+
+---
+
 ## [1.10.0] - 2026-04-26
 
 ### 🎉 重大更新：Phase 10 · Agent智能工具重构与创作工坊深度优化
@@ -1174,6 +1245,28 @@
 ---
 
 ## 升级指南
+
+### 升级到 1.11.0
+
+```bash
+# 拉取最新代码
+git pull origin main
+
+# 更新依赖
+pnpm update
+
+# 重新部署
+pnpm build
+wrangler pages deploy dist
+```
+
+**重要变更说明**：
+- Workshop服务架构重构：`server/services/workshop.ts`拆分为7个独立模块
+- 前端Workshop组件全新设计：新增10+组件，WorkshopPage大幅精简
+- 新增章节摘要标签页（ChapterSummaryTab组件）
+- ChapterList组件重构增强
+- 上下文构建器优化
+- 伏笔系统优化
 
 ### 升级到 1.10.0
 

@@ -1,8 +1,8 @@
 # NovelForge 创作工坊 — 完整执行指南
 
-> 版本: 1.0.0 | 模块: `server/services/workshop.ts` + `server/routes/workshop.ts`
+> 版本: 1.1.0 | 模块: `server/services/workshop/` (v1.11.0 模块化)
 > 前端页面: [WorkshopPage.tsx](file:///d:/开发项目/NovelForge/src/pages/WorkshopPage.tsx)
-> 创建日期: 2026-04-25
+> 创建日期: 2026-04-25 | 更新日期: 2026-04-27
 
 ---
 
@@ -683,22 +683,53 @@ while (true) {
 
 ---
 
-## 十二、文件索引
+## 十二、文件索引 (v1.11.0)
+
+### 后端服务模块 (server/services/workshop/)
 
 | 文件 | 说明 |
 |------|------|
-| [workshop.ts](file:///d:/开发项目/NovelForge/server/services/workshop.ts) | 核心服务逻辑 |
-| [workshop.ts](file:///d:/开发项目/NovelForge/server/routes/workshop.ts) | API 路由定义 |
-| [formatImport.ts](file:///d:/开发项目/NovelForge/server/services/formatImport.ts) | 导入格式化服务 |
-| [workshop-import.ts](file:///d:/开发项目/NovelForge/server/routes/workshop-import.ts) | 导入 API 路由 |
-| [workshop-format-import.ts](file:///d:/开发项目/NovelForge/server/routes/workshop-format-import.ts) | 格式化导入 API |
-| [WorkshopPage.tsx](file:///d:/开发项目/NovelForge/src/pages/WorkshopPage.tsx) | 前端页面主组件 |
+| [index.ts](file:///d:/开发项目/NovelForge/server/services/workshop/index.ts) | 统一导出入口 (198行) |
+| [commit.ts](file:///d:/开发项目/NovelForge/server/services/workshop/commit.ts) | commit逻辑增强 (580行) |
+| [extract.ts](file:///d:/开发项目/NovelForge/server/services/workshop/extract.ts) | 数据提取服务 (100行) |
+| [helpers.ts](file:///d:/开发项目/NovelForge/server/services/workshop/helpers.ts) | 辅助函数 (116行) |
+| [prompt.ts](file:///d:/开发项目/NovelForge/server/services/workshop/prompt.ts) | 分阶段Prompt (660行) |
+| [session.ts](file:///d:/开发项目/NovelForge/server/services/workshop/session.ts) | 会话管理 (264行) |
+| [types.ts](file:///d:/开发项目/NovelForge/server/services/workshop/types.ts) | 类型定义 (65行) |
+
+### 前端组件 (src/components/workshop/)
+
+| 文件 | 说明 |
+|------|------|
+| [WorkshopPage.tsx](file:///d:/开发项目/NovelForge/src/pages/WorkshopPage.tsx) | 主页面 (v1.11.0大幅精简) |
 | [WorkshopSidebar.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/WorkshopSidebar.tsx) | 侧边栏组件 |
-| [ImportDataDialog.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/ImportDataDialog.tsx) | 导入对话框组件 |
-| [constants.ts](file:///d:/开发项目/NovelForge/server/services/agent/constants.ts) | Agent 系统常量 |
+| [ChatInput.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/ChatInput.tsx) | 聊天输入 (v1.11.0新增) |
+| [ChatMessageList.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/ChatMessageList.tsx) | 消息列表 (v1.11.0新增) |
+| [CommitDialog.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/CommitDialog.tsx) | 提交确认 (v1.11.0新增) |
+| [PreviewPanel.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewPanel.tsx) | 预览面板 (v1.11.0新增) |
+| [PreviewBasicInfo.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewBasicInfo.tsx) | 基本信息预览 (v1.11.0新增) |
+| [PreviewChapters.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewChapters.tsx) | 章节预览 (v1.11.0新增) |
+| [PreviewCharacters.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewCharacters.tsx) | 角色预览 (v1.11.0新增) |
+| [PreviewVolumes.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewVolumes.tsx) | 卷预览 (v1.11.0新增) |
+| [PreviewWorldSettings.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewWorldSettings.tsx) | 世界设定预览 (v1.11.0新增) |
+| [PreviewWritingRules.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewWritingRules.tsx) | 规则预览 (v1.11.0新增) |
+| [WelcomeView.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/WelcomeView.tsx) | 欢迎视图 (v1.11.0新增) |
+| [WorkshopHeaderActions.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/WorkshopHeaderActions.tsx) | 头部操作 (v1.11.0新增) |
+| [ImportDataDialog.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/ImportDataDialog.tsx) | 导入对话框 |
+| [types.ts](file:///d:/开发项目/NovelForge/src/components/workshop/types.ts) | 前端类型定义 (v1.11.0新增) |
+
+### API路由
+
+| 文件 | 说明 |
+|------|------|
+| [routes/workshop.ts](file:///d:/开发项目/NovelForge/server/routes/workshop.ts) | 创意工坊API路由 |
+| [services/formatImport.ts](file:///d:/开发项目/NovelForge/server/services/formatImport.ts) | 导入格式化服务 |
+| [routes/workshop-import.ts](file:///d:/开发项目/NovelForge/server/routes/workshop-import.ts) | 导入API路由 |
+| [routes/workshop-format-import.ts](file:///d:/开发项目/NovelForge/server/routes/workshop-format-import.ts) | 格式化导入API |
+| [services/agent/constants.ts](file:///d:/开发项目/NovelForge/server/services/agent/constants.ts) | Agent系统常量 |
 
 ---
 
-> 文档版本：1.0.0
-> 最后更新：2026-04-25
+> 文档版本：1.1.0
+> 最后更新：2026-04-27
 > 维护者：NovelForge 开发团队

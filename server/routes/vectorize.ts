@@ -29,7 +29,7 @@ router.post(
   zValidator(
     'json',
     z.object({
-      sourceType: z.enum(['outline', 'chapter', 'character', 'summary', 'setting', 'foreshadowing']),
+      sourceType: z.enum(['chapter', 'character', 'summary', 'setting', 'foreshadowing']),
       sourceId: z.string().min(1),
       novelId: z.string().min(1),
       title: z.string(),
@@ -44,7 +44,7 @@ router.post(
 
     let content = body.content
     if (!content) {
-      if (sourceType === 'outline' || sourceType === 'chapter') {
+      if (sourceType === 'chapter') {
         const fetched = await fetchContentForIndexing(c.env, sourceType, sourceId)
         content = fetched.content
       }
@@ -53,7 +53,6 @@ router.post(
     if (content) {
       const MAX_CONTENT_LENGTH: Record<string, number> = {
         setting: 500,
-        outline: 2000,
         character: 400,
         foreshadowing: 0,
         chapter: 0,
@@ -106,7 +105,7 @@ router.delete('/:type/:id', async (c) => {
   const sourceType = c.req.param('type') as any
   const sourceId = c.req.param('id')
 
-  if (!['outline', 'chapter', 'character', 'summary', 'setting', 'foreshadowing'].includes(sourceType)) {
+  if (!['chapter', 'character', 'summary', 'setting', 'foreshadowing'].includes(sourceType)) {
     return c.json({ error: 'Invalid source type' }, 400)
   }
 
@@ -398,13 +397,13 @@ router.post(
     'json',
     z.object({
       novelId: z.string().min(1),
-      types: z.array(z.enum(['setting', 'character', 'outline', 'foreshadowing'])).optional(),
+      types: z.array(z.enum(['setting', 'character', 'foreshadowing'])).optional(),
       clearExisting: z.boolean().optional(),
     })
   ),
   async (c) => {
     const body = c.req.valid('json')
-    const { novelId, types = ['setting', 'character', 'outline', 'foreshadowing'], clearExisting } = body
+    const { novelId, types = ['setting', 'character', 'foreshadowing'], clearExisting } = body
 
     if (!c.env.VECTORIZE) {
       return c.json({ error: 'Vectorize binding not configured' }, 503)

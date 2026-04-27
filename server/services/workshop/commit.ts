@@ -157,6 +157,10 @@ export async function commitWorkshopSessionCore(
             novelId: novelSetting.novelId,
             title: novelSetting.name,
             content: indexContent,
+            extraMetadata: {
+              settingType: novelSetting.type,
+              importance: novelSetting.importance,
+            },
           },
         })
       } catch (err) {

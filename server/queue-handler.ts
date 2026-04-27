@@ -283,7 +283,7 @@ async function handleReindexAll(
   env: Env,
   payload: Extract<QueueMessage, { type: 'reindex_all' }>['payload']
 ): Promise<void> {
-  const { novelId, types = ['setting', 'character', 'outline', 'foreshadowing'], clearExisting } = payload
+  const { novelId, types = ['setting', 'character', 'foreshadowing'], clearExisting } = payload
   const db = drizzle(env.DB)
 
   if (clearExisting && env.VECTORIZE) {
