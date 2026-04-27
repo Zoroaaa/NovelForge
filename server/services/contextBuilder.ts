@@ -31,7 +31,7 @@ import {
   chapters, volumes, characters, modelConfigs, foreshadowing,
   novelSettings, masterOutline, writingRules, novels
 } from '../db/schema'
-import { eq, and, sql, desc, inArray } from 'drizzle-orm'
+import { eq, and, sql, desc, inArray, notInArray, asc } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { embedText, searchSimilar } from './embedding'
 
@@ -163,6 +163,7 @@ export async function buildChapterContext(
     allActiveRules,
     recentSummaries,
     rhythmStats,
+    firstChapterInVolume,
   ] = await Promise.all([
     fetchMasterOutlineContent(db, novelId),
     fetchVolumeInfo(db, currentChapter.volumeId),
@@ -172,7 +173,20 @@ export async function buildChapterContext(
     fetchAllActiveRules(db, novelId),
     fetchRecentSummaries(db, currentChapter.novelId, currentChapter.sortOrder, summaryChainLength),
     fetchRhythmStats(db, novelId, currentChapter.volumeId, currentChapter.sortOrder),
+    currentChapter.volumeId
+      ? db
+          .select({ sortOrder: chapters.sortOrder })
+          .from(chapters)
+          .where(and(eq(chapters.volumeId, currentChapter.volumeId), sql`${chapters.deletedAt} IS NULL`))
+          .orderBy(asc(chapters.sortOrder))
+          .limit(1)
+          .get()
+      : Promise.resolve(null),
   ])
+
+  const chapterIndexInVolume = firstChapterInVolume
+    ? currentChapter.sortOrder - firstChapterInVolume.sortOrder + 1
+    : 1
 
   const protagonistStateCards = mergeProtagonistAndPower(protagonistData, powerLevelInfo)
   const chapterTypeHint = inferChapterType(volumeInfo.eventLine, currentChapter.title)
@@ -180,7 +194,7 @@ export async function buildChapterContext(
   // ── Step 2: 组装查询向量（聚焦当前章节语义，≤800字） ──
   const queryText = [
     currentChapter.title,
-    extractCurrentChapterEvent(volumeInfo.eventLine, currentChapter.sortOrder),
+    extractCurrentChapterEvent(volumeInfo.eventLine, chapterIndexInVolume),
     prevContent?.slice(0, 300),
   ].filter(Boolean).join('\n').slice(0, 800)
 
@@ -804,18 +818,20 @@ async function fetchChapterTypeRules(
   if (categories.length === 0) return []
 
   try {
+    const whereConditions = [
+      eq(writingRules.novelId, novelId),
+      eq(writingRules.isActive, 1),
+      inArray(writingRules.category, categories),
+      sql`${writingRules.deletedAt} IS NULL`,
+    ]
+    if (existingRuleIds.length > 0) {
+      whereConditions.push(notInArray(writingRules.id, existingRuleIds))
+    }
+
     const rows = await db
       .select({ id: writingRules.id, category: writingRules.category, title: writingRules.title, content: writingRules.content, priority: writingRules.priority })
       .from(writingRules)
-      .where(and(
-        eq(writingRules.novelId, novelId),
-        eq(writingRules.isActive, 1),
-        inArray(writingRules.category, categories),
-        sql`${writingRules.deletedAt} IS NULL`,
-        existingRuleIds.length > 0
-          ? sql`${writingRules.id} NOT IN (${existingRuleIds.map(() => '?').join(',')})`
-          : sql`1=1`
-      ))
+      .where(and(...whereConditions))
       .orderBy(writingRules.priority).limit(8).all()
 
     const catLabel: Record<string, string> = {
