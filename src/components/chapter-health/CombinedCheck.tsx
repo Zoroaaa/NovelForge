@@ -61,7 +61,42 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete, combinedRep
   const [repairError, setRepairError] = useState<string | null>(null)
   const [internalResult, setInternalResult] = useState<CombinedCheckResult | null>(null)
 
-  const result: CombinedCheckResult | null = internalResult || (combinedReport as CombinedCheckResult | null) || null
+  const getDefaultVolumeProgressCheck = () => ({
+    volumeId: '', currentChapter: 0, targetChapter: null, currentWordCount: 0,
+    targetWordCount: null, chapterProgress: 0, wordProgress: 0,
+    perChapterEstimate: null, wordCountIssues: [], rhythmIssues: [],
+    wordCountScore: 100, rhythmScore: 100, diagnosis: '', suggestion: '', score: 100,
+  })
+
+  const getDefaultCoherenceCheck = () => ({
+    score: 100,
+    issues: [],
+  })
+
+  const getDefaultCharacterCheck = () => ({
+    score: 100,
+    conflicts: [],
+    warnings: [],
+  })
+
+  const normalizedReport = combinedReport ? {
+    ...combinedReport,
+    score: combinedReport.score ?? 100,
+    characterCheck: combinedReport.characterCheck ? {
+      ...getDefaultCharacterCheck(),
+      ...combinedReport.characterCheck,
+    } : getDefaultCharacterCheck(),
+    coherenceCheck: combinedReport.coherenceCheck ? {
+      ...getDefaultCoherenceCheck(),
+      ...combinedReport.coherenceCheck,
+    } : getDefaultCoherenceCheck(),
+    volumeProgressCheck: combinedReport.volumeProgressCheck ? {
+      ...getDefaultVolumeProgressCheck(),
+      ...combinedReport.volumeProgressCheck,
+    } : getDefaultVolumeProgressCheck(),
+  } : null
+
+  const result: CombinedCheckResult | null = internalResult || normalizedReport
 
   const { data: characters } = useQuery({
     queryKey: ['characters', novelId],

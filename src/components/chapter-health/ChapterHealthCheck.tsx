@@ -151,9 +151,9 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
 
         if (isVolumeProgressValid) {
           setCombinedReport({
-            characterResult: cachedData.log.characterResult,
-            coherenceResult: cachedData.log.coherenceResult,
-            volumeProgressResult: cachedVolumeProgress,
+            characterCheck: cachedData.log.characterResult,
+            coherenceCheck: cachedData.log.coherenceResult,
+            volumeProgressCheck: cachedVolumeProgress,
             score: cachedData.log.score ?? 100,
           })
           setIsFromCache(true)
@@ -165,9 +165,9 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
         const volumeProgressData = await api.generate.getCheckLogsLatest(chapterId!, 'volume_progress')
         if (volumeProgressData.log && volumeProgressData.log.volumeProgressResult) {
           setCombinedReport({
-            characterResult: cachedData.log.characterResult,
-            coherenceResult: cachedData.log.coherenceResult,
-            volumeProgressResult: volumeProgressData.log.volumeProgressResult,
+            characterCheck: cachedData.log.characterResult,
+            coherenceCheck: cachedData.log.coherenceResult,
+            volumeProgressCheck: volumeProgressData.log.volumeProgressResult,
             score: cachedData.log.score ?? 100,
           })
           setIsFromCache(true)
@@ -428,14 +428,24 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                 variant="default"
                 size="sm"
                 className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700"
-                onClick={() => {
+                onClick={async () => {
                   if (latestCheckLog.coherenceResult) {
+                    let volumeProgressResult = latestCheckLog.volumeProgressResult
+                    if (!volumeProgressResult && latestCheckLog.checkType === 'combined') {
+                      const volumeData = await api.generate.getCheckLogsLatest(chapterId!, 'volume_progress')
+                      volumeProgressResult = volumeData.log?.volumeProgressResult || null
+                    }
                     setCombinedReport({
-                    characterCheck: latestCheckLog.characterResult || { conflicts: [], warnings: [] },
-                    coherenceCheck: latestCheckLog.coherenceResult,
-                    volumeProgressCheck: latestCheckLog.volumeProgressResult || null,
-                    score: latestCheckLog.score,
-                  })
+                      characterCheck: latestCheckLog.characterResult || { conflicts: [], warnings: [] },
+                      coherenceCheck: latestCheckLog.coherenceResult,
+                      volumeProgressCheck: volumeProgressResult || {
+                        volumeId: '', currentChapter: 0, targetChapter: null, currentWordCount: 0,
+                        targetWordCount: null, chapterProgress: 0, wordProgress: 0,
+                        perChapterEstimate: null, wordCountIssues: [], rhythmIssues: [],
+                        wordCountScore: 100, rhythmScore: 100, diagnosis: '无数据', suggestion: '', score: 100,
+                      },
+                      score: latestCheckLog.score ?? 100,
+                    })
                     setCoherenceResult({
                       score: latestCheckLog.coherenceResult.score,
                       issues: latestCheckLog.coherenceResult.issues,
