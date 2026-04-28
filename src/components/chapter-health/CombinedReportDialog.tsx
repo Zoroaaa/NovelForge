@@ -26,6 +26,8 @@ import {
   Zap,
   Wand2,
   Check,
+  FileText,
+  AlignLeft,
 } from 'lucide-react'
 import type { CombinedReport, RepairState } from './types'
 
@@ -266,7 +268,7 @@ export function CombinedReportDialog({
                         </section>
                       )}
 
-                      {combinedReport.volumeProgressCheck && (combinedReport.volumeProgressCheck.wordCountIssues.length > 0 || combinedReport.volumeProgressCheck.rhythmIssues.length > 0) && (
+                      {combinedReport.volumeProgressCheck && (
                         <section className="space-y-3">
                           <header className="flex items-center gap-2.5 pb-2 border-b border-blue-200/50 dark:border-blue-800/30">
                             <Target className="h-4 w-4 text-blue-600" />
@@ -301,6 +303,63 @@ export function CombinedReportDialog({
                                 <span className="font-medium ml-1">{combinedReport.volumeProgressCheck.targetWordCount ? `${(combinedReport.volumeProgressCheck.targetWordCount / 10000).toFixed(0)} 万` : '未设定'}</span>
                               </div>
                             </div>
+
+                            {(combinedReport.volumeProgressCheck.targetChapter || combinedReport.volumeProgressCheck.targetWordCount) && (
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="p-2 bg-muted/30 rounded-lg">
+                                  <div className="text-[10px] text-muted-foreground mb-1">章节进度</div>
+                                  <div className="text-sm font-semibold">{combinedReport.volumeProgressCheck.chapterProgress?.toFixed(1) || '0'}%</div>
+                                  <div className="mt-1 h-1 bg-muted rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-blue-500 rounded-full transition-all"
+                                      style={{ width: `${Math.min(combinedReport.volumeProgressCheck.chapterProgress || 0, 100)}%` }}
+                                    />
+                                  </div>
+                                </div>
+                                <div className="p-2 bg-muted/30 rounded-lg">
+                                  <div className="text-[10px] text-muted-foreground mb-1">字数进度</div>
+                                  <div className="text-sm font-semibold">{combinedReport.volumeProgressCheck.wordProgress?.toFixed(1) || '0'}%</div>
+                                  <div className="mt-1 h-1 bg-muted rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-blue-500 rounded-full transition-all"
+                                      style={{ width: `${Math.min(combinedReport.volumeProgressCheck.wordProgress || 0, 100)}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {combinedReport.volumeProgressCheck.perChapterEstimate && (
+                              <div className="p-2 bg-muted/30 rounded-lg text-xs text-center text-muted-foreground">
+                                预估每章字数：约 {combinedReport.volumeProgressCheck.perChapterEstimate.toLocaleString()} 字（±15% 内为健康范围）
+                              </div>
+                            )}
+
+                            <div className="flex gap-2">
+                              <div className="flex-1 p-2.5 bg-blue-50/50 dark:bg-blue-950/20 rounded-lg border text-center">
+                                <div className="text-[10px] text-muted-foreground mb-0.5">字数健康度</div>
+                                <div className={`text-lg font-bold ${getScoreColor(combinedReport.volumeProgressCheck.wordCountScore)}`}>
+                                  {combinedReport.volumeProgressCheck.wordCountScore}
+                                </div>
+                                {combinedReport.volumeProgressCheck.wordCountIssues.length > 0 && (
+                                  <div className="text-[10px] text-muted-foreground mt-0.5">
+                                    {combinedReport.volumeProgressCheck.wordCountIssues.filter((i: any) => i.severity === 'error').length}个严重，{combinedReport.volumeProgressCheck.wordCountIssues.filter((i: any) => i.severity === 'warning').length}个轻微
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 p-2.5 bg-purple-50/50 dark:bg-purple-950/20 rounded-lg border text-center">
+                                <div className="text-[10px] text-muted-foreground mb-0.5">节奏健康度</div>
+                                <div className={`text-lg font-bold ${getScoreColor(combinedReport.volumeProgressCheck.rhythmScore)}`}>
+                                  {combinedReport.volumeProgressCheck.rhythmScore}
+                                </div>
+                                {combinedReport.volumeProgressCheck.rhythmIssues.length > 0 && (
+                                  <div className="text-[10px] text-muted-foreground mt-0.5">
+                                    {combinedReport.volumeProgressCheck.rhythmIssues.filter((i: any) => i.severity === 'error').length}个严重，{combinedReport.volumeProgressCheck.rhythmIssues.filter((i: any) => i.severity === 'warning').length}个轻微
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
                             {combinedReport.volumeProgressCheck.diagnosis && (
                               <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg text-xs">
                                 <span className="text-blue-700 dark:text-blue-300 font-medium">诊断：</span>
@@ -313,14 +372,75 @@ export function CombinedReportDialog({
                                 <p className="mt-1 text-foreground">{combinedReport.volumeProgressCheck.suggestion}</p>
                               </div>
                             )}
+
+                            {combinedReport.volumeProgressCheck.wordCountIssues.length > 0 && (
+                              <div className="space-y-1.5">
+                                <p className="text-xs font-medium text-blue-600 flex items-center gap-1">
+                                  <FileText className="h-3.5 w-3.5" />
+                                  字数风险 ({combinedReport.volumeProgressCheck.wordCountIssues.length})
+                                </p>
+                                {combinedReport.volumeProgressCheck.wordCountIssues.map((issue: any, i: number) => (
+                                  <div key={`vpc-wc-${i}`} className={`p-2.5 rounded-lg border text-xs ${
+                                    issue.severity === 'error'
+                                      ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800'
+                                      : 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800'
+                                  }`}>
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                      <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${issue.severity === 'error' ? 'text-red-500' : 'text-yellow-500'}`} />
+                                      <span className="font-medium text-xs">第{issue.chapterNumber}章「{issue.chapterTitle}」</span>
+                                      <Badge variant="outline" className={`ml-auto text-[10px] h-4 ${issue.severity === 'error' ? 'border-red-300 text-red-600' : 'border-yellow-300 text-yellow-600'}`}>
+                                        {issue.severity === 'error' ? '严重' : '轻微'}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-muted-foreground pl-5">{issue.message}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {combinedReport.volumeProgressCheck.rhythmIssues.length > 0 && (
+                              <div className="space-y-1.5">
+                                <p className="text-xs font-medium text-purple-600 flex items-center gap-1">
+                                  <AlignLeft className="h-3.5 w-3.5" />
+                                  节奏风险 ({combinedReport.volumeProgressCheck.rhythmIssues.length})
+                                </p>
+                                {combinedReport.volumeProgressCheck.rhythmIssues.map((issue: any, i: number) => (
+                                  <div key={`vpc-rh-${i}`} className={`p-2.5 rounded-lg border text-xs ${
+                                    issue.severity === 'error'
+                                      ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800'
+                                      : 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800'
+                                  }`}>
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                      <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${issue.severity === 'error' ? 'text-red-500' : 'text-yellow-500'}`} />
+                                      <span className="font-medium text-xs">第{issue.chapterNumber}章「{issue.chapterTitle}」</span>
+                                      <Badge className={`ml-auto text-[10px] h-4 ${issue.severity === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'}`}>
+                                        {issue.dimension}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-muted-foreground pl-5">{issue.deviation}</p>
+                                    {issue.suggestion && (
+                                      <p className="text-blue-600 dark:text-blue-400 pl-5 mt-1">调整建议：{issue.suggestion}</p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {combinedReport.volumeProgressCheck.wordCountIssues.length === 0 && combinedReport.volumeProgressCheck.rhythmIssues.length === 0 && (
+                              <div className="flex items-center gap-2 p-3 bg-green-50/50 dark:bg-green-950/20 border border-green-200/50 dark:border-green-800/30 rounded-lg text-xs text-green-700 dark:text-green-300">
+                                <CheckCircle className="h-4 w-4" />
+                                <span>字数和节奏均在健康范围内</span>
+                              </div>
+                            )}
                           </div>
                         </section>
                       )}
 
-                      {!combinedReport.characterCheck?.conflicts?.length &&
-                       !combinedReport.characterCheck?.warnings?.filter((w: string) => !w.includes('失败'))?.length &&
-                       !combinedReport.coherenceCheck?.issues?.length &&
-                       (!combinedReport.volumeProgressCheck || (combinedReport.volumeProgressCheck.wordCountIssues.length === 0 && combinedReport.volumeProgressCheck.rhythmIssues.length === 0)) && (
+                      {!(
+                        (combinedReport.characterCheck?.conflicts?.length > 0 || combinedReport.characterCheck?.warnings?.filter((w: string) => !w.includes('失败'))?.length > 0) ||
+                        combinedReport.coherenceCheck?.issues?.length > 0 ||
+                        (combinedReport.volumeProgressCheck && (combinedReport.volumeProgressCheck.wordCountIssues.length > 0 || combinedReport.volumeProgressCheck.rhythmIssues.length > 0))
+                      ) && (
                         <div className="flex flex-col items-center gap-3 p-8 bg-gradient-to-br from-green-50 via-emerald-50/30 to-transparent dark:from-green-950/40 dark:via-emerald-950/10 dark:to-transparent border border-green-200/60 dark:border-green-800/30 rounded-xl">
                           <CheckCircle className="h-12 w-12 text-green-500" />
                           <div className="text-center space-y-1">
