@@ -5,16 +5,16 @@
  * @modified 2026-04-21 - 添加规范化注释
  */
 import { drizzle } from 'drizzle-orm/d1'
-import { novels, chapters, volumes, exports } from '../db/schema'
-import { eq, and, isNull, asc } from 'drizzle-orm'
+import { novels, chapters, volumes, exports, masterOutline, novelSettings, characters, foreshadowing, writingRules } from '../db/schema'
+import { eq, and, isNull, asc, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 
 export interface ExportOptions {
-  format: 'md' | 'txt' | 'epub' | 'html' | 'zip'
+  format: 'md' | 'txt' | 'epub' | 'html' | 'zip' | 'entity-tree'
   novelId: string
-  volumeIds?: string[]  // 按卷范围导出（可选）
-  includeTOC?: boolean  // 是否包含目录
-  includeMeta?: boolean // 是否包含元数据
+  volumeIds?: string[]
+  includeTOC?: boolean
+  includeMeta?: boolean
 }
 
 export interface ChapterData {
@@ -576,6 +576,345 @@ export async function exportAsZip(env: Env, options: ExportOptions): Promise<Blo
   }
 }
 
+interface EntityTreeExportData {
+  novel: {
+    id: string
+    title: string
+    description: string | null
+    genre: string | null
+    status: string
+    wordCount: number
+    chapterCount: number
+    targetWordCount: number | null
+    targetChapterCount: number | null
+    systemPrompt: string | null
+    createdAt: number
+    updatedAt: number
+  }
+  masterOutline: {
+    id: string
+    title: string
+    content: string | null
+    version: number
+    summary: string | null
+    wordCount: number
+  } | null
+  settings: Array<{
+    id: string
+    type: string
+    category: string | null
+    name: string
+    content: string
+    summary: string | null
+    importance: string
+    sortOrder: number
+  }>
+  volumes: Array<{
+    id: string
+    title: string
+    sortOrder: number
+    eventLine: string | null
+    blueprint: string | null
+    summary: string | null
+    status: string
+    wordCount: number
+    chapterCount: number
+    targetWordCount: number | null
+    targetChapterCount: number | null
+    notes: string | null
+    chapters: Array<{
+      id: string
+      title: string
+      sortOrder: number
+      content: string | null
+      wordCount: number
+      status: string
+      summary: string | null
+    }>
+  }>
+  characters: Array<{
+    id: string
+    name: string
+    aliases: string | null
+    role: string | null
+    description: string | null
+    attributes: string | null
+    powerLevel: string | null
+  }>
+  foreshadowingItems: Array<{
+    id: string
+    title: string
+    description: string | null
+    status: string
+    importance: string
+    chapterId: string | null
+    volumeId: string | null
+    resolvedChapterId: string | null
+  }>
+  writingRules: Array<{
+    id: string
+    category: string
+    title: string
+    content: string
+    priority: number
+    isActive: number
+    sortOrder: number
+  }>
+}
+
+async function loadFullNovelData(db: any, novelId: string): Promise<EntityTreeExportData> {
+  const novel = await db.select().from(novels).where(eq(novels.id, novelId)).get()
+  if (!novel) throw new Error('小说不存在')
+
+  const mo = await db.select()
+    .from(masterOutline)
+    .where(and(eq(masterOutline.novelId, novelId), sql`${masterOutline.deletedAt} IS NULL`))
+    .get()
+
+  const settingList = await db.select()
+    .from(novelSettings)
+    .where(and(eq(novelSettings.novelId, novelId), sql`${novelSettings.deletedAt} IS NULL`))
+    .orderBy(novelSettings.sortOrder)
+    .all()
+
+  const volumeList = await db.select()
+    .from(volumes)
+    .where(and(eq(volumes.novelId, novelId), sql`${volumes.deletedAt} IS NULL`))
+    .orderBy(volumes.sortOrder)
+    .all()
+
+  const volumesWithChapters = await Promise.all(
+    volumeList.map(async (vol: { id: string }) => {
+      const chapterList = await db.select({
+        id: chapters.id,
+        title: chapters.title,
+        sortOrder: chapters.sortOrder,
+        content: chapters.content,
+        wordCount: chapters.wordCount,
+        status: chapters.status,
+        summary: chapters.summary,
+      })
+        .from(chapters)
+        .where(and(eq(chapters.volumeId, vol.id), sql`${chapters.deletedAt} IS NULL`))
+        .orderBy(chapters.sortOrder)
+        .all()
+
+      return {
+        ...vol,
+        chapters: chapterList,
+      }
+    })
+  )
+
+  const charList = await db.select()
+    .from(characters)
+    .where(and(eq(characters.novelId, novelId), sql`${characters.deletedAt} IS NULL`))
+    .all()
+
+  const foreshadowingList = await db.select()
+    .from(foreshadowing)
+    .where(and(eq(foreshadowing.novelId, novelId), sql`${foreshadowing.deletedAt} IS NULL`))
+    .all()
+
+  const rulesList = await db.select()
+    .from(writingRules)
+    .where(and(eq(writingRules.novelId, novelId), sql`${writingRules.deletedAt} IS NULL`))
+    .orderBy(writingRules.sortOrder)
+    .all()
+
+  return {
+    novel: {
+      id: novel.id,
+      title: novel.title,
+      description: novel.description,
+      genre: novel.genre,
+      status: novel.status,
+      wordCount: novel.wordCount,
+      chapterCount: novel.chapterCount,
+      targetWordCount: novel.targetWordCount,
+      targetChapterCount: novel.targetChapterCount,
+      systemPrompt: novel.systemPrompt,
+      createdAt: novel.createdAt,
+      updatedAt: novel.updatedAt,
+    },
+    masterOutline: mo ? {
+      id: mo.id,
+      title: mo.title,
+      content: mo.content,
+      version: mo.version,
+      summary: mo.summary,
+      wordCount: mo.wordCount,
+    } : null,
+    settings: settingList.map((s: { id: string; type: string; category: string | null; name: string; content: string; summary: string | null; importance: string; sortOrder: number }) => ({
+      id: s.id,
+      type: s.type,
+      category: s.category,
+      name: s.name,
+      content: s.content,
+      summary: s.summary,
+      importance: s.importance,
+      sortOrder: s.sortOrder,
+    })),
+    volumes: volumesWithChapters,
+    characters: charList.map((c: { id: string; name: string; aliases: string | null; role: string | null; description: string | null; attributes: string | null; powerLevel: string | null }) => ({
+      id: c.id,
+      name: c.name,
+      aliases: c.aliases,
+      role: c.role,
+      description: c.description,
+      attributes: c.attributes,
+      powerLevel: c.powerLevel,
+    })),
+    foreshadowingItems: foreshadowingList.map((f: { id: string; title: string; description: string | null; status: string; importance: string; chapterId: string | null; volumeId: string | null; resolvedChapterId: string | null }) => ({
+      id: f.id,
+      title: f.title,
+      description: f.description,
+      status: f.status,
+      importance: f.importance,
+      chapterId: f.chapterId,
+      volumeId: f.volumeId,
+      resolvedChapterId: f.resolvedChapterId,
+    })),
+    writingRules: rulesList.map((r: { id: string; category: string; title: string; content: string; priority: number; isActive: number; sortOrder: number }) => ({
+      id: r.id,
+      category: r.category,
+      title: r.title,
+      content: r.content,
+      priority: r.priority,
+      isActive: r.isActive,
+      sortOrder: r.sortOrder,
+    })),
+  }
+}
+
+export async function exportAsEntityTreeZip(env: Env, options: ExportOptions): Promise<Blob> {
+  try {
+    const JSZip = (await import('jszip')).default
+    const db = drizzle(env.DB)
+    const data = await loadFullNovelData(db, options.novelId)
+
+    const zip = new JSZip()
+    const title = sanitizeFilename(data.novel.title)
+
+    zip.file('manifest.json', JSON.stringify({
+      version: '1.0.0',
+      exportTime: new Date().toISOString(),
+      novel: {
+        id: data.novel.id,
+        title: data.novel.title,
+      },
+      structure: [
+        'novel.json',
+        'master-outline/',
+        'settings/',
+        'volumes/',
+        'characters/',
+        'foreshadowing/',
+        'rules/',
+      ],
+    }, null, 2))
+
+    zip.file('novel.json', JSON.stringify(data.novel, null, 2))
+
+    if (data.masterOutline) {
+      zip.file('master-outline/outline.json', JSON.stringify(data.masterOutline, null, 2))
+      if (data.masterOutline.content) {
+        zip.file('master-outline/content.md', data.masterOutline.content)
+      }
+    }
+
+    data.settings.forEach((setting, idx) => {
+      const safeName = sanitizeFilename(setting.name)
+      zip.file(`settings/${String(idx + 1).padStart(2, '0')}_${safeName}.json`, JSON.stringify(setting, null, 2))
+      zip.file(`settings/${String(idx + 1).padStart(2, '0')}_${safeName}.md`, setting.content)
+    })
+
+    data.volumes.forEach((vol, volIdx) => {
+      const volSafeName = sanitizeFilename(vol.title)
+      const volDir = `volumes/${String(volIdx + 1).padStart(2, '0')}_${volSafeName}`
+
+      zip.file(`${volDir}/volume.json`, JSON.stringify({
+        id: vol.id,
+        title: vol.title,
+        sortOrder: vol.sortOrder,
+        eventLine: vol.eventLine,
+        blueprint: vol.blueprint,
+        summary: vol.summary,
+        status: vol.status,
+        wordCount: vol.wordCount,
+        chapterCount: vol.chapterCount,
+        targetWordCount: vol.targetWordCount,
+        targetChapterCount: vol.targetChapterCount,
+        notes: vol.notes,
+      }, null, 2))
+
+      if (vol.eventLine) {
+        zip.file(`${volDir}/event-line.md`, vol.eventLine)
+      }
+      if (vol.blueprint) {
+        zip.file(`${volDir}/blueprint.md`, vol.blueprint)
+      }
+      if (vol.summary) {
+        zip.file(`${volDir}/summary.md`, vol.summary)
+      }
+
+      vol.chapters.forEach((ch, chIdx) => {
+        const chSafeName = sanitizeFilename(ch.title)
+        zip.file(`${volDir}/chapters/${String(chIdx + 1).padStart(3, '0')}_${chSafeName}.json`, JSON.stringify({
+          id: ch.id,
+          title: ch.title,
+          sortOrder: ch.sortOrder,
+          wordCount: ch.wordCount,
+          status: ch.status,
+          summary: ch.summary,
+        }, null, 2))
+
+        if (ch.content) {
+          zip.file(`${volDir}/chapters/${String(chIdx + 1).padStart(3, '0')}_${chSafeName}.md`, ch.content)
+        }
+      })
+    })
+
+    data.characters.forEach((char, idx) => {
+      const safeName = sanitizeFilename(char.name)
+      zip.file(`characters/${String(idx + 1).padStart(2, '0')}_${safeName}.json`, JSON.stringify(char, null, 2))
+      if (char.description) {
+        zip.file(`characters/${String(idx + 1).padStart(2, '0')}_${safeName}.md`, char.description)
+      }
+    })
+
+    data.foreshadowingItems.forEach((item, idx) => {
+      const safeName = sanitizeFilename(item.title)
+      zip.file(`foreshadowing/${String(idx + 1).padStart(2, '0')}_${safeName}.json`, JSON.stringify(item, null, 2))
+      if (item.description) {
+        zip.file(`foreshadowing/${String(idx + 1).padStart(2, '0')}_${safeName}.md`, item.description)
+      }
+    })
+
+    data.writingRules.forEach((rule, idx) => {
+      const safeName = sanitizeFilename(rule.title)
+      zip.file(`rules/${String(idx + 1).padStart(2, '0')}_${safeName}.json`, JSON.stringify(rule, null, 2))
+      zip.file(`rules/${String(idx + 1).padStart(2, '0')}_${safeName}.md`, rule.content)
+    })
+
+    const zipBlob = await zip.generateAsync({
+      type: 'blob',
+      mimeType: 'application/zip',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 6 },
+    })
+
+    if (!zipBlob || !(zipBlob instanceof Blob)) {
+      throw new Error('实体树数据包生成返回了无效的结果')
+    }
+
+    return zipBlob
+  } catch (error) {
+    console.error('Entity tree export failed:', error)
+    throw new Error(`实体树数据包导出失败: ${(error as Error).message}`)
+  }
+}
+
 // ========== 工具函数 ==========
 
 /**
@@ -704,6 +1043,9 @@ export async function performExport(
     case 'zip':
       blob = await exportAsZip(env, options)
       break
+    case 'entity-tree':
+      blob = await exportAsEntityTreeZip(env, options)
+      break
     default:
       throw new Error(`Unsupported format: ${format}`)
   }
@@ -723,6 +1065,7 @@ function getContentType(format: string): string {
     case 'html':
       return 'text/html; charset=utf-8'
     case 'zip':
+    case 'entity-tree':
       return 'application/zip'
     default:
       return 'application/octet-stream'
@@ -732,5 +1075,6 @@ function getContentType(format: string): string {
 function getFileExtension(format: string): string {
   if (format === 'epub') return 'epub'
   if (format === 'html') return 'html'
+  if (format === 'entity-tree') return 'zip'
   return format
 }

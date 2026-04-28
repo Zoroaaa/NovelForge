@@ -26,7 +26,9 @@ import { buildChapterContext } from '../services/contextBuilder'
 import { buildMessages } from '../services/agent/messages'
 import { drizzle } from 'drizzle-orm/d1'
 import { novels, chapters } from '../db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, isNull } from 'drizzle-orm'
+import { enqueue } from '../lib/queue'
+import { checkAndCompleteVolume } from '../services/agent/volumeCompletion'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -60,6 +62,19 @@ const GenerateSchema = z.object({
 router.post('/chapter', async (c) => {
   const body = GenerateSchema.parse(await c.req.json())
   const { chapterId, novelId, mode, existingContent, targetWords, issuesContext, options } = body
+
+  try {
+    const db = drizzle(c.env.DB)
+    const chapterRow = await db.select({ volumeId: chapters.volumeId }).from(chapters).where(eq(chapters.id, chapterId)).get()
+    if (chapterRow?.volumeId) {
+      const volumeCheck = await checkAndCompleteVolume(c.env, chapterRow.volumeId)
+      if (volumeCheck.completed) {
+        return c.json({ error: 'VOLUME_COMPLETED', message: '该卷已达到目标章节数，无法继续生成' }, 403)
+      }
+    }
+  } catch {
+    // 卷完成检测失败不阻塞生成
+  }
 
   const { readable, writable } = new TransformStream()
   const writer = writable.getWriter()
@@ -179,6 +194,52 @@ router.post('/chapter', async (c) => {
       'X-Accel-Buffering': 'no',
     },
   })
+})
+
+/**
+ * POST /chapter/queue - 后台生成章节内容（异步队列模式）
+ * @description 将章节生成任务提交到队列，立即返回，用户可关闭页面
+ * @param {string} chapterId - 章节ID
+ * @param {string} novelId - 小说ID
+ * @param {string} [mode='generate'] - 生成模式：generate | continue | rewrite
+ * @param {string} [existingContent] - 现有内容（续写/重写模式需要）
+ * @param {Object} [options] - 可选配置
+ * @returns {Object} { ok: boolean, taskId: string, message: string }
+ */
+router.post('/chapter/queue', async (c) => {
+  const body = GenerateSchema.parse(await c.req.json())
+  const { chapterId, novelId, mode, existingContent, targetWords, issuesContext, options } = body
+
+  try {
+    const taskId = await enqueue(c.env, {
+      type: 'generate_chapter',
+      payload: {
+        chapterId,
+        novelId,
+        mode: mode || 'generate',
+        existingContent,
+        targetWords,
+        issuesContext,
+        enableRAG: options?.enableRAG,
+        enableAutoSummary: options?.enableAutoSummary,
+      },
+    })
+
+    return c.json({
+      ok: true,
+      message: '章节生成任务已提交到后台队列',
+      taskId,
+    })
+  } catch (error) {
+    console.error('Failed to enqueue generation task:', error)
+    return c.json(
+      {
+        error: 'Failed to enqueue generation task',
+        details: (error as Error).message,
+      },
+      500
+    )
+  }
 })
 
 /**

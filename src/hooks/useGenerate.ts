@@ -6,7 +6,7 @@
  */
 import { useState, useRef } from 'react'
 import { toast } from 'sonner'
-import { streamGenerate } from '@/lib/api'
+import { streamGenerate, api } from '@/lib/api'
 import type { ContextBundle } from '@/components/generate/ContextPreview'
 
 export interface ToolCallEvent {
@@ -24,6 +24,7 @@ export function useGenerate() {
   const [usage, setUsage] = useState<{ prompt_tokens: number; completion_tokens: number } | null>(null)
   const [repairedContent, setRepairedContent] = useState<string | null>(null)
   const [repairInfo, setRepairInfo] = useState<{ originalScore: number; issues: Array<{ severity: 'error' | 'warning'; category?: string; message: string; suggestion?: string }> } | null>(null)
+  const [queueStatus, setQueueStatus] = useState<'idle' | 'submitting' | 'submitted'>('idle')
   const stopRef = useRef<(() => void) | null>(null)
 
   const generate = (chapterId: string, novelId: string, options?: {
@@ -132,7 +133,43 @@ export function useGenerate() {
     setStatus('idle')
   }
 
+  const generateQueue = async (chapterId: string, novelId: string, options?: {
+    mode?: 'generate' | 'continue' | 'rewrite'
+    existingContent?: string
+    targetWords?: number
+    issuesContext?: string[]
+  }) => {
+    setQueueStatus('submitting')
+
+    try {
+      const result = await api.generate.chapterQueue({
+        chapterId,
+        novelId,
+        mode: options?.mode || 'generate',
+        existingContent: options?.existingContent,
+        targetWords: options?.targetWords,
+        issuesContext: options?.issuesContext,
+      })
+
+      if (result.ok) {
+        setQueueStatus('submitted')
+        toast.success('章节生成任务已提交到后台队列', {
+          description: '您可以关闭页面，任务将在后台继续执行',
+          duration: 5000,
+        })
+      } else {
+        throw new Error(result.error || '提交失败')
+      }
+    } catch (error) {
+      setQueueStatus('idle')
+      toast.error('后台生成任务提交失败', {
+        description: (error as Error).message,
+        duration: 5000,
+      })
+    }
+  }
+
   const clearRepair = () => { setRepairedContent(null); setRepairInfo(null) }
 
-  return { output, status, generate, stop, contextInfo, setContextInfo, toolCalls, usage, repairedContent, repairInfo, clearRepair }
+  return { output, status, generate, stop, contextInfo, setContextInfo, toolCalls, usage, repairedContent, repairInfo, clearRepair, queueStatus, generateQueue }
 }

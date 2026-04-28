@@ -18,7 +18,6 @@ const {
   writingRules,
   characters,
   volumes,
-  chapters,
   foreshadowing,
   entityIndex,
 } = schema
@@ -409,71 +408,6 @@ export async function commitWorkshopSessionCore(
     createdItems.volumes = createdVolumes
   }
 
-  if (data.chapters && data.chapters.length > 0 && (isNewNovel || stage === 'chapter_outline')) {
-    const existingChapters = await db
-      .select()
-      .from(chapters)
-      .where(and(eq(chapters.novelId, novelId), isNull(chapters.deletedAt)))
-      .all()
-    const chapterMap = new Map(
-      existingChapters.map((c: typeof existingChapters[number]) => [c.title, c])
-    )
-
-    const volumeIdMap: Map<number, string> = new Map()
-    if (createdItems.volumes && createdItems.volumes.length > 0 && data.volumes) {
-      let chapterIndex = 0
-      for (let v = 0; v < data.volumes.length; v++) {
-        const volChapterCount = data.volumes[v]?.targetChapterCount || 0
-        for (let c = 0; c < volChapterCount && chapterIndex < data.chapters.length; c++) {
-          volumeIdMap.set(chapterIndex, createdItems.volumes[v].id)
-          chapterIndex++
-        }
-      }
-    }
-
-    const createdChapters: any[] = []
-    for (let i = 0; i < data.chapters.length; i++) {
-      const ch = data.chapters[i]
-      const existing = chapterMap.get(ch.title)
-      let chapter: any
-
-      if (existing) {
-        await db.update(chapters)
-          .set({
-            volumeId: volumeIdMap.get(i) || existing.volumeId,
-            sortOrder: i,
-            content: ch.outline || null,
-            wordCount: (ch.outline || '').length,
-            summary: ch.summary || null,
-            updatedAt: Math.floor(Date.now() / 1000),
-          })
-          .where(eq(chapters.id, existing.id))
-          .run()
-        chapter = {
-          ...existing,
-          volumeId: volumeIdMap.get(i) || existing.volumeId,
-          sortOrder: i,
-          content: ch.outline || null,
-          summary: ch.summary || null,
-        }
-      } else {
-        const [newChapter] = await db.insert(chapters).values({
-          novelId,
-          volumeId: volumeIdMap.get(i) || null,
-          title: ch.title,
-          sortOrder: i,
-          content: ch.outline || null,
-          wordCount: (ch.outline || '').length,
-          status: 'outline',
-          summary: ch.summary || null,
-        }).returning()
-        chapter = newChapter
-      }
-      createdChapters.push(chapter)
-    }
-    createdItems.chapters = createdChapters
-  }
-
   await rebuildEntityIndex(db, novelId, data)
 
   await db.update(workshopSessions)
@@ -545,22 +479,6 @@ export async function rebuildEntityIndex(
         title: vol.title,
         sortOrder: i,
         depth: 1,
-      })
-    }
-  }
-
-  if (data.chapters) {
-    for (let i = 0; i < data.chapters.length; i++) {
-      const ch = data.chapters[i]
-      entries.push({
-        entityType: 'chapter',
-        entityId: `ch_${i}`,
-        novelId,
-        parentId: novelId,
-        title: ch.title,
-        sortOrder: i,
-        depth: 1,
-        meta: JSON.stringify({ summary: ch.summary }),
       })
     }
   }

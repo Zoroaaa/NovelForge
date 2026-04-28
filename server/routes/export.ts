@@ -18,7 +18,7 @@ const router = new Hono<{ Bindings: Env }>()
 
 const ExportSchema = z.object({
   novelId: z.string().min(1),
-  format: z.enum(['md', 'txt', 'epub', 'html', 'zip']),
+  format: z.enum(['md', 'txt', 'epub', 'html', 'zip', 'entity-tree']),
   volumeIds: z.array(z.string()).optional(),
   includeTOC: z.boolean().optional(),
   includeMeta: z.boolean().optional(),
@@ -132,6 +132,13 @@ router.get('/formats', (c) => {
         id: 'zip',
         name: 'ZIP 打包',
         description: '包含所有格式的压缩包（MD + TXT + EPUB）',
+        extension: '.zip',
+        mimeType: 'application/zip',
+      },
+      {
+        id: 'entity-tree',
+        name: '实体树数据包',
+        description: '按实体树架构导出完整小说数据（含设定/角色/伏笔/规则等），适合备份和迁移',
         extension: '.zip',
         mimeType: 'application/zip',
       },

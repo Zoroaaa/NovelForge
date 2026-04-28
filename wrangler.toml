@@ -36,9 +36,10 @@ queue = "novelforge-tasks"
 
 [[queues.consumers]]
 queue = "novelforge-tasks"
-max_batch_size = 10
-max_batch_timeout = 5
+max_batch_size = 5
+max_batch_timeout = 10
 max_retries = 3
+max_concurrency = 1
 
 # vectorize建库
 # npx wrangler vectorize create novelforge-index --dimensions=1024 --metric=cosine

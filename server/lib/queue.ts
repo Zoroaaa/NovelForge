@@ -48,6 +48,44 @@ export type QueueMessage =
         sessionId: string
       }
     }
+  | {
+      type: 'batch_generate_chapter'
+      payload: {
+        taskId: string
+        novelId: string
+        volumeId: string
+      }
+    }
+  | {
+      type: 'batch_chapter_done'
+      payload: {
+        taskId: string
+        novelId: string
+        volumeId: string
+        chapterId: string
+        success: boolean
+      }
+    }
+  | {
+      type: 'quality_check'
+      payload: {
+        chapterId: string
+        novelId: string
+      }
+    }
+  | {
+      type: 'generate_chapter'
+      payload: {
+        chapterId: string
+        novelId: string
+        mode: 'generate' | 'continue' | 'rewrite'
+        existingContent?: string
+        targetWords?: number
+        issuesContext?: string[]
+        enableRAG?: boolean
+        enableAutoSummary?: boolean
+      }
+    }
 
 export async function enqueue(
   env: Env,

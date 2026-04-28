@@ -28,6 +28,7 @@ import {
   Loader2,
   CheckCircle2,
   Settings2,
+  TreePine,
 } from 'lucide-react'
 
 interface ExportDialogProps {
@@ -35,7 +36,7 @@ interface ExportDialogProps {
   novelTitle?: string
 }
 
-type FormatId = 'md' | 'txt' | 'epub' | 'zip'
+type FormatId = 'md' | 'txt' | 'epub' | 'zip' | 'entity-tree'
 
 interface FormatOption {
   id: FormatId
@@ -83,6 +84,15 @@ const FORMAT_OPTIONS: FormatOption[] = [
     extension: '.zip',
     color: 'text-orange-600',
     bgColor: 'bg-orange-50',
+  },
+  {
+    id: 'entity-tree',
+    name: '实体树数据包',
+    icon: TreePine,
+    description: '按实体树架构导出完整数据（含设定/角色/伏笔/规则等）',
+    extension: '.zip',
+    color: 'text-emerald-600',
+    bgColor: 'bg-emerald-50',
   },
 ]
 
@@ -286,6 +296,7 @@ export function ExportDialog({ novelId, novelTitle }: ExportDialogProps) {
             <ul className="list-disc list-inside space-y-0.5 ml-2">
               <li>EPUB 格式可在电子阅读器或手机上阅读</li>
               <li>ZIP 打包包含所有格式，方便归档备份</li>
+              <li>实体树数据包包含完整小说数据（设定/角色/伏笔/规则/章节等），适合备份和迁移</li>
               <li>导出的文件将自动下载到您的设备</li>
             </ul>
           </div>

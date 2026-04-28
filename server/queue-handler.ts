@@ -11,6 +11,11 @@ import { checkVolumeProgress } from './services/agent/volumeProgress'
 import { logGeneration } from './services/agent/logging'
 import { saveCheckLog } from './services/agent/checkLogService'
 import { commitWorkshopSessionCore } from './services/workshop'
+import { generateChapter } from './services/agent/generation'
+import { startBatchGeneration as enqueueNextBatchChapter, incrementCompleted, markTaskDone, markTaskFailed, getBatchTask } from './services/agent/batchGenerate'
+import { checkAndCompleteVolume } from './services/agent/volumeCompletion'
+import { buildPrevChapterAdvice } from './services/agent/prevChapterAdvice'
+import { checkQuality } from './services/agent/qualityCheck'
 import { drizzle } from 'drizzle-orm/d1'
 import { novelSettings, characters, foreshadowing, chapters, queueTaskLogs, vectorIndex } from './db/schema'
 import { eq, and, sql } from 'drizzle-orm'
@@ -65,6 +70,58 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
       console.log(`[Queue] 开始处理 commit_workshop task for session ${msg.payload.sessionId}`)
       const result = await commitWorkshopSessionCore(env, msg.payload.sessionId)
       console.log(`[Queue] commit_workshop 完成: novelId=${result.novelId}`)
+      break
+    }
+
+    case 'generate_chapter': {
+      const { chapterId, novelId, mode, existingContent, targetWords, issuesContext, enableRAG, enableAutoSummary } = msg.payload
+
+      console.log(`[Queue] 开始后台生成章节: chapter=${chapterId}, novel=${novelId}, mode=${mode}`)
+
+      await generateChapter(
+        env,
+        chapterId,
+        novelId,
+        (text) => {
+          console.log(`[Queue] 生成进度: ${text.slice(0, 50)}...`)
+        },
+        (event) => {
+          console.log(`[Queue] 工具调用: ${event.name}`)
+        },
+        async (usage, modelId) => {
+          console.log(`[Queue] 章节生成完成: model=${modelId}, tokens=${usage.completion_tokens}`)
+
+          await logGeneration(env, {
+            novelId,
+            chapterId,
+            stage: 'chapter_gen',
+            modelId,
+            promptTokens: usage.prompt_tokens,
+            completionTokens: usage.completion_tokens,
+            durationMs: 0,
+            status: 'success',
+          })
+        },
+        async (error) => {
+          console.error(`[Queue] 章节生成失败:`, error)
+
+          await logGeneration(env, {
+            novelId,
+            chapterId,
+            stage: 'chapter_gen',
+            modelId: 'unknown',
+            durationMs: 0,
+            status: 'error',
+            errorMsg: error.message,
+          })
+
+          throw error
+        },
+        { enableRAG: enableRAG ?? true, enableAutoSummary: enableAutoSummary ?? true },
+        { mode, existingContent, targetWords, issuesContext }
+      )
+
+      console.log(`[Queue] 后台章节生成全部完成 for chapter ${chapterId}`)
       break
     }
 
@@ -269,6 +326,149 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
       }
 
       console.log(`✅ [Queue] 章节后处理全部完成 for chapter ${chapterId}`)
+
+      // ----- 步骤7：质量评分（Phase 2）-----
+      if (env.TASK_QUEUE) {
+        await env.TASK_QUEUE.send({
+          type: 'quality_check',
+          payload: { chapterId, novelId },
+        })
+      }
+
+      break
+    }
+
+    case 'batch_generate_chapter': {
+      const { taskId, novelId, volumeId } = msg.payload
+      const db = drizzle(env.DB)
+
+      const task = await getBatchTask(env, taskId)
+      if (!task || (task.status !== 'running' && task.status !== 'paused')) {
+        console.log(`[Queue] batch task ${taskId} status=${task?.status}, skipping`)
+        break
+      }
+
+      if (task.status === 'paused') {
+        console.log(`[Queue] batch task ${taskId} is paused, skipping`)
+        break
+      }
+
+      const volumeCompleted = await checkAndCompleteVolume(env, volumeId)
+      if (volumeCompleted.completed) {
+        console.log(`[Queue] volume ${volumeId} completed, marking batch done`)
+        await markTaskDone(env, taskId)
+        break
+      }
+
+      const currentOrder = task.currentChapterOrder ?? task.startChapterOrder
+
+      let chapter = await db.select()
+        .from(chapters)
+        .where(and(eq(chapters.volumeId, volumeId), eq(chapters.sortOrder, currentOrder)))
+        .get()
+
+      if (!chapter) {
+        const now = Math.floor(Date.now() / 1000)
+        ;[chapter] = await db.insert(chapters).values({
+          novelId,
+          volumeId,
+          title: `第${currentOrder}章`,
+          sortOrder: currentOrder,
+          status: 'draft',
+          wordCount: 0,
+          createdAt: now,
+          updatedAt: now,
+        }).returning()
+      }
+
+      let prevChapterAdvice: string | null = null
+      if (currentOrder > task.startChapterOrder) {
+        const prevChapters = await db.select({ id: chapters.id })
+          .from(chapters)
+          .where(and(eq(chapters.volumeId, volumeId), eq(chapters.sortOrder, currentOrder - 1)))
+          .limit(1)
+          .all()
+
+        if (prevChapters.length > 0) {
+          try {
+            prevChapterAdvice = await buildPrevChapterAdvice(env, prevChapters[0].id)
+          } catch (e) {
+            console.warn('[Queue] buildPrevChapterAdvice failed:', e)
+          }
+        }
+      }
+
+      try {
+        await generateChapter(
+          env,
+          chapter.id,
+          novelId,
+          () => {},
+          () => {},
+          async () => {},
+          async (error) => { throw error },
+          { enableRAG: true, enableAutoSummary: true },
+          { issuesContext: prevChapterAdvice ? [prevChapterAdvice] : undefined }
+        )
+
+        if (env.TASK_QUEUE) {
+          await env.TASK_QUEUE.send({
+            type: 'post_process_chapter',
+            payload: { chapterId: chapter.id, novelId, enableAutoSummary: true },
+          })
+        }
+
+        if (env.TASK_QUEUE) {
+          await env.TASK_QUEUE.send({
+            type: 'batch_chapter_done',
+            payload: { taskId, novelId, volumeId, chapterId: chapter.id, success: true },
+          })
+        }
+      } catch (genError) {
+        console.error(`[Queue] batch chapter generation failed:`, genError)
+
+        if (env.TASK_QUEUE) {
+          await env.TASK_QUEUE.send({
+            type: 'batch_chapter_done',
+            payload: { taskId, novelId, volumeId, chapterId: chapter.id, success: false },
+          })
+        }
+      }
+
+      break
+    }
+
+    case 'batch_chapter_done': {
+      const { taskId, success } = msg.payload
+
+      await incrementCompleted(env, taskId, success)
+
+      const task = await getBatchTask(env, taskId)
+      if (!task) break
+
+      if (task.completedCount + task.failedCount >= task.targetCount) {
+        await markTaskDone(env, taskId)
+        console.log(`[Queue] batch task ${taskId} done: ${task.completedCount}/${task.targetCount}`)
+      } else if (task.status === 'running' && env.TASK_QUEUE) {
+        await env.TASK_QUEUE.send({
+          type: 'batch_generate_chapter',
+          payload: { taskId, novelId: task.novelId, volumeId: task.volumeId },
+        })
+      }
+
+      break
+    }
+
+    case 'quality_check': {
+      const { chapterId, novelId } = msg.payload
+
+      try {
+        await checkQuality(env, { chapterId, novelId })
+        console.log(`✅ [Queue] 质量评分完成 for chapter ${chapterId}`)
+      } catch (qualityError) {
+        console.warn('[Queue] 质量评分失败（非致命）:', qualityError)
+      }
+
       break
     }
 
@@ -467,5 +667,13 @@ function getNovelId(msg: QueueMessage): string {
       return msg.payload.novelId
     case 'commit_workshop':
       return ''
+    case 'generate_chapter':
+      return msg.payload.novelId
+    case 'batch_generate_chapter':
+      return msg.payload.novelId
+    case 'batch_chapter_done':
+      return msg.payload.novelId
+    case 'quality_check':
+      return msg.payload.novelId
   }
 }

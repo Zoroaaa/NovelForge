@@ -423,3 +423,44 @@ export const queueTaskLogs = sqliteTable('queue_task_logs', {
   index('idx_queue_logs_novel').on(table.novelId, table.createdAt),
   index('idx_queue_logs_status').on(table.status, table.createdAt),
 ])
+
+// ============================================================
+// 18.1 批量生成任务表（Phase 1）
+// ============================================================
+export const batchGenerationTasks = sqliteTable('batch_generation_tasks', {
+  id: text('id').primaryKey(),
+  novelId: text('novel_id').notNull(),
+  volumeId: text('volume_id').notNull(),
+  status: text('status').notNull().default('running'),
+  startChapterOrder: integer('start_chapter_order').notNull(),
+  targetCount: integer('target_count').notNull(),
+  completedCount: integer('completed_count').notNull().default(0),
+  failedCount: integer('failed_count').notNull().default(0),
+  currentChapterOrder: integer('current_chapter_order'),
+  errorMsg: text('error_msg'),
+  createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at').notNull().default(sql`(unixepoch())`),
+}, (table) => [
+  index('idx_batch_novel').on(table.novelId),
+  index('idx_batch_status').on(table.status),
+])
+
+// ============================================================
+// 18.2 质量评分表（Phase 2）
+// ============================================================
+export const qualityScores = sqliteTable('quality_scores', {
+  id: text('id').primaryKey(),
+  novelId: text('novel_id').notNull(),
+  chapterId: text('chapter_id').notNull(),
+  totalScore: integer('total_score'),
+  plotScore: integer('plot_score'),
+  consistencyScore: integer('consistency_score'),
+  foreshadowingScore: integer('foreshadowing_score'),
+  pacingScore: integer('pacing_score'),
+  fluencyScore: integer('fluency_score'),
+  details: text('details'),
+  createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
+}, (table) => [
+  index('idx_quality_chapter').on(table.chapterId),
+  index('idx_quality_novel').on(table.novelId, sql`${table.createdAt} DESC`),
+])

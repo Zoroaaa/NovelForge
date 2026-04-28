@@ -216,10 +216,6 @@ export function extractStructuredData(
         newData.volumes = validatedVolumes as typeof newData.volumes
       }
       break
-
-    case 'chapter_outline':
-      if (parsed.chapters) newData.chapters = parsed.chapters as Array<{ title: string; outline: string; summary?: string; characters?: string[]; foreshadowingActions?: Array<{ action: string; target: string; description: string }>; keyScenes?: string[] }>
-      break
   }
 
   return newData

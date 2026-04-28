@@ -9,7 +9,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Volume, Chapter } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Plus, Trash2, Edit2, BookOpen, ChevronDown, ChevronRight, FileText, FileCode, StickyNote, Wand2, Loader2 } from 'lucide-react'
+import { Plus, Trash2, Edit2, BookOpen, ChevronDown, ChevronRight, FileText, FileCode, StickyNote, Wand2, Loader2, CheckCircle2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { BatchGeneratePanel } from '@/components/generation/BatchGeneratePanel'
 import {
   Select,
   SelectContent,
@@ -434,6 +435,28 @@ export function VolumePanel({ novelId, onChapterSelect }: VolumePanelProps) {
 
                 {isExpanded && (
                   <div className="border-t bg-muted/10 space-y-2 p-3">
+                    {volume.status === 'completed' && (
+                      <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950 px-2 py-1 rounded">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        本卷已完成
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDialogOpen(true); setEditingId(null) }}
+                          className="ml-auto underline hover:no-underline"
+                        >
+                          创建新卷
+                        </button>
+                      </div>
+                    )}
+
+                    {volume.status !== 'completed' && (
+                      <BatchGeneratePanel
+                        novelId={novelId}
+                        volumeId={volume.id}
+                        targetChapterCount={volume.targetChapterCount || 0}
+                        currentChapterCount={volumeChapters.length}
+                        onGenerated={() => queryClient.invalidateQueries({ queryKey: ['volumes', novelId] })}
+                      />
+                    )}
                     {volume.summary && (
                       <div className="flex items-start gap-2">
                         <FileText className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0 mt-0.5" />

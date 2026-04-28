@@ -178,7 +178,6 @@ export function WorkshopSidebar({
                           {session.stage === 'worldbuild' && '世界观构建'}
                           {session.stage === 'character_design' && '角色设计'}
                           {session.stage === 'volume_outline' && '卷纲规划'}
-                          {session.stage === 'chapter_outline' && '章节大纲'}
                         </span>
                       )}
                     </div>

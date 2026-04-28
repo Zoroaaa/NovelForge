@@ -498,3 +498,32 @@ export interface VolumeProgressResult {
   suggestion: string
   raw?: string
 }
+
+export interface BatchTaskStatus {
+  id: string
+  novelId: string
+  volumeId: string
+  status: 'running' | 'paused' | 'done' | 'failed' | 'cancelled'
+  startChapterOrder: number
+  targetCount: number
+  completedCount: number
+  failedCount: number
+  currentChapterOrder: number | null
+  errorMsg: string | null
+  createdAt: number
+  updatedAt: number
+}
+
+export interface QualityScore {
+  id: string
+  novelId: string
+  chapterId: string
+  totalScore: number | null
+  plotScore: number | null
+  consistencyScore: number | null
+  foreshadowingScore: number | null
+  pacingScore: number | null
+  fluencyScore: number | null
+  details: string | null
+  createdAt: number
+}

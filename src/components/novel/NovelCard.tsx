@@ -275,10 +275,6 @@ export function NovelCard({ novel, onEdit, onDelete, onStatusChange, onWorkshopO
                 <Layers className="mr-2 h-4 w-4" />
                 继续卷纲规划
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onWorkshopOpen(novel.id, 'chapter_outline')} className="pl-6">
-                <FileText className="mr-2 h-4 w-4" />
-                继续章节大纲
-              </DropdownMenuItem>
             </>
           )}
           <DropdownMenuItem onClick={() => onEdit(novel)}>

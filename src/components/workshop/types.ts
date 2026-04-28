@@ -92,7 +92,6 @@ export const STAGES: Stage[] = [
   { id: 'worldbuild', label: '世界观构建', icon: Globe, description: '建立完整的世界观体系' },
   { id: 'character_design', label: '角色设计', icon: Users, description: '设计主要角色和关系' },
   { id: 'volume_outline', label: '卷纲规划', icon: Layers, description: '规划分卷和事件线' },
-  { id: 'chapter_outline', label: '章节大纲', icon: FileText, description: '细化每章内容和伏笔操作' },
 ]
 
 export function getStageName(s: string): string {
@@ -101,7 +100,6 @@ export function getStageName(s: string): string {
     worldbuild: '世界观构建',
     character_design: '角色设计',
     volume_outline: '卷纲规划',
-    chapter_outline: '章节大纲',
   }
   return names[s] || s
 }

@@ -10,7 +10,8 @@ import type {
   MasterOutline, WritingRule, NovelSetting, ForeshadowingItem,
   ForeshadowingProgress, ForeshadowingHealthReport, ForeshadowingSuggestion, ForeshadowingStats,
   PowerLevelDetectionResult, PowerLevelBatchResult, PowerLevelHistoryItem,
-  PowerLevelValidationResult, PowerLevelApplyResult
+  PowerLevelValidationResult, PowerLevelApplyResult,
+  BatchTaskStatus, QualityScore
 } from './types'
 
 const TOKEN_KEY = 'auth_token'
@@ -371,6 +372,13 @@ export const api = {
 
   generate: {
     chapter: (): (() => void) => { return () => {} },
+    chapterQueue: (body: GenerateOptions) =>
+      req<{
+        ok: boolean
+        taskId?: string
+        message: string
+        error?: string
+      }>('/api/generate/chapter/queue', { method: 'POST', body: j(body) }),
     masterOutlineSummary: (body: { novelId: string }) =>
       req<{
         ok: boolean
@@ -584,6 +592,28 @@ export const api = {
       req<{ success: boolean; data: { initialized: boolean; adminExists: boolean } }>('/api/setup/status'),
     initialize: (body: { username: string; email: string; password: string }) =>
       req<{ success: boolean; data: { token: string; user: UserInfo }; message: string }>('/api/setup', { method: 'POST', body: j(body) }),
+  },
+
+  batch: {
+    start: (body: { novelId: string; volumeId: string; targetCount: number; startFromNext?: boolean }) =>
+      req<{ taskId: string }>('/api/batch/start', { method: 'POST', body: j(body) }),
+    getStatus: (taskId: string) =>
+      req<BatchTaskStatus>(`/api/batch/${taskId}`),
+    pause: (taskId: string) =>
+      req<{ ok: boolean }>(`/api/batch/${taskId}/pause`, { method: 'POST' }),
+    resume: (taskId: string) =>
+      req<{ ok: boolean }>(`/api/batch/${taskId}/resume`, { method: 'POST' }),
+    cancel: (taskId: string) =>
+      req<{ ok: boolean }>(`/api/batch/${taskId}`, { method: 'DELETE' }),
+    getActive: (novelId: string) =>
+      req<BatchTaskStatus | null>(`/api/batch/novels/${novelId}/active`),
+  },
+
+  quality: {
+    getChapterScore: (chapterId: string) =>
+      req<QualityScore>(`/api/quality/chapter/${chapterId}`),
+    getNovelTrend: (novelId: string) =>
+      req<QualityScore[]>(`/api/quality/novel/${novelId}`),
   },
 }
 

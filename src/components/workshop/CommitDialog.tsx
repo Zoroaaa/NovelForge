@@ -94,12 +94,6 @@ export function CommitDialog({
                     <span className="font-medium">{extractedData.volumes?.length || 0} 卷</span>
                   </div>
                 )}
-                {stage === 'chapter_outline' && (
-                  <div className="p-2 bg-amber-50 dark:bg-amber-950 rounded col-span-2">
-                    <span className="text-muted-foreground">章节大纲：</span>
-                    <span className="font-medium">{extractedData.chapters?.length || 0} 章</span>
-                  </div>
-                )}
               </>
             ) : (
               <>

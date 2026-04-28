@@ -110,7 +110,7 @@ export async function loadNovelContextData(
   if (novel.targetWordCount) extractedData.targetWordCount = String(novel.targetWordCount)
   if (novel.targetChapterCount) extractedData.targetChapters = String(novel.targetChapterCount)
 
-  if (targetStage === 'concept' || targetStage === 'worldbuild' || targetStage === 'character_design' || targetStage === 'volume_outline' || targetStage === 'chapter_outline') {
+  if (targetStage === 'concept' || targetStage === 'worldbuild' || targetStage === 'character_design' || targetStage === 'volume_outline') {
     const outline = await db
       .select()
       .from(masterOutline)
@@ -137,7 +137,7 @@ export async function loadNovelContextData(
     }
   }
 
-  if (targetStage === 'worldbuild' || targetStage === 'character_design' || targetStage === 'volume_outline' || targetStage === 'chapter_outline') {
+  if (targetStage === 'worldbuild' || targetStage === 'character_design' || targetStage === 'volume_outline') {
     const settings = await db
       .select()
       .from(novelSettings)
@@ -161,7 +161,7 @@ export async function loadNovelContextData(
     }
   }
 
-  if (targetStage === 'character_design' || targetStage === 'volume_outline' || targetStage === 'chapter_outline') {
+  if (targetStage === 'character_design' || targetStage === 'volume_outline') {
     const chars = await db
       .select()
       .from(characters)
@@ -190,7 +190,7 @@ export async function loadNovelContextData(
     }
   }
 
-  if (targetStage === 'volume_outline' || targetStage === 'chapter_outline') {
+  if (targetStage === 'volume_outline') {
     const vols = await db
       .select()
       .from(volumes)
@@ -228,24 +228,7 @@ export async function loadNovelContextData(
     }
   }
 
-  if (targetStage === 'chapter_outline') {
-    const existingChapters = await db
-      .select()
-      .from(chapters)
-      .where(and(eq(chapters.novelId, novelId), isNull(chapters.deletedAt)))
-      .all()
-
-    if (existingChapters.length > 0) {
-      extractedData.chapters = existingChapters.map((ch: typeof existingChapters[number]) => ({
-        title: ch.title,
-        summary: ch.summary || '',
-        outline: ch.content || '',
-        characters: [],
-      }))
-    }
-  }
-
-  return extractedData
+    return extractedData
 }
 
 export function extractCoreAppealFromContent(content: string): string[] | undefined {

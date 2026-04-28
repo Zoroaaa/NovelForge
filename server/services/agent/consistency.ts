@@ -75,10 +75,11 @@ ${chapter.content.slice(0, 10000)}
   "conflicts": [
     {
       "characterName": "角色名",
-      "dimension": "境界|说话方式|性格行为|弱点表现",
-      "conflict": "具体冲突描述（指出章节中的具体行为和设定的差异）",
+      "dimension": "境界一致性|说话方式|性格行为|弱点表现",
+      "issue": "具体问题描述（指出章节中的具体行为和设定的差异）",
       "excerpt": "相关原文片段（30字以内）",
-      "severity": "error|warning"
+      "severity": "error|warning",
+      "suggestion": "给下一章的具体规避建议（以'建议'开头，30字以内）"
     }
   ],
   "warnings": ["不确定项或轻微偏差的提示"]

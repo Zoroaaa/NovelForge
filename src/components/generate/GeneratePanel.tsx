@@ -14,6 +14,7 @@ import {
   Loader2,
   RefreshCw,
   MessageSquare,
+  CloudUpload,
 } from 'lucide-react'
 import { useGenerate } from '@/hooks/useGenerate'
 import { StreamOutput } from './StreamOutput'
@@ -45,7 +46,7 @@ export function GeneratePanel({
   onContextUpdate,
   existingContent = '',
 }: GeneratePanelProps) {
-  const { output, status, generate, stop, contextInfo, toolCalls, usage } = useGenerate()
+  const { output, status, generate, stop, contextInfo, toolCalls, usage, queueStatus, generateQueue } = useGenerate()
   const [isInserting, setIsInserting] = useState(false)
   const [mode, setMode] = useState<GenerationMode>('generate')
   const [selectedText] = useState<string>('')
@@ -91,6 +92,30 @@ export function GeneratePanel({
     }
 
     generate(chapterId, novelId, options)
+  }
+
+  const handleGenerateQueue = () => {
+    const options: any = { mode }
+
+    if (mode === 'continue' && hasContent) {
+      options.existingContent = existingContent
+      options.targetWords = targetWords
+    }
+
+    if (mode === 'rewrite') {
+      if (selectedText) {
+        options.existingContent = selectedText
+      } else if (hasContent) {
+        options.existingContent = existingContent
+      }
+
+      // 如果用户填写了重写要求，将其作为 issuesContext 传递给 AI
+      if (rewriteInstruction.trim()) {
+        options.issuesContext = [`用户重写要求：${rewriteInstruction.trim()}`]
+      }
+    }
+
+    generateQueue(chapterId, novelId, options)
   }
 
   const getModeDescription = (): string => {
@@ -282,15 +307,34 @@ export function GeneratePanel({
             停止生成
           </Button>
         ) : (
-          <Button
-            size="sm"
-            className="gap-2 flex-1"
-            onClick={handleGenerate}
-            disabled={isGenerateButtonDisabled()}
-          >
-            <PenLine className="h-4 w-4" />
-            {getButtonText()}
-          </Button>
+          <>
+            <Button
+              size="sm"
+              className="gap-2 flex-1"
+              onClick={handleGenerate}
+              disabled={isGenerateButtonDisabled()}
+            >
+              <PenLine className="h-4 w-4" />
+              {getButtonText()}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={handleGenerateQueue}
+              disabled={isGenerateButtonDisabled() || queueStatus === 'submitting' || queueStatus === 'submitted'}
+              title="提交到后台队列生成，可关闭页面"
+            >
+              {queueStatus === 'submitting' ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : queueStatus === 'submitted' ? (
+                <Play className="h-4 w-4 text-green-600" />
+              ) : (
+                <CloudUpload className="h-4 w-4" />
+              )}
+              {queueStatus === 'submitting' ? '提交中...' : queueStatus === 'submitted' ? '已提交' : '后台生成'}
+            </Button>
+          </>
         )}
       </div>
 

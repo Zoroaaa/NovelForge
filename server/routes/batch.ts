@@ -1,0 +1,86 @@
+import { Hono } from 'hono'
+import { z } from 'zod'
+import { zValidator } from '@hono/zod-validator'
+import type { Env } from '../lib/types'
+import * as batchService from '../services/agent/batchGenerate'
+import { checkAndCompleteVolume } from '../services/agent/volumeCompletion'
+
+const router = new Hono<{ Bindings: Env }>()
+
+const StartSchema = z.object({
+  novelId: z.string().min(1),
+  volumeId: z.string().min(1),
+  targetCount: z.number().int().min(1).max(200),
+  startFromNext: z.boolean().default(true),
+  startChapterOrder: z.number().int().optional(),
+})
+
+router.post('/start', zValidator('json', StartSchema), async (c) => {
+  const body = c.req.valid('json')
+  const env = c.env
+
+  const activeTask = await batchService.getActiveBatchTask(env, body.novelId)
+  if (activeTask) {
+    return c.json({ error: '已有运行中的批量生成任务', activeTaskId: activeTask.id }, 409)
+  }
+
+  const result = await batchService.startBatchGeneration(env, body)
+  return c.json(result)
+})
+
+router.get('/:taskId', async (c) => {
+  const taskId = c.req.param('taskId')
+  const task = await batchService.getBatchTask(c.env, taskId)
+
+  if (!task) {
+    return c.json({ error: '任务不存在' }, 404)
+  }
+
+  return c.json(task)
+})
+
+router.post('/:taskId/pause', async (c) => {
+  const taskId = c.req.param('taskId')
+  const task = await batchService.getBatchTask(c.env, taskId)
+
+  if (!task) return c.json({ error: '任务不存在' }, 404)
+  if (task.status !== 'running') return c.json({ error: '任务当前不可暂停' }, 400)
+
+  await batchService.pauseBatchTask(c.env, taskId)
+  return c.json({ ok: true })
+})
+
+router.post('/:taskId/resume', async (c) => {
+  const taskId = c.req.param('taskId')
+  const task = await batchService.getBatchTask(c.env, taskId)
+
+  if (!task) return c.json({ error: '任务不存在' }, 404)
+  if (task.status !== 'paused') return c.json({ error: '任务当前不可恢复' }, 400)
+
+  await batchService.resumeBatchTask(c.env, taskId)
+  return c.json({ ok: true })
+})
+
+router.delete('/:taskId', async (c) => {
+  const taskId = c.req.param('taskId')
+  const task = await batchService.getBatchTask(c.env, taskId)
+
+  if (!task) return c.json({ error: '任务不存在' }, 404)
+  if (task.status === 'done') return c.json({ error: '任务已完成，无法取消' }, 400)
+
+  await batchService.cancelBatchTask(c.env, taskId)
+  return c.json({ ok: true })
+})
+
+router.get('/novels/:id/active', async (c) => {
+  const novelId = c.req.param('id')
+  const task = await batchService.getActiveBatchTask(c.env, novelId)
+
+  if (!task) {
+    return c.json(null)
+  }
+
+  return c.json(task)
+})
+
+export { router as batch }
