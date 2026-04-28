@@ -99,7 +99,7 @@ export function buildMessages(
   chapterTitle: string,
   contextBundle: ContextBundle | null,
   options: GenerationOptions = {},
-  systemPromptOverride?: string,
+  _systemPromptOverride?: string,
   novelSystemNote?: string,
 ): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
   const { mode = 'generate', existingContent, targetWords, issuesContext } = options
