@@ -79,12 +79,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
   const [historyReportDialogOpen, setHistoryReportDialogOpen] = useState(false)
   const [selectedHistoryLog, setSelectedHistoryLog] = useState<any>(null)
 
-  const [combinedReport, setCombinedReport] = useState<{
-    characterResult: any
-    coherenceResult: any
-    volumeProgressResult: any
-    score: number
-  } | null>(null)
+  const [combinedReport, setCombinedReport] = useState<any>(null)
   const [isChecking, setIsChecking] = useState(false)
   const [isFromCache, setIsFromCache] = useState(false)
   const [reportCachedAt, setReportCachedAt] = useState<number | null>(null)
@@ -149,24 +144,31 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
       const cachedData = await api.generate.getCheckLogsLatest(chapterId!, 'combined')
 
       if (cachedData.log && cachedData.log.characterResult && cachedData.log.coherenceResult) {
-        setCombinedReport({
-          characterResult: cachedData.log.characterResult,
-          coherenceResult: cachedData.log.coherenceResult,
-          volumeProgressResult: cachedData.log.volumeProgressResult || null,
-          score: cachedData.log.score,
-        })
-        setIsFromCache(true)
-        setReportCachedAt(cachedData.log.createdAt)
-        setIsChecking(false)
-        return
+        const cachedVolumeProgress = cachedData.log.volumeProgressResult
+        const isVolumeProgressValid = cachedVolumeProgress &&
+          cachedVolumeProgress.wordCountIssues !== undefined &&
+          cachedVolumeProgress.rhythmIssues !== undefined
+
+        if (isVolumeProgressValid) {
+          setCombinedReport({
+            characterResult: cachedData.log.characterResult,
+            coherenceResult: cachedData.log.coherenceResult,
+            volumeProgressResult: cachedVolumeProgress,
+            score: cachedData.log.score,
+          })
+          setIsFromCache(true)
+          setReportCachedAt(cachedData.log.createdAt)
+          setIsChecking(false)
+          return
+        }
       }
 
       const checkData = await api.generate.combinedCheck({ chapterId: chapterId!, novelId })
 
       setCombinedReport({
-        characterResult: checkData.characterCheck,
-        coherenceResult: checkData.coherenceCheck,
-        volumeProgressResult: checkData.volumeProgressCheck,
+        characterCheck: checkData.characterCheck,
+        coherenceCheck: checkData.coherenceCheck,
+        volumeProgressCheck: checkData.volumeProgressCheck,
         score: checkData.score,
       })
       setIsFromCache(false)
@@ -189,9 +191,9 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
       const data = await api.generate.combinedCheck({ chapterId: chapterId!, novelId })
 
       setCombinedReport({
-        characterResult: data.characterCheck,
-        coherenceResult: data.coherenceCheck,
-        volumeProgressResult: data.volumeProgressCheck,
+        characterCheck: data.characterCheck,
+        coherenceCheck: data.coherenceCheck,
+        volumeProgressCheck: data.volumeProgressCheck,
         score: data.score,
       })
       setIsFromCache(false)
@@ -415,11 +417,11 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                 onClick={() => {
                   if (latestCheckLog.coherenceResult) {
                     setCombinedReport({
-                      characterResult: latestCheckLog.characterResult || { conflicts: [], warnings: [] },
-                      coherenceResult: latestCheckLog.coherenceResult,
-                      volumeProgressResult: latestCheckLog.volumeProgressResult || null,
-                      score: latestCheckLog.score,
-                    })
+                    characterCheck: latestCheckLog.characterResult || { conflicts: [], warnings: [] },
+                    coherenceCheck: latestCheckLog.coherenceResult,
+                    volumeProgressCheck: latestCheckLog.volumeProgressResult || null,
+                    score: latestCheckLog.score,
+                  })
                     setCoherenceResult({
                       score: latestCheckLog.coherenceResult.score,
                       issues: latestCheckLog.coherenceResult.issues,
@@ -555,21 +557,26 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                 )}
               </Button>
             </div>
-            <CombinedCheck novelId={novelId} chapterId={chapterId} onCheckComplete={(result) => {
-              if (result.coherenceCheck.issues.length > 0) {
-                setCoherenceResult({
-                  score: result.coherenceCheck.score,
-                  issues: result.coherenceCheck.issues,
+            <CombinedCheck
+              novelId={novelId}
+              chapterId={chapterId}
+              combinedReport={combinedReport}
+              onCheckComplete={(result) => {
+                if (result.coherenceCheck.issues.length > 0) {
+                  setCoherenceResult({
+                    score: result.coherenceCheck.score,
+                    issues: result.coherenceCheck.issues,
+                  })
+                }
+                setCombinedReport({
+                  characterCheck: result.characterCheck,
+                  coherenceCheck: result.coherenceCheck,
+                  volumeProgressCheck: result.volumeProgressCheck,
+                  score: result.score,
                 })
-              }
-              setCombinedReport({
-                characterResult: result.characterCheck,
-                coherenceResult: result.coherenceCheck,
-                volumeProgressResult: result.volumeProgressCheck,
-                score: result.score,
-              })
-              loadLatestCheckLog()
-            }} />
+                loadLatestCheckLog()
+              }}
+            />
           </div>
         </TabsContent>
       </Tabs>
@@ -669,20 +676,20 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                     <div className="overflow-y-auto max-h-[45vh] pr-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent rounded-lg">
                       <div className="space-y-5 pb-2">
                         {/* 角色一致性部分 */}
-                        {(combinedReport.characterResult?.conflicts?.length > 0 || combinedReport.characterResult?.warnings?.length > 0) && (
+                        {(combinedReport.characterCheck?.conflicts?.length > 0 || combinedReport.characterCheck?.warnings?.length > 0) && (
                           <section className="space-y-3">
                             <header className="flex items-center gap-2.5 pb-2 border-b border-red-200/50 dark:border-red-800/30">
                               <Shield className="h-4 w-4 text-destructive" />
                               <h3 className="text-sm font-semibold uppercase tracking-wide">角色一致性检查</h3>
                               <Badge variant="destructive" className="ml-auto text-[11px] h-5">
-                                {combinedReport.characterResult.conflicts.length > 0 
-                                  ? `${combinedReport.characterResult.conflicts.length} 个冲突` 
+                                {combinedReport.characterCheck.conflicts.length > 0
+                                  ? `${combinedReport.characterCheck.conflicts.length} 个冲突` 
                                   : '通过'}
                               </Badge>
                             </header>
 
                             <div className="space-y-2 pl-1">
-                              {combinedReport.characterResult.conflicts.map((conflict: any, i: number) => (
+                              {combinedReport.characterCheck.conflicts.map((conflict: any, i: number) => (
                                 <article key={`char-c-${i}`} className="group p-3.5 bg-gradient-to-br from-red-50 to-white dark:from-red-950/60 dark:to-transparent border border-red-200/70 dark:border-red-800/40 rounded-lg hover:shadow-md transition-shadow">
                                   <header className="flex items-center gap-2 mb-2">
                                     <ShieldAlert className="h-4 w-4 text-red-500 shrink-0" />
@@ -697,7 +704,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                                 </article>
                               ))}
 
-                              {combinedReport.characterResult.warnings?.filter((w: string) => !w.includes('失败')).map((warning: string, i: number) => (
+                              {combinedReport.characterCheck.warnings?.filter((w: string) => !w.includes('失败')).map((warning: string, i: number) => (
                                 <div key={`char-w-${i}`} className="flex items-start gap-3 p-3 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/30 rounded-lg text-[13px] text-amber-800 dark:text-amber-200 leading-relaxed">
                                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
                                   <span>{warning}</span>
@@ -708,18 +715,18 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                         )}
 
                         {/* 章节连贯性部分 */}
-                        {combinedReport.coherenceResult?.issues?.length > 0 && (
+                        {combinedReport.coherenceCheck?.issues?.length > 0 && (
                           <section className="space-y-3">
                             <header className="flex items-center gap-2.5 pb-2 border-b border-amber-200/50 dark:border-amber-800/30">
                               <Link className="h-4 w-4 text-amber-600" />
                               <h3 className="text-sm font-semibold uppercase tracking-wide">章节连贯性检查</h3>
                               <Badge variant="outline" className="ml-auto text-[11px] h-5">
-                                {combinedReport.coherenceResult.score}分 · {combinedReport.coherenceResult.issues.length}个问题
+                                {combinedReport.coherenceCheck.score}分 · {combinedReport.coherenceCheck.issues.length}个问题
                               </Badge>
                             </header>
 
                             <div className="space-y-2 pl-1">
-                              {combinedReport.coherenceResult.issues.map((issue: any, i: number) => (
+                              {combinedReport.coherenceCheck.issues.map((issue: any, i: number) => (
                                 <article key={`coh-${i}`} className={`p-3.5 rounded-lg border hover:shadow-md transition-shadow ${
                                   issue.severity === 'error'
                                     ? 'bg-gradient-to-br from-red-50 to-white dark:from-red-950/60 dark:to-transparent border-red-200/70 dark:border-red-800/40'
@@ -809,9 +816,9 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                         )}
 
                         {/* 无问题提示 */}
-                        {!combinedReport.characterResult?.conflicts?.length &&
-                         !combinedReport.characterResult?.warnings?.filter((w: string) => !w.includes('失败'))?.length &&
-                         !combinedReport.coherenceResult?.issues?.length &&
+                        {!combinedReport.characterCheck?.conflicts?.length &&
+                         !combinedReport.characterCheck?.warnings?.filter((w: string) => !w.includes('失败'))?.length &&
+                         !combinedReport.coherenceCheck?.issues?.length &&
                          (!combinedReport.volumeProgressResult || (combinedReport.volumeProgressResult.wordCountIssues.length === 0 && combinedReport.volumeProgressResult.rhythmIssues.length === 0)) && (
                           <div className="flex flex-col items-center gap-3 p-8 bg-gradient-to-br from-green-50 via-emerald-50/30 to-transparent dark:from-green-950/40 dark:via-emerald-950/10 dark:to-transparent border border-green-200/60 dark:border-green-800/30 rounded-xl">
                             <CheckCircle className="h-12 w-12 text-green-500" />
@@ -824,8 +831,8 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                       </div>
                     </div>
 
-                    {(combinedReport.characterResult?.conflicts?.length > 0 ||
-                     combinedReport.coherenceResult?.issues?.some((i: any) => i.severity === 'error') ||
+                    {(combinedReport.characterCheck?.conflicts?.length > 0 ||
+                     combinedReport.coherenceCheck?.issues?.some((i: any) => i.severity === 'error') ||
                      (combinedReport.volumeProgressResult && combinedReport.volumeProgressResult.score < 60)) && (
                       <aside className="pt-3 border-t text-center">
                         <p className="text-xs text-muted-foreground flex items-center justify-center gap-1.5">

@@ -50,15 +50,18 @@ interface CombinedCheckProps {
   novelId: string
   chapterId: string | null
   onCheckComplete?: (result: CombinedCheckResult) => void
+  combinedReport?: any
 }
 
-export function CombinedCheck({ novelId, chapterId, onCheckComplete }: CombinedCheckProps) {
+export function CombinedCheck({ novelId, chapterId, onCheckComplete, combinedReport }: CombinedCheckProps) {
   const [checking, setChecking] = useState(false)
-  const [result, setResult] = useState<CombinedCheckResult | null>(null)
   const [expandedItem, setExpandedItem] = useState<string | null>(null)
   const [repairing, setRepairing] = useState<string | null>(null)
   const [repairedContent, setRepairedContent] = useState<string | null>(null)
   const [repairError, setRepairError] = useState<string | null>(null)
+  const [internalResult, setInternalResult] = useState<CombinedCheckResult | null>(null)
+
+  const result: CombinedCheckResult | null = internalResult || (combinedReport as CombinedCheckResult | null) || null
 
   const { data: characters } = useQuery({
     queryKey: ['characters', novelId],
@@ -69,7 +72,7 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete }: CombinedC
   const handleCheck = async () => {
     if (!chapterId) return
     setChecking(true)
-    setResult(null)
+    setInternalResult(null)
     setRepairedContent(null)
     setRepairError(null)
 
@@ -92,11 +95,11 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete }: CombinedC
         },
         volumeProgressCheck: data.volumeProgressCheck,
       }
-      setResult(typedResult)
+      setInternalResult(typedResult)
       onCheckComplete?.(typedResult)
     } catch (error) {
       console.error('综合检查失败:', error)
-      setResult({
+      setInternalResult({
         score: 0,
         characterCheck: { score: 0, conflicts: [], warnings: [`检查失败: ${(error as Error).message}`] },
         coherenceCheck: { score: 0, issues: [] },
