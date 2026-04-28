@@ -519,7 +519,16 @@ export async function rebuildEntityIndex(
 
 export async function generateGenreSystemPrompt(env: Env, novelId: string, data: WorkshopExtractedData, extraContext?: string): Promise<string> {
   const db = drizzle(env.DB)
-  const llmConfig = await resolveConfig(db, 'summary', novelId)
+  let llmConfig
+  try {
+    llmConfig = await resolveConfig(db, 'summary_gen', novelId)
+  } catch {
+    try {
+      llmConfig = await resolveConfig(db, 'chapter_gen', novelId)
+    } catch {
+      throw new Error('未配置摘要或章节生成模型，请先在模型配置中添加')
+    }
+  }
 
   const genreInfo = [
     `题材类型：${data.genre || '未知'}`,
