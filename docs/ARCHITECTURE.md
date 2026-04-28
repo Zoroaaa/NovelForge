@@ -2,7 +2,7 @@
 
 > 完整的技术架构、数据流设计和模块依赖关系图。
 >
-> **版本**: 1.11.0 | **最后更新**: 2026-04-27
+> **版本**: 2.1.0 | **最后更新**: 2026-04-28
 
 ---
 
@@ -353,17 +353,19 @@ server/
 │   ├── master-outline.ts       # 总纲管理路由
 │   ├── writing-rules.ts        # 创作规则路由
 │   ├── novel-settings.ts       # 小说设定路由
-│   ├── foreshadowing.ts        # 伏笔管理路由 (v1.7.0 增强)
+│   ├── foreshadowing.ts        # 伏笔管理路由
 │   ├── generate.ts             # AI 生成路由
 │   ├── search.ts               # 搜索路由
 │   ├── export.ts               # 导出路由
-│   ├── vectorize.ts            # 向量化索引路由 (v1.6.0 增强)
+│   ├── vectorize.ts            # 向量化索引路由
 │   ├── entity-index.ts         # 实体索引路由
 │   ├── power-level.ts          # 境界追踪路由
 │   ├── mcp.ts                  # MCP 服务路由
 │   ├── workshop.ts             # 创意工坊路由
-│   ├── workshop-import.ts      # 工坊导入路由 (v1.7.0)
-│   ├── workshop-format-import.ts # 格式化导入路由 (v1.8.0)
+│   ├── workshop-import.ts      # 工坊导入路由
+│   ├── workshop-format-import.ts # 格式化导入路由
+│   ├── batch.ts               # 批量生成路由 (v2.1.0)
+│   ├── quality.ts             # 质量评分路由 (v2.1.0)
 │   └── settings.ts             # 模型配置路由
 ├── services/                   # 服务层
 │   ├── llm.ts                  # LLM 统一调用层
@@ -381,7 +383,11 @@ server/
 │   │   ├── checkLogService.ts  # 检查日志服务
 │   │   ├── coherence.ts         # 连贯性检查
 │   │   ├── consistency.ts      # 一致性检查
-│   │   └── volumeProgress.ts   # 卷进度检查
+│   │   ├── volumeProgress.ts   # 卷进度检查
+│   │   ├── batchGenerate.ts    # 批量生成服务 (v2.1.0)
+│   │   ├── qualityCheck.ts     # 质量评分服务 (v2.1.0)
+│   │   ├── prevChapterAdvice.ts # 上一章建议服务 (v2.1.0)
+│   │   └── volumeCompletion.ts # 卷完成检测服务 (v2.1.0)
 │   ├── contextBuilder.ts       # 上下文组装 (v4.0)
 │   ├── embedding.ts            # 向量化服务
 │   ├── vision.ts               # 视觉分析服务
@@ -549,6 +555,9 @@ app.use('*', cors())
 | `0014_volume_target_chapter_count.sql` | v1.7.0 | volumes 表新增 target_chapter_count 字段 |
 | `0015_check_logs_volume_progress.sql` | v1.7.0 | checkLogs 表新增 volume_progress_result 字段 |
 | `0016_novel_target_chapter_count.sql` | v1.7.0 | novels 表新增 target_chapter_count 字段 |
+| `0018_foreshadowing_volume_relation.sql` | v2.1.0 | 伏笔卷关联（新增volumeId字段） |
+| `0019_batch_generation_tasks.sql` | v2.1.0 | 批量生成任务队列表 |
+| `0020_quality_scores.sql` | v2.1.0 | 质量评分表 |
 
 ---
 
@@ -865,7 +874,11 @@ server/services/agent/
 ├── checkLogService.ts    # 检查日志服务（质量检查记录）
 ├── coherence.ts          # 连贯性检查（章节间一致性）
 ├── consistency.ts        # 一致性检查（角色行为一致性）
-└── volumeProgress.ts     # 卷进度检查（写作节奏评估）
+├── volumeProgress.ts     # 卷进度检查（写作节奏评估）
+├── batchGenerate.ts      # 批量生成服务 (v2.1.0)
+├── qualityCheck.ts       # 质量评分服务 (v2.1.0)
+├── prevChapterAdvice.ts  # 上一章建议服务 (v2.1.0)
+└── volumeCompletion.ts   # 卷完成检测服务 (v2.1.0)
 ```
 
 ### ReAct 循环流程
@@ -1235,11 +1248,12 @@ CLOUDFLARE_API_TOKEN=xxx      # Cloudflare API Token
 | **v1.9.0** | 质量检查系统重构 + 卷进度检查 + 上下文v4.1优化 |
 | **v1.10.0** | Agent工具v2 + 上下文构建优化 + 摘要质量提升 |
 | **v1.11.0** | Workshop架构模块化拆分 + 10+前端组件全新设计 |
+| **v2.1.0** | 批量生成系统 + 质量评分 + 上一章建议 + 卷完成检测 |
 
 ---
 
 <div align="center">
 
-**Architecture Version: 1.11.0 · 最后更新: 2026-04-27**
+**Architecture Version: 2.1.0 · 最后更新: 2026-04-28**
 
 </div>

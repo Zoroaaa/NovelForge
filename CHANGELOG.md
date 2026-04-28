@@ -7,6 +7,97 @@
 
 ---
 
+## [2.1.0] - 2026-04-28
+
+### 🎉 重大更新：Phase 12 · 批量生成与质量评分系统
+
+#### 新增功能
+
+##### 批量生成系统 🚀
+- **批量生成路由** (`server/routes/batch.ts`)
+  - `POST /api/batch/start` - 开始批量生成
+  - `GET /api/batch/:taskId` - 获取任务详情
+  - `POST /api/batch/:taskId/pause` - 暂停任务
+  - `POST /api/batch/:taskId/resume` - 恢复任务
+  - `DELETE /api/batch/:taskId` - 取消任务
+  - `GET /api/batch/novels/:id/active` - 获取小说活跃任务
+
+- **批量生成服务** (`server/services/agent/batchGenerate.ts`)
+  - 批量章节生成核心逻辑
+  - 任务状态管理
+  - 进度追踪
+  - 被queue-handler调用
+
+- **批量生成任务队列表** (`batch_generation_tasks`)
+  - 任务ID和状态追踪
+  - 目标章节数/完成章节数字段
+  - 生成配置参数
+
+##### 质量评分系统 🛡️
+- **质量评分路由** (`server/routes/quality.ts`)
+  - `GET /quality/chapter/:chapterId` - 获取章节评分
+  - `GET /quality/novel/:novelId` - 获取小说所有评分
+
+- **质量评分数据库表** (`quality_scores`)
+  - 章节质量评分存储（plotScore/consistencyScore/foreshadowingScore/pacingScore/fluencyScore）
+  - 评分在章节生成后自动创建
+
+> **注意**: 评分在章节生成时自动触发，通过 `/api/generate/chapter` 的连贯性检查结果保存
+
+##### 上一章建议系统 💡
+- **上一章建议服务** (`server/services/agent/prevChapterAdvice.ts`)
+  - 基于上一章内容提供续写建议
+  - 文风延续性指导
+  - 剧情衔接优化
+  - 被queue-handler调用，生成章节时自动注入
+
+##### 卷完成检测 📊
+- **卷完成检测服务** (`server/services/agent/volumeCompletion.ts`)
+  - 检测卷是否接近完成
+  - 字数/章节数进度评估
+  - 完成度百分比计算
+  - 生成章节后自动触发检测
+
+#### 数据库变更
+
+- 🔧 新增 `0018_foreshadowing_volume_relation.sql` - 伏笔卷关联表（新增volumeId字段）
+- 🔧 新增 `0019_batch_generation_tasks.sql` - 批量生成任务表
+- 🔧 新增 `0020_quality_scores.sql` - 质量评分表
+- 🔧 `volumes`表新增`volumeId`字段用于伏笔关联
+
+#### 架构优化
+
+##### 上下文构建器增强
+- **伏笔与卷关联** (`server/services/contextBuilder.ts`)
+  - 伏笔检索时可按卷过滤
+  - 新增 `volumeId` 关联字段
+
+##### 导出服务增强
+- **导出路由优化** (`server/routes/export.ts`)
+  - 导出配置增强
+  - 支持更多导出选项
+
+##### Workshop服务优化
+- **commit.ts 强化** - 伏笔创建逻辑增强
+- **extract.ts 优化** - 数据提取服务改进
+- **index.ts 完善** - 统一导出接口优化
+
+#### 前端组件增强
+
+- 📝 **ChapterList 组件优化**
+  - 交互体验提升
+  - 列表展示优化
+  - 批量操作支持
+
+#### 改进
+
+- 🔧 伏笔系统与卷管理更紧密关联
+- 🔧 批量生成任务后台异步处理
+- 🔧 质量评分多维度分析
+- 🔧 上一章续写建议增强文风一致性
+
+---
+
 ## [1.11.0] - 2026-04-27
 
 ### 🎉 重大更新：Phase 11 · Workshop架构深度重构与上下文优化
@@ -1245,6 +1336,29 @@
 ---
 
 ## 升级指南
+
+### 升级到 2.1.0
+
+```bash
+# 拉取最新代码
+git pull origin main
+
+# 更新依赖
+pnpm update
+
+# 运行数据库迁移
+wrangler d1 migrations apply novelforge --remote
+
+# 重新部署
+pnpm build
+wrangler pages deploy dist
+```
+
+**重要变更说明**：
+- 新增伏笔卷关联功能：伏笔现在可以关联到具体卷，便于追踪伏笔在不同卷中的分布
+- 新增批量生成任务系统：支持批量章节生成的后台异步任务管理
+- 新增质量评分功能：提供章节质量多维度评估能力
+- 上一章建议系统增强：续写时更好地继承上一章的文风和叙事节奏
 
 ### 升级到 1.11.0
 

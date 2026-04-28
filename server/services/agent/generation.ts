@@ -23,6 +23,11 @@ import type { AgentConfig, GenerationOptions, ToolCallEvent } from './types'
 import { saveCheckLog } from './checkLogService'
 import { logGeneration } from './logging'
 
+function extractTitleFromContent(content: string): string | null {
+  const match = content.match(/^#\s+(.+)$/m)
+  return match?.[1]?.trim() || null
+}
+
 export async function generateChapter(
   env: Env,
   chapterId: string,
@@ -81,12 +86,20 @@ export async function generateChapter(
 
     const fullContent = usageResult.collectedContent
     if (fullContent && fullContent.trim().length > 0) {
+      const extractedTitle = extractTitleFromContent(fullContent)
+      const updateData: Record<string, unknown> = {
+        content: fullContent,
+        wordCount: fullContent.length,
+        updatedAt: sql`(unixepoch())`,
+      }
+
+      if (options.isBackgroundGeneration && extractedTitle) {
+        updateData.title = extractedTitle
+        LOG_STYLES.SUCCESS(`[Background] 标题已更新: ${extractedTitle}`)
+      }
+
       await db.update(chapters)
-        .set({
-          content: fullContent,
-          wordCount: fullContent.length,
-          updatedAt: sql`(unixepoch())`,
-        })
+        .set(updateData)
         .where(eq(chapters.id, chapterId))
       LOG_STYLES.SUCCESS(`B1 fix: 章节内容已写入数据库 (${fullContent.length} 字符)`)
     }

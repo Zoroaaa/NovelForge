@@ -391,8 +391,14 @@ server/db/migrations/
 ├── 0013_novel_target_word_count.sql # v1.7.0 小说目标字数字段
 ├── 0014_volume_target_chapter_count.sql # v1.7.0 卷目标章节数字段
 ├── 0015_check_logs_volume_progress.sql # v1.7.0 检查日志卷进度字段
-└── 0016_novel_target_chapter_count.sql # v1.7.0 小说目标章数字段
+├── 0016_novel_target_chapter_count.sql # v1.7.0 小说目标章数字段
+├── 0017_novel_system_prompt.sql # v1.10.0 小说专属System Prompt
+├── 0018_foreshadowing_volume_relation.sql # v2.1.0 伏笔卷关联
+├── 0019_batch_generation_tasks.sql # v2.1.0 批量生成任务表
+└── 0020_quality_scores.sql # v2.1.0 质量评分表
 ```
+
+> **v2.1.0 变更说明**：新增伏笔卷关联、批量生成任务表、质量评分表，需要执行 `0018-0020` 迁移。
 
 > **v1.10.0 变更说明**：无需额外迁移，Agent工具系统v2重构，创作工坊深度优化。
 
@@ -709,6 +715,12 @@ pnpm build
 wrangler pages deploy dist
 ```
 
+**v2.1.0 升级注意事项**：
+- 需要执行 `0018-0020` 数据库迁移
+- 新增伏笔卷关联字段，可在创建小说后自动关联伏笔到对应卷
+- 新增批量生成任务队列表，支持批量章节生成的后台任务管理
+- 新增质量评分功能，提供章节质量评估能力
+
 **v1.10.0 升级注意事项**：
 - 无需数据库迁移（已在 v1.9.0 中完成）
 - Agent工具系统v2重构：从4个工具扩展到5个智能工具
@@ -739,14 +751,18 @@ wrangler pages deploy dist
 
 | 版本 | Node.js | Wrangler | Drizzle |
 |------|---------|----------|---------|
+| **v2.1.0+** | >= 20 | >= 4.0 | >= 0.45 |
 | v1.10+ | >= 20 | >= 4.0 | >= 0.45 |
 | v1.9+ | >= 20 | >= 4.0 | >= 0.45 |
 | v1.7+ | >= 20 | >= 4.0 | >= 0.45 |
 | v1.6+ | >= 20 | >= 4.0 | >= 0.45 |
 | v1.5+ | >= 18 | >= 3.0 | >= 0.45 |
-| v1.4+ | >= 18 | >= 3.0 | >= 0.45 |
-| v1.3+ | >= 18 | >= 3.0 | >= 0.40 |
-| v1.0+ | >= 18 | >= 3.0 | >= 0.30 |
+
+### 重要变更说明 (v2.1.0)
+
+- **伏笔卷关联增强**：新增伏笔与卷的关联关系，可追踪伏笔在不同卷中的分布
+- **批量生成任务系统**：完整的批量章节生成任务管理，支持后台异步处理
+- **质量评分系统**：新增章节质量评分功能，提供多维度质量评估
 
 ### 重要变更说明 (v1.10.0)
 
@@ -843,7 +859,7 @@ wrangler d1 migrations apply novelforge --local
 wrangler d1 migrations apply novelforge --remote
 
 # Vectorize
-wrangler vectorize create novelforge-index --dimensions=768 --metric=cosine
+wrangler vectorize create novelforge-index --dimensions=1024 --metric=cosine
 wrangler vectorize list
 
 # 部署

@@ -118,7 +118,7 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
           throw error
         },
         { enableRAG: enableRAG ?? true, enableAutoSummary: enableAutoSummary ?? true },
-        { mode, existingContent, targetWords, issuesContext }
+        { mode, existingContent, targetWords, issuesContext, isBackgroundGeneration: true }
       )
 
       console.log(`[Queue] 后台章节生成全部完成 for chapter ${chapterId}`)

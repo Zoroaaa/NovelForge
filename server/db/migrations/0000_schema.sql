@@ -1,7 +1,7 @@
 -- ============================================================
--- NovelForge · D1 Schema (整理版)
--- 版本：v4.0
--- 说明：合并所有迁移，移除ALTER语句，使用触发器维护字数/章数统计
+-- NovelForge · D1 Schema (合并版)
+-- 版本：v4.x
+-- 说明：合并所有迁移文件 (0010~0020)，直接部署即可
 -- ============================================================
 
 PRAGMA foreign_keys = ON;
@@ -10,17 +10,20 @@ PRAGMA foreign_keys = ON;
 -- 1. 小说主表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS novels (
-  id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
-  title           TEXT NOT NULL,
-  description     TEXT,
-  genre           TEXT,
-  status          TEXT NOT NULL DEFAULT 'draft',
-  cover_r2_key    TEXT,
-  word_count      INTEGER NOT NULL DEFAULT 0,
-  chapter_count   INTEGER NOT NULL DEFAULT 0,
-  created_at      INTEGER NOT NULL DEFAULT (unixepoch()),
-  updated_at      INTEGER NOT NULL DEFAULT (unixepoch()),
-  deleted_at      INTEGER
+  id                  TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+  title               TEXT NOT NULL,
+  description         TEXT,
+  genre               TEXT,
+  status              TEXT NOT NULL DEFAULT 'draft',
+  cover_r2_key        TEXT,
+  word_count          INTEGER NOT NULL DEFAULT 0,
+  chapter_count       INTEGER NOT NULL DEFAULT 0,
+  target_word_count   INTEGER,
+  target_chapter_count INTEGER,
+  system_prompt       TEXT,
+  created_at         INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at         INTEGER NOT NULL DEFAULT (unixepoch()),
+  deleted_at          INTEGER
 );
 
 CREATE INDEX idx_novels_status ON novels(status) WHERE deleted_at IS NULL;
@@ -53,21 +56,24 @@ CREATE INDEX idx_characters_role ON characters(novel_id, role) WHERE deleted_at 
 -- 3. 卷表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS volumes (
-  id                  TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
-  novel_id            TEXT NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
-  title               TEXT NOT NULL,
-  sort_order          INTEGER NOT NULL DEFAULT 0,
-  event_line          TEXT,
-  blueprint           TEXT,
-  summary             TEXT,
-  word_count          INTEGER NOT NULL DEFAULT 0,
-  chapter_count       INTEGER NOT NULL DEFAULT 0,
-  target_word_count   INTEGER,
-  status              TEXT NOT NULL DEFAULT 'draft',
-  notes               TEXT,
-  created_at          INTEGER NOT NULL DEFAULT (unixepoch()),
-  updated_at          INTEGER NOT NULL DEFAULT (unixepoch()),
-  deleted_at          INTEGER
+  id                      TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+  novel_id                TEXT NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+  title                   TEXT NOT NULL,
+  sort_order              INTEGER NOT NULL DEFAULT 0,
+  event_line              TEXT,
+  blueprint               TEXT,
+  summary                 TEXT,
+  word_count              INTEGER NOT NULL DEFAULT 0,
+  chapter_count           INTEGER NOT NULL DEFAULT 0,
+  target_word_count       INTEGER,
+  target_chapter_count    INTEGER,
+  foreshadowing_setup     TEXT,
+  foreshadowing_resolve   TEXT,
+  status                  TEXT NOT NULL DEFAULT 'draft',
+  notes                   TEXT,
+  created_at              INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at              INTEGER NOT NULL DEFAULT (unixepoch()),
+  deleted_at              INTEGER
 );
 
 CREATE INDEX idx_volumes_novel ON volumes(novel_id) WHERE deleted_at IS NULL;
@@ -183,6 +189,7 @@ CREATE INDEX idx_novel_settings_importance ON novel_settings(novel_id, importanc
 CREATE TABLE IF NOT EXISTS foreshadowing (
   id                    TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
   novel_id              TEXT NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+  volume_id             TEXT,
   chapter_id            TEXT,
   title                 TEXT NOT NULL,
   description           TEXT,
@@ -197,9 +204,68 @@ CREATE TABLE IF NOT EXISTS foreshadowing (
 CREATE INDEX idx_foreshadowing_novel ON foreshadowing(novel_id, status) WHERE deleted_at IS NULL;
 CREATE INDEX idx_foreshadowing_chapter ON foreshadowing(chapter_id);
 CREATE INDEX idx_foreshadowing_importance ON foreshadowing(importance) WHERE status = 'open';
+CREATE INDEX idx_foreshadowing_volume ON foreshadowing(volume_id) WHERE volume_id IS NOT NULL;
 
 -- ============================================================
--- 9. 模型配置表
+-- 9. 伏笔推进记录表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS foreshadowing_progress (
+  id                  TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+  foreshadowing_id    TEXT NOT NULL REFERENCES foreshadowing(id) ON DELETE CASCADE,
+  chapter_id          TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+  progress_type       TEXT NOT NULL CHECK(progress_type IN ('hint', 'advance', 'partial_reveal')),
+  summary             TEXT,
+  mentioned_keywords  TEXT,
+  created_at          INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE INDEX idx_progress_foreshadowing ON foreshadowing_progress(foreshadowing_id, created_at DESC);
+CREATE INDEX idx_progress_chapter ON foreshadowing_progress(chapter_id, created_at DESC);
+
+-- ============================================================
+-- 10. 章节检查日志表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS check_logs (
+  id                      TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+  novel_id                TEXT NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+  chapter_id              TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+  check_type              TEXT NOT NULL CHECK(check_type IN ('character_consistency', 'chapter_coherence', 'combined', 'volume_progress')),
+  score                   INTEGER NOT NULL DEFAULT 100,
+  status                  TEXT NOT NULL DEFAULT 'success' CHECK(status IN ('success', 'failed', 'error')),
+  character_result        TEXT,
+  coherence_result        TEXT,
+  volume_progress_result  TEXT,
+  issues_count            INTEGER NOT NULL DEFAULT 0,
+  error_message           TEXT,
+  created_at              INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE INDEX idx_check_logs_chapter ON check_logs(chapter_id, created_at DESC);
+CREATE INDEX idx_check_logs_novel ON check_logs(novel_id, created_at DESC);
+CREATE INDEX idx_check_logs_type ON check_logs(chapter_id, check_type, created_at DESC);
+
+-- ============================================================
+-- 11. 质量评分表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS quality_scores (
+  id                  TEXT PRIMARY KEY,
+  novel_id            TEXT NOT NULL,
+  chapter_id          TEXT NOT NULL,
+  total_score         INTEGER,
+  plot_score          INTEGER,
+  consistency_score   INTEGER,
+  foreshadowing_score INTEGER,
+  pacing_score        INTEGER,
+  fluency_score       INTEGER,
+  details             TEXT,
+  created_at          INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE INDEX idx_quality_chapter ON quality_scores(chapter_id);
+CREATE INDEX idx_quality_novel ON quality_scores(novel_id, created_at DESC);
+
+-- ============================================================
+-- 12. 模型配置表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS model_configs (
   id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
@@ -219,7 +285,7 @@ CREATE TABLE IF NOT EXISTS model_configs (
 CREATE INDEX idx_model_configs_lookup ON model_configs(scope, stage, novel_id);
 
 -- ============================================================
--- 10. 生成任务日志
+-- 13. 生成任务日志
 -- ============================================================
 CREATE TABLE IF NOT EXISTS generation_logs (
   id                  TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
@@ -240,7 +306,28 @@ CREATE INDEX idx_gen_logs_chapter ON generation_logs(chapter_id);
 CREATE INDEX idx_gen_logs_novel ON generation_logs(novel_id, created_at DESC);
 
 -- ============================================================
--- 11. 导出记录
+-- 14. 批量生成任务表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS batch_generation_tasks (
+  id                    TEXT PRIMARY KEY,
+  novel_id              TEXT NOT NULL,
+  volume_id             TEXT NOT NULL,
+  status                TEXT NOT NULL DEFAULT 'running',
+  start_chapter_order   INTEGER NOT NULL,
+  target_count          INTEGER NOT NULL,
+  completed_count       INTEGER NOT NULL DEFAULT 0,
+  failed_count          INTEGER NOT NULL DEFAULT 0,
+  current_chapter_order INTEGER,
+  error_msg             TEXT,
+  created_at            INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at            INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE INDEX idx_batch_novel ON batch_generation_tasks(novel_id);
+CREATE INDEX idx_batch_status ON batch_generation_tasks(status);
+
+-- ============================================================
+-- 15. 导出记录
 -- ============================================================
 CREATE TABLE IF NOT EXISTS exports (
   id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
@@ -259,7 +346,7 @@ CREATE TABLE IF NOT EXISTS exports (
 CREATE INDEX idx_exports_novel ON exports(novel_id, created_at DESC);
 
 -- ============================================================
--- 12. 向量索引追踪
+-- 16. 向量索引追踪
 -- ============================================================
 CREATE TABLE IF NOT EXISTS vector_index (
   id            TEXT PRIMARY KEY,
@@ -275,7 +362,7 @@ CREATE INDEX idx_vector_source ON vector_index(source_type, source_id, chunk_ind
 CREATE INDEX idx_vector_novel ON vector_index(novel_id);
 
 -- ============================================================
--- 13. 总索引表
+-- 17. 总索引表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS entity_index (
   id            TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
@@ -298,7 +385,7 @@ CREATE INDEX idx_entity_parent ON entity_index(parent_id);
 CREATE INDEX idx_entity_depth ON entity_index(novel_id, depth);
 
 -- ============================================================
--- 14. 创作工坊会话表
+-- 18. 创作工坊会话表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS workshop_sessions (
   id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
@@ -318,7 +405,7 @@ CREATE INDEX idx_workshop_novel ON workshop_sessions(novel_id) WHERE deleted_at 
 CREATE INDEX idx_workshop_stage ON workshop_sessions(stage);
 
 -- ============================================================
--- 15. 用户表
+-- 19. 用户表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS users (
   id              TEXT PRIMARY KEY,
@@ -339,7 +426,7 @@ CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_status ON users(status) WHERE deleted_at IS NULL;
 
 -- ============================================================
--- 16. 邀请码表
+-- 20. 邀请码表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS invite_codes (
   id          TEXT PRIMARY KEY,
@@ -357,7 +444,7 @@ CREATE INDEX idx_invite_codes_code ON invite_codes(code);
 CREATE INDEX idx_invite_codes_status ON invite_codes(status);
 
 -- ============================================================
--- 17. 系统设置表
+-- 21. 系统设置表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS system_settings (
   key         TEXT PRIMARY KEY,
@@ -367,7 +454,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
 );
 
 -- ============================================================
--- 18. 队列任务日志表
+-- 22. 队列任务日志表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS queue_task_logs (
   id          TEXT PRIMARY KEY,
@@ -388,7 +475,6 @@ CREATE INDEX idx_queue_logs_status ON queue_task_logs(status, created_at DESC);
 -- 触发器：自动维护字数和章数统计
 -- ============================================================
 
--- 触发器1：章节新增时增加小说和卷的章数/字数
 CREATE TRIGGER IF NOT EXISTS trg_chapter_insert
 AFTER INSERT ON chapters
 WHEN NEW.deleted_at IS NULL
@@ -406,7 +492,6 @@ BEGIN
   WHERE id = NEW.volume_id;
 END;
 
--- 触发器2：章节删除时减少小说和卷的章数/字数
 CREATE TRIGGER IF NOT EXISTS trg_chapter_delete
 AFTER DELETE ON chapters
 WHEN OLD.deleted_at IS NULL
@@ -424,7 +509,6 @@ BEGIN
   WHERE id = OLD.volume_id;
 END;
 
--- 触发器3：章节字数变化时同步更新小说和卷的字数
 CREATE TRIGGER IF NOT EXISTS trg_chapter_word_count_update
 AFTER UPDATE OF word_count ON chapters
 WHEN OLD.deleted_at IS NULL AND NEW.deleted_at IS NULL
@@ -440,7 +524,6 @@ BEGIN
   WHERE id = NEW.volume_id;
 END;
 
--- 触发器4：章节软删除时（设置deleted_at）减少统计
 CREATE TRIGGER IF NOT EXISTS trg_chapter_soft_delete
 AFTER UPDATE OF deleted_at ON chapters
 WHEN OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL
@@ -471,15 +554,8 @@ INSERT OR IGNORE INTO system_settings (key, value, description, updated_at)
 VALUES ('jwt_secret_placeholder', 'CHANGE_ME_IN_PRODUCTION', 'JWT密钥占位符（请使用环境变量 JWT_SECRET）', unixepoch());
 
 -- ============================================================
--- Schema 完成
--- ============================================================
-
--- ============================================================
 -- 数据校正：基于现有章节数据重新统计字数和章数
--- 注意：仅当需要从旧系统迁移到触发器模式时执行，执行后触发器才能正确累加
 -- ============================================================
-
--- 校正 novels 表的 chapter_count 和 word_count
 UPDATE novels
 SET chapter_count = (
     SELECT COUNT(*) FROM chapters
@@ -491,7 +567,6 @@ word_count = (
 ),
 updated_at = unixepoch();
 
--- 校正 volumes 表的 chapter_count 和 word_count
 UPDATE volumes
 SET chapter_count = (
     SELECT COUNT(*) FROM chapters
@@ -502,3 +577,7 @@ word_count = (
     WHERE chapters.volume_id = volumes.id AND chapters.deleted_at IS NULL
 ),
 updated_at = unixepoch();
+
+-- ============================================================
+-- Schema 完成
+-- ============================================================

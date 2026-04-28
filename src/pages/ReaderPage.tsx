@@ -19,11 +19,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ArrowLeft, ChevronLeft, ChevronRight, Settings2, Type, Maximize2, Minimize2, Sparkles } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Settings2, Type, Maximize2, Minimize2, Sparkles, AlignCenter, BookOpen } from 'lucide-react'
 import { useState, useMemo, useCallback, useEffect } from 'react'
 
 type ParagraphIndent = 'none' | 'two-char' | 'four-char'
 type DialogueStyle = 'normal' | 'highlight' | 'indent'
+type ContentWidth = 'narrow' | 'medium' | 'wide'
 
 interface ReaderSettings {
   paragraphIndent: ParagraphIndent
@@ -31,6 +32,7 @@ interface ReaderSettings {
   paragraphSpacing: number
   showFormatted: boolean
   isFullscreen: boolean
+  contentWidth: ContentWidth
 }
 
 /**
@@ -43,7 +45,7 @@ export default function ReaderPage() {
   const navigate = useNavigate()
   const [showSettings, setShowSettings] = useState(false)
 
-  const { fontSize, theme, fontFamily, lineHeight, setFontSize, setTheme, setFontFamily } = useReaderStore()
+  const { fontSize, theme, fontFamily, lineHeight, letterSpacing, setFontSize, setTheme, setFontFamily, setLetterSpacing } = useReaderStore()
 
   const [readerSettings, setReaderSettings] = useState<ReaderSettings>({
     paragraphIndent: 'two-char',
@@ -51,6 +53,7 @@ export default function ReaderPage() {
     paragraphSpacing: 1.8,
     showFormatted: false,
     isFullscreen: false,
+    contentWidth: 'medium',
   })
 
   const { data: novel } = useQuery({
@@ -81,16 +84,20 @@ export default function ReaderPage() {
     if (!chapter?.content) return ''
 
     if (readerSettings.showFormatted) {
-      return formatForReading(chapter.content)
+      return formatForReading(chapter.content, {
+        maxParagraphLength: 320,
+        dialogueStandalone: true,
+        preserveSceneBreaks: true,
+      })
     }
 
     return chapter.content
-  }, [chapter?.content, readerSettings.showFormatted])
+  }, [chapter, readerSettings.showFormatted])
 
   const wordCount = useMemo(() => {
     if (!chapter?.content) return 0
     return chapter.content.replace(/\s/g, '').length
-  }, [chapter?.content])
+  }, [chapter])
 
   const readingTime = useMemo(() => {
     const wordsPerMinute = 500
@@ -147,6 +154,7 @@ export default function ReaderPage() {
       fontSize: `${fontSize}px`,
       fontFamily: fontFamily === 'serif' ? '"Noto Serif SC", "Source Han Serif SC", serif' : '"Noto Sans SC", system-ui, sans-serif',
       lineHeight: lineHeight,
+      letterSpacing: `${letterSpacing}em`,
     }}>
       <header className="sticky top-0 z-10 backdrop-blur-md bg-[var(--reader-bg)]/80 border-b border-[var(--reader-text)]/10">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -251,6 +259,41 @@ export default function ReaderPage() {
               </Select>
             </div>
             <div className="flex items-center gap-4 text-sm">
+              <label className="shrink-0 flex items-center gap-1">
+                <BookOpen className="h-3.5 w-3.5" />
+                内容宽度
+              </label>
+              <Select
+                value={readerSettings.contentWidth}
+                onValueChange={(v) => setReaderSettings(p => ({ ...p, contentWidth: v as ContentWidth }))}
+              >
+                <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="narrow">窄版</SelectItem>
+                  <SelectItem value="medium">适中</SelectItem>
+                  <SelectItem value="wide">宽版</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-4 text-sm">
+              <label className="shrink-0 flex items-center gap-1">
+                <AlignCenter className="h-3.5 w-3.5" />
+                字间距
+              </label>
+              <Select
+                value={String(letterSpacing)}
+                onValueChange={(v) => setLetterSpacing(Number(v))}
+              >
+                <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">紧凑</SelectItem>
+                  <SelectItem value="0.03">适中</SelectItem>
+                  <SelectItem value="0.05">宽松</SelectItem>
+                  <SelectItem value="0.08">疏朗</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-4 text-sm">
               <label className="shrink-0">对话样式</label>
               <Select
                 value={readerSettings.dialogueStyle}
@@ -275,7 +318,10 @@ export default function ReaderPage() {
       </header>
 
       <main
-        className="max-w-3xl mx-auto px-8 py-12"
+        className={`mx-auto px-8 py-12 ${
+          readerSettings.contentWidth === 'narrow' ? 'max-w-2xl' :
+          readerSettings.contentWidth === 'wide' ? 'max-w-4xl' : 'max-w-3xl'
+        }`}
         style={{ marginBottom: readerSettings.isFullscreen ? '80px' : undefined }}
       >
         {chapter?.content ? (
@@ -346,6 +392,46 @@ export default function ReaderPage() {
           margin-bottom: ${readerSettings.paragraphSpacing}em;
           text-align: justify;
           ${getParagraphIndentStyle()}
+        }
+
+        .reader-content p.reader-dialogue,
+        .reader-content p.reader-system {
+          text-indent: 0 !important;
+        }
+
+        .reader-content p.reader-dialogue {
+          position: relative;
+          padding-left: 1em;
+          margin-bottom: ${Math.max(readerSettings.paragraphSpacing * 0.6, 0.8)}em;
+          ${
+            readerSettings.dialogueStyle === 'highlight'
+              ? 'color: var(--reader-accent, #c25e00); font-weight: 500;'
+              : readerSettings.dialogueStyle === 'indent'
+              ? 'margin-left: 1.5em; margin-right: 1.5em;'
+              : ''
+          }
+        }
+
+        .reader-content p.reader-dialogue::before {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 0.3em;
+          bottom: 0.3em;
+          width: 3px;
+          border-radius: 2px;
+          background-color: var(--reader-text);
+          opacity: 0.2;
+        }
+
+        .reader-content p.reader-system {
+          text-align: center;
+          font-family: "Noto Sans SC", system-ui, sans-serif;
+          font-size: 0.92em;
+          color: var(--reader-accent, #8b5cf6);
+          opacity: 0.85;
+          margin: 1.5em 0;
+          letter-spacing: 0.08em;
         }
 
         .reader-content blockquote {

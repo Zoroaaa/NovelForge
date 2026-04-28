@@ -53,9 +53,9 @@
   }
 }
 
-.reader-light { --reader-bg: #fafaf8; --reader-text: #1a1a1a; }
-.reader-dark  { --reader-bg: #1c1c1e; --reader-text: #e5e5e5; }
-.reader-sepia { --reader-bg: #f4efe4; --reader-text: #3b3020; }
+.reader-light { --reader-bg: #fafaf8; --reader-text: #1a1a1a; --reader-accent: #c25e00; }
+.reader-dark  { --reader-bg: #1c1c1e; --reader-text: #e5e5e5; --reader-accent: #fb923c; }
+.reader-sepia { --reader-bg: #f4efe4; --reader-text: #3b3020; --reader-accent: #8b5e3c; }
 
 * {
   scrollbar-width: thin;

@@ -15,6 +15,7 @@ export interface GenerationOptions {
   existingContent?: string
   targetWords?: number
   issuesContext?: string[]
+  isBackgroundGeneration?: boolean
 }
 
 export interface GenerationResult {

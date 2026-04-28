@@ -101,10 +101,19 @@
   - [预览上下文](#预览上下文)
   - [总纲摘要生成](#总纲摘要生成)
   - [卷摘要生成](#卷摘要生成)
-  - [批量确认章节](#批量确认章节)
-  - [生成下一章](#生成下一章)
+  - [后台生成章节](#后台生成章节)
   - [获取最新检查日志](#获取最新检查日志)
   - [获取检查日志历史](#获取检查日志历史)
+- **批量生成 (Batch)** - v2.1.0新增
+  - [开始批量生成](#开始批量生成)
+  - [获取批量任务详情](#获取批量任务详情)
+  - [暂停批量任务](#暂停批量任务)
+  - [恢复批量任务](#恢复批量任务)
+  - [取消批量任务](#取消批量任务)
+  - [获取小说活跃任务](#获取小说活跃任务)
+- **质量评分 (Quality)** - v2.1.0新增
+  - [获取章节评分](#获取章节评分)
+  - [获取小说评分列表](#获取小说评分列表)
 - **境界管理 (Power Level)**
   - [检测境界突破](#检测境界突破)
   - [批量检测境界](#批量检测境界)
@@ -2309,57 +2318,43 @@ data: [DONE]
 
 ---
 
-### 批量确认章节
+### 后台生成章节
 
-**POST** `/api/generate/confirm-batch-chapters`
+**POST** `/api/generate/chapter/queue`
 
 > **需要认证**
+
+**说明**: 将章节生成任务提交到后台队列，立即返回，用户可关闭页面
 
 **请求体**:
 ```json
 {
-  "volumeId": "vol123",
+  "chapterId": "chap123",
   "novelId": "novel456",
-  "chapterPlans": [
-    { "chapterTitle": "第一章：少年林风", "summary": "介绍主角背景" },
-    { "chapterTitle": "第二章：拜入宗门", "summary": "主角踏上修仙路" }
-  ]
+  "mode": "generate",
+  "targetWords": 3000,
+  "options": {
+    "enableRAG": true,
+    "enableAutoSummary": true
+  }
 }
 ```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| chapterId | string | ✅ | 章节ID |
+| novelId | string | ✅ | 小说ID |
+| mode | string | 否 | 生成模式：generate/continue/rewrite（默认generate） |
+| targetWords | number | 否 | 目标字数（500-8000） |
+| options.enableRAG | boolean | 否 | 是否启用RAG（默认true） |
+| options.enableAutoSummary | boolean | 否 | 是否自动生成摘要（默认true） |
 
 **响应示例**:
 ```json
 {
   "ok": true,
-  "created": [
-    { "id": "chap_new_1", "title": "第一章：少年林风" },
-    { "id": "chap_new_2", "title": "第二章：拜入宗门" }
-  ]
-}
-```
-
----
-
-### 生成下一章
-
-**POST** `/api/generate/next-chapter`
-
-> **需要认证**
-
-**请求体**:
-```json
-{
-  "volumeId": "vol123",
-  "novelId": "novel456"
-}
-```
-
-**响应示例**:
-```json
-{
-  "ok": true,
-  "chapterId": "chap_new_3",
-  "title": "第三章：初试锋芒"
+  "message": "章节生成任务已提交到后台队列",
+  "taskId": "queue_task_abc123"
 }
 ```
 
@@ -2411,6 +2406,204 @@ data: [DONE]
 {
   "logs": [...]
 }
+```
+
+---
+
+## 批量生成 (Batch)
+
+> v2.1.0 新增 - 批量章节生成系统
+
+### 开始批量生成
+
+**POST** `/api/batch/start`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "novelId": "novel456",
+  "volumeId": "vol123",
+  "targetCount": 5,
+  "startFromNext": true,
+  "startChapterOrder": 10
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| novelId | string | ✅ | 小说ID |
+| volumeId | string | ✅ | 卷ID |
+| targetCount | number | ✅ | 要生成的章节数（1-200） |
+| startFromNext | boolean | 否 | 是否从下一章开始（默认true） |
+| startChapterOrder | number | 否 | 指定起始章节序号 |
+
+**响应示例**:
+```json
+{
+  "id": "batch_task_abc123",
+  "novelId": "novel456",
+  "volumeId": "vol123",
+  "status": "pending",
+  "targetCount": 5,
+  "completedCount": 0,
+  "createdAt": 1714348800
+}
+```
+
+---
+
+### 获取批量任务详情
+
+**GET** `/api/batch/:taskId`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "id": "batch_task_abc123",
+  "novelId": "novel456",
+  "volumeId": "vol123",
+  "status": "running",
+  "targetCount": 5,
+  "completedCount": 2,
+  "failedCount": 0,
+  "createdAt": 1714348800,
+  "startedAt": 1714348801,
+  "completedAt": null,
+  "lastError": null
+}
+```
+
+**任务状态说明**:
+| 状态 | 说明 |
+|------|------|
+| `pending` | 等待执行 |
+| `running` | 执行中 |
+| `paused` | 已暂停 |
+| `done` | 已完成 |
+| `cancelled` | 已取消 |
+| `failed` | 失败 |
+
+---
+
+### 暂停批量任务
+
+**POST** `/api/batch/:taskId/pause`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "ok": true
+}
+```
+
+---
+
+### 恢复批量任务
+
+**POST** `/api/batch/:taskId/resume`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "ok": true
+}
+```
+
+---
+
+### 取消批量任务
+
+**DELETE** `/api/batch/:taskId`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "ok": true
+}
+```
+
+---
+
+### 获取小说活跃任务
+
+**GET** `/api/batch/novels/:id/active`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "id": "batch_task_abc123",
+  "status": "running",
+  "volumeId": "vol123",
+  "targetCount": 5,
+  "completedCount": 2,
+  "createdAt": 1714348800
+}
+```
+
+> 如果没有活跃任务，返回 `null`
+
+---
+
+## 质量评分 (Quality)
+
+> v2.1.0 新增 - 多维度章节质量评分系统
+
+### 获取章节评分
+
+**GET** `/api/quality/chapter/:chapterId`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "id": "qs_abc123",
+  "chapterId": "chap123",
+  "novelId": "novel456",
+  "totalScore": 82,
+  "plotScore": 85,
+  "consistencyScore": 80,
+  "foreshadowingScore": 78,
+  "pacingScore": 83,
+  "fluencyScore": 84,
+  "details": {...},
+  "createdAt": 1714348800
+}
+```
+
+> 如果章节没有评分，返回 `null`
+
+---
+
+### 获取小说评分列表
+
+**GET** `/api/quality/novel/:novelId`
+
+> **需要认证**
+
+**响应示例**:
+```json
+[
+  {
+    "id": "qs_abc123",
+    "chapterId": "chap123",
+    "novelId": "novel456",
+    "totalScore": 82,
+    "createdAt": 1714348800
+  }
+]
 ```
 
 ---
@@ -3462,6 +3655,6 @@ X-Export-Id: export_abc123
 
 <div align="center">
 
-**API Version: 3.1.0**
+**API Version: 3.2.0**
 
 </div>
