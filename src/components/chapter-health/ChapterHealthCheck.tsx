@@ -662,7 +662,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
               )}
             </div>
             <AlertDialogDescription asChild>
-              <div className="text-left mt-3 overflow-y-auto max-h-[60vh] pr-2">
+              <div className="text-left mt-3" style={{ overflowY: 'auto', maxHeight: '60vh' }}>
                 {isChecking ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-3">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -891,7 +891,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
               )}
             </div>
             <AlertDialogDescription asChild>
-              <div className="text-left mt-3 overflow-y-auto max-h-[60vh] pr-2">
+              <div className="text-left mt-3 overflow-y-auto" style={{ maxHeight: '60vh' }}>
                 {coherenceChecking ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-3">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />

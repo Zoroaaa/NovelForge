@@ -216,15 +216,15 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete, combinedRep
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="max-h-full overflow-hidden">
+      <CardHeader className="pb-3 flex-shrink-0">
         <CardTitle className="text-base flex items-center gap-2">
           <Shield className="h-4 w-4" /><Link className="h-4 w-4" /><Target className="h-4 w-4" />
           综合质量检查
         </CardTitle>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="overflow-y-auto flex-1 min-h-0">
         {!result && !checking && (
           <div className="text-center py-6 text-muted-foreground text-sm">
             同时执行角色一致性检查、章节连贯性检查和卷完成度检查，提供全面的健康评估
