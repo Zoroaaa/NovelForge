@@ -1434,6 +1434,89 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                                 )}
                               </div>
                             </section>
+
+                            {selectedHistoryLog.volumeProgressResult && (
+                              <section className="space-y-3">
+                                <header className="flex items-center gap-2.5 pb-2 border-b border-blue-200/50 dark:border-blue-800/30">
+                                  <Target className="h-4 w-4 text-blue-600" />
+                                  <h3 className="text-sm font-semibold uppercase tracking-wide">卷完成度检查</h3>
+                                  <Badge className={`ml-auto text-[11px] h-5 ${
+                                    selectedHistoryLog.volumeProgressResult.score >= 80
+                                      ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                      : selectedHistoryLog.volumeProgressResult.score >= 60
+                                      ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
+                                      : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                                  }`}>
+                                    {selectedHistoryLog.volumeProgressResult.score}分
+                                  </Badge>
+                                </header>
+                                <div className="space-y-2 pl-1">
+                                  <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <div className="p-2 bg-muted/30 rounded">
+                                      <span className="text-muted-foreground">当前章节：</span>
+                                      <span className="font-medium ml-1">第 {selectedHistoryLog.volumeProgressResult.currentChapter || '-'} 章</span>
+                                    </div>
+                                    <div className="p-2 bg-muted/30 rounded">
+                                      <span className="text-muted-foreground">目标章节：</span>
+                                      <span className="font-medium ml-1">{selectedHistoryLog.volumeProgressResult.targetChapter ? `${selectedHistoryLog.volumeProgressResult.targetChapter} 章` : '未设定'}</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <div className="flex-1 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800 text-center">
+                                      <div className="text-[10px] text-muted-foreground">字数健康度</div>
+                                      <div className={`text-lg font-bold ${selectedHistoryLog.volumeProgressResult.wordCountScore >= 80 ? 'text-green-600' : selectedHistoryLog.volumeProgressResult.wordCountScore >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                                        {selectedHistoryLog.volumeProgressResult.wordCountScore}
+                                      </div>
+                                    </div>
+                                    <div className="flex-1 p-3 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-200 dark:border-purple-800 text-center">
+                                      <div className="text-[10px] text-muted-foreground">节奏健康度</div>
+                                      <div className={`text-lg font-bold ${selectedHistoryLog.volumeProgressResult.rhythmScore >= 80 ? 'text-green-600' : selectedHistoryLog.volumeProgressResult.rhythmScore >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                                        {selectedHistoryLog.volumeProgressResult.rhythmScore}
+                                      </div>
+                                    </div>
+                                    <div className="flex-1 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-300 dark:border-blue-700 text-center">
+                                      <div className="text-[10px] text-muted-foreground">综合</div>
+                                      <div className={`text-lg font-bold ${selectedHistoryLog.volumeProgressResult.score >= 80 ? 'text-green-600' : selectedHistoryLog.volumeProgressResult.score >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                                        {selectedHistoryLog.volumeProgressResult.score}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {selectedHistoryLog.volumeProgressResult.wordCountIssues?.length > 0 && (
+                                    <div className="space-y-1">
+                                      <p className="text-xs font-medium text-blue-600">字数风险 ({selectedHistoryLog.volumeProgressResult.wordCountIssues.length})</p>
+                                      {selectedHistoryLog.volumeProgressResult.wordCountIssues.map((issue: any, i: number) => (
+                                        <div key={`hist-wc-${i}`} className={`p-2 rounded border text-xs ${issue.severity === 'error' ? 'bg-red-50 dark:bg-red-950/30 border-red-200' : 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200'}`}>
+                                          <span className="font-medium">{issue.chapterTitle}</span>
+                                          <span className="text-muted-foreground ml-2">{issue.message}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {selectedHistoryLog.volumeProgressResult.rhythmIssues?.length > 0 && (
+                                    <div className="space-y-1">
+                                      <p className="text-xs font-medium text-purple-600">节奏风险 ({selectedHistoryLog.volumeProgressResult.rhythmIssues.length})</p>
+                                      {selectedHistoryLog.volumeProgressResult.rhythmIssues.map((issue: any, i: number) => (
+                                        <div key={`hist-rh-${i}`} className={`p-2 rounded border text-xs ${issue.severity === 'error' ? 'bg-red-50 dark:bg-red-950/30 border-red-200' : 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200'}`}>
+                                          <span className="font-medium">{issue.chapterTitle}</span>
+                                          <Badge className={`ml-1 text-[10px] h-4 ${issue.severity === 'error' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{issue.dimension}</Badge>
+                                          <span className="text-muted-foreground ml-2">{issue.deviation}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {selectedHistoryLog.volumeProgressResult.diagnosis && (
+                                    <div className="p-2.5 bg-muted/30 rounded text-xs">
+                                      <span className="text-muted-foreground">诊断：</span>{selectedHistoryLog.volumeProgressResult.diagnosis}
+                                    </div>
+                                  )}
+                                  {selectedHistoryLog.volumeProgressResult.suggestion && (
+                                    <div className="p-2.5 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded text-xs text-blue-700 dark:text-blue-300">
+                                      <span className="font-medium">建议：</span>{selectedHistoryLog.volumeProgressResult.suggestion}
+                                    </div>
+                                  )}
+                                </div>
+                              </section>
+                            )}
                           </>
                         )}
 

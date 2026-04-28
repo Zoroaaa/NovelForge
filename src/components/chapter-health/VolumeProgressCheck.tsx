@@ -105,13 +105,8 @@ export function VolumeProgressCheck({ novelId, chapterId }: VolumeProgressCheckP
 
       <CardContent>
         {!result && !checkMutation.isPending && (
-          <div className="flex flex-col items-center gap-3">
-            <div className="text-center text-muted-foreground text-sm">
-              评估当前卷的字数健康度和节奏健康度
-            </div>
-            <Button onClick={() => checkMutation.mutate()} size="sm" className="mt-1">
-              开始检查
-            </Button>
+          <div className="text-center text-muted-foreground text-sm py-8">
+            请选择章节后点击上方"执行卷进度检查"
           </div>
         )}
 
