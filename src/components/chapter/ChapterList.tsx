@@ -11,7 +11,7 @@ import { api, streamGenerate } from '@/lib/api'
 import type { Chapter, ChapterInput, Volume } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Square, BookOpen, Trash2, FileText, Sparkles, CheckCircle, RefreshCw, ChevronDown, ChevronRight, Library, Wand2, Loader2, Zap, Plus } from 'lucide-react'
+import { Square, BookOpen, Trash2, FileText, Sparkles, CheckCircle, RefreshCw, ChevronDown, ChevronRight, Library, Wand2, Loader2, Zap, Plus, CloudUpload } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -62,6 +62,8 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
   const [nextChapterDialogOpen, setNextChapterDialogOpen] = useState(false)
   const [selectedVolumeForNext, setSelectedVolumeForNext] = useState<Volume | null>(null)
   const [isGeneratingNext, setIsGeneratingNext] = useState(false)
+  const [isQueueSubmitting, setIsQueueSubmitting] = useState(false)
+  const [isQueueSubmitted, setIsQueueSubmitted] = useState(false)
 
   const [generatingChapterId, setGeneratingChapterId] = useState<string | null>(null)
   const [generatingOutput, setGeneratingOutput] = useState('')
@@ -161,6 +163,57 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
     setNextChapterDialogOpen(false)
     setSelectedVolumeForNext(null)
   }, [generatingChapterId, novelId, queryClient])
+
+  const handleStartGenerateNextQueue = async () => {
+    if (!selectedVolumeForNext || !chapters) return
+    setIsQueueSubmitting(true)
+
+    const maxOrder = chapters.length > 0 ? Math.max(...chapters.map(c => c.sortOrder)) : -1
+    const chapterNumber = chapters.length + 1
+    const tempTitle = `第${chapterNumber}章`
+
+    try {
+      const newChapter = await api.chapters.create({
+        novelId,
+        title: tempTitle,
+        sortOrder: maxOrder + 1,
+        content: null,
+        volumeId: selectedVolumeForNext.id,
+        summary: '',
+      })
+
+      const result = await api.generate.chapterQueue({
+        chapterId: newChapter.id,
+        novelId,
+        mode: 'generate',
+      })
+
+      if (result.ok) {
+        setIsQueueSubmitted(true)
+        setIsQueueSubmitting(false)
+        toast.success('章节生成任务已提交到后台队列', {
+          description: '您可以关闭页面，任务将在后台继续执行',
+          duration: 5000,
+        })
+        queryClient.invalidateQueries({ queryKey: ['chapters', novelId] })
+
+        setTimeout(() => {
+          setNextChapterDialogOpen(false)
+          setSelectedVolumeForNext(null)
+          setIsQueueSubmitted(false)
+        }, 2000)
+
+        if (onChapterSelect) {
+          onChapterSelect(newChapter.id)
+        }
+      } else {
+        throw new Error(result.error || '提交失败')
+      }
+    } catch (err) {
+      toast.error(`提交失败: ${(err as Error).message}`)
+      setIsQueueSubmitting(false)
+    }
+  }
 
   const handleCloseDialog = (open: boolean) => {
     if (!open && isGeneratingContent) {
@@ -535,7 +588,7 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
               <DialogDescription>
                 {isGeneratingContent
                   ? '正在生成章节内容...'
-                  : '选择目标卷，直接开始生成章节正文'}
+                  : '选择目标卷，即时生成或后台生成章节正文'}
               </DialogDescription>
             </DialogHeader>
 
@@ -545,7 +598,7 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
                   <div className="bg-muted/50 p-3 rounded-lg">
                     <p className="text-sm font-medium">目标卷：《{selectedVolumeForNext?.title || '请选择卷'}》</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      选择卷后点击开始，系统将直接生成章节正文
+                      选择卷后可选择"即时生成"（等待完成）或"后台生成"（可关闭页面）
                     </p>
                   </div>
 
@@ -566,8 +619,8 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
 
                   <Button
                     onClick={handleStartGenerateNext}
-                    disabled={isGeneratingNext || !selectedVolumeForNext}
-                    className="w-full gap-2"
+                    disabled={isGeneratingNext || !selectedVolumeForNext || isQueueSubmitting || isQueueSubmitted}
+                    className="flex-1 gap-2"
                   >
                     {isGeneratingNext ? (
                       <>
@@ -577,7 +630,31 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
                     ) : (
                       <>
                         <Wand2 className="h-4 w-4" />
-                        开始生成
+                        即时生成
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleStartGenerateNextQueue}
+                    disabled={isGeneratingNext || !selectedVolumeForNext || isQueueSubmitting || isQueueSubmitted}
+                    className="flex-1 gap-2"
+                    title="提交到后台队列生成，可关闭页面"
+                  >
+                    {isQueueSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        提交中...
+                      </>
+                    ) : isQueueSubmitted ? (
+                      <>
+                        <Wand2 className="h-4 w-4 text-green-600" />
+                        已提交
+                      </>
+                    ) : (
+                      <>
+                        <CloudUpload className="h-4 w-4" />
+                        后台生成
                       </>
                     )}
                   </Button>
