@@ -426,12 +426,21 @@ export const api = {
         targetWordCount: number | null
         chapterProgress: number
         wordProgress: number
-        healthStatus: 'healthy' | 'ahead' | 'behind' | 'critical'
-        risk: 'early_ending' | 'late_ending' | null
-        suggestion: string
-        diagnosis?: string
-        raw?: string
+        perChapterEstimate: number | null
+        wordCountIssues: Array<{
+          chapterNumber: number; chapterTitle: string; expectedWords: number
+          actualWords: number; deviationPct: number; severity: 'warning' | 'error'; message: string
+        }>
+        rhythmIssues: Array<{
+          chapterNumber: number; chapterTitle: string; dimension: string
+          deviation: string; severity: 'warning' | 'error'; suggestion: string
+        }>
+        wordCountScore: number
+        rhythmScore: number
         score: number
+        diagnosis: string
+        suggestion: string
+        raw?: string
         error?: string
       }>('/api/generate/volume-progress-check', { method: 'POST', body: j(body), timeout: 120000 }),
     getLogs: (novelId?: string, limit?: number) =>
@@ -467,8 +476,13 @@ export const api = {
             targetWordCount: number | null
             chapterProgress: number
             wordProgress: number
-            healthStatus: 'healthy' | 'ahead' | 'behind' | 'critical'
-            risk: 'early_ending' | 'late_ending' | null
+            perChapterEstimate: number | null
+            wordCountIssues: Array<{ chapterNumber: number; chapterTitle: string; expectedWords: number; actualWords: number; deviationPct: number; severity: 'warning' | 'error'; message: string }>
+            rhythmIssues: Array<{ chapterNumber: number; chapterTitle: string; dimension: string; deviation: string; severity: 'warning' | 'error'; suggestion: string }>
+            wordCountScore: number
+            rhythmScore: number
+            score: number
+            diagnosis: string
             suggestion: string
           }
           score: number
@@ -491,8 +505,13 @@ export const api = {
             targetWordCount: number | null
             chapterProgress: number
             wordProgress: number
-            healthStatus: 'healthy' | 'ahead' | 'behind' | 'critical'
-            risk: 'early_ending' | 'late_ending' | null
+            perChapterEstimate: number | null
+            wordCountIssues: Array<{ chapterNumber: number; chapterTitle: string; expectedWords: number; actualWords: number; deviationPct: number; severity: 'warning' | 'error'; message: string }>
+            rhythmIssues: Array<{ chapterNumber: number; chapterTitle: string; dimension: string; deviation: string; severity: 'warning' | 'error'; suggestion: string }>
+            wordCountScore: number
+            rhythmScore: number
+            score: number
+            diagnosis: string
             suggestion: string
           }
           score: number
@@ -507,6 +526,18 @@ export const api = {
         score: number
         hasIssues: boolean
       }>('/api/generate/combined-check', { method: 'POST', body: j(body), timeout: 180000 }),
+    repairChapter: (body: {
+      chapterId: string
+      novelId: string
+      repairType: 'coherence' | 'character' | 'volume'
+      coherenceIssues?: Array<{ severity: string; message: string; suggestion?: string; category?: string }>
+      coherenceScore?: number
+      characterConflicts?: Array<{ characterName: string; dimension: string; issue: string; excerpt?: string; suggestion?: string }>
+      wordCountIssues?: Array<{ chapterNumber: number; chapterTitle: string; message: string }>
+      rhythmIssues?: Array<{ chapterNumber: number; chapterTitle: string; dimension: string; deviation: string; suggestion: string }>
+      volumeContext?: string
+    }) =>
+      req<{ ok: boolean; repairedContent?: string; error?: string }>('/api/generate/repair-chapter', { method: 'POST', body: j(body), timeout: 300000 }),
   },
 
   // 认证系统API

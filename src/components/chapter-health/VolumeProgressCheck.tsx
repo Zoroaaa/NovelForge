@@ -1,6 +1,6 @@
 /**
  * @file VolumeProgressCheck.tsx
- * @description 卷完成程度检查组件
+ * @description 卷完成程度检查组件（字数风险 + 节奏风险）
  */
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -11,33 +11,76 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Loader2, AlertTriangle, CheckCircle, TrendingUp, Clock, Target } from 'lucide-react'
+import {
+  Loader2, AlertTriangle, CheckCircle, Target,
+  ChevronDown, ChevronUp, FileText, AlignLeft, Wand2, Check
+} from 'lucide-react'
 
 interface VolumeProgressCheckProps {
   novelId: string
   chapterId: string | null
 }
 
-const healthStatusConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  healthy: { label: '进度正常', color: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300', icon: <CheckCircle className="h-4 w-4" /> },
-  ahead: { label: '进度稍快', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300', icon: <TrendingUp className="h-4 w-4" /> },
-  behind: { label: '进度偏慢', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300', icon: <Clock className="h-4 w-4" /> },
-  critical: { label: '严重偏离', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300', icon: <AlertTriangle className="h-4 w-4" /> },
-}
-
 export function VolumeProgressCheck({ novelId, chapterId }: VolumeProgressCheckProps) {
   const queryClient = useQueryClient()
   const [result, setResult] = useState<VolumeProgressResult | null>(null)
+  const [expandedWordCount, setExpandedWordCount] = useState(true)
+  const [expandedRhythm, setExpandedRhythm] = useState(true)
+  const [showRepaired, setShowRepaired] = useState(false)
+  const [repairing, setRepairing] = useState(false)
+  const [repairedContent, setRepairedContent] = useState<string | null>(null)
+  const [repairError, setRepairError] = useState<string | null>(null)
 
   const checkMutation = useMutation({
     mutationFn: () => api.generate.checkVolumeProgress({ chapterId: chapterId!, novelId }),
     onSuccess: (data) => {
       setResult(data)
+      setRepairedContent(null)
+      setRepairError(null)
+      setShowRepaired(false)
       queryClient.invalidateQueries({ queryKey: ['check-logs'] })
       toast.success('卷完成度检查完成')
     },
     onError: (err) => toast.error(`检查失败: ${(err as Error).message}`),
   })
+
+  const handleRepair = async () => {
+    if (!chapterId || !result) return
+    const hasIssues = result.wordCountIssues.length > 0 || result.rhythmIssues.length > 0
+    if (!hasIssues) return
+    setRepairing(true)
+    setRepairedContent(null)
+    setRepairError(null)
+
+    try {
+      const data = await api.generate.repairChapter({
+        chapterId, novelId, repairType: 'volume',
+        wordCountIssues: result.wordCountIssues.map(w => ({
+          chapterNumber: w.chapterNumber, chapterTitle: w.chapterTitle, message: w.message,
+        })),
+        rhythmIssues: result.rhythmIssues.map(r => ({
+          chapterNumber: r.chapterNumber, chapterTitle: r.chapterTitle,
+          dimension: r.dimension, deviation: r.deviation, suggestion: r.suggestion,
+        })),
+        volumeContext: `${result.diagnosis}。${result.suggestion}`,
+      })
+      if (data.ok && data.repairedContent) {
+        setRepairedContent(data.repairedContent)
+      } else {
+        setRepairError(data.error || '修复失败')
+      }
+    } catch (error) {
+      setRepairError((error as Error).message)
+    } finally {
+      setRepairing(false)
+    }
+  }
+
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return 'text-green-600'
+    if (score >= 60) return 'text-amber-600'
+    return 'text-red-600'
+  }
 
   if (!chapterId) {
     return (
@@ -62,80 +105,245 @@ export function VolumeProgressCheck({ novelId, chapterId }: VolumeProgressCheckP
 
       <CardContent>
         {!result && !checkMutation.isPending && (
-          <div className="text-center py-6 text-muted-foreground text-sm">
-            点击"开始检查"评估当前卷的进度是否健康
+          <div className="flex flex-col items-center gap-3">
+            <div className="text-center text-muted-foreground text-sm">
+              评估当前卷的字数健康度和节奏健康度
+            </div>
+            <Button onClick={() => checkMutation.mutate()} size="sm" className="mt-1">
+              开始检查
+            </Button>
           </div>
         )}
 
         {checkMutation.isPending && (
-          <div className="flex items-center justify-center py-6 gap-2 text-muted-foreground text-sm">
+          <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground text-sm">
             <Loader2 className="h-4 w-4 animate-spin" />
             正在分析卷的完成程度...
           </div>
         )}
 
-        {result && (
+        {result && !checkMutation.isPending && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <StatItem label="当前章节" value={`第 ${result.currentChapter} 章`} />
               <StatItem label="目标章节" value={result.targetChapter ? `${result.targetChapter} 章` : '未设定'} />
               <StatItem label="当前字数" value={`${(result.currentWordCount / 10000).toFixed(1)} 万字`} />
               <StatItem label="目标字数" value={result.targetWordCount ? `${(result.targetWordCount / 10000).toFixed(0)} 万字` : '未设定'} />
             </div>
 
-            {(result.targetChapter || result.targetWordCount) && (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-muted/50 rounded-lg">
-                  <div className="text-xs text-muted-foreground mb-1">章节进度</div>
-                  <div className="text-lg font-semibold">{result.chapterProgress.toFixed(1)}%</div>
-                  <div className="mt-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary rounded-full transition-all"
-                      style={{ width: `${Math.min(result.chapterProgress, 100)}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="p-3 bg-muted/50 rounded-lg">
-                  <div className="text-xs text-muted-foreground mb-1">字数进度</div>
-                  <div className="text-lg font-semibold">{result.wordProgress.toFixed(1)}%</div>
-                  <div className="mt-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary rounded-full transition-all"
-                      style={{ width: `${Math.min(result.wordProgress, 100)}%` }}
-                    />
-                  </div>
-                </div>
+            {result.perChapterEstimate && (
+              <div className="p-2.5 bg-muted/30 rounded-lg text-xs text-center text-muted-foreground">
+                预估每章字数：约 {result.perChapterEstimate.toLocaleString()} 字（±15% 内为健康范围）
               </div>
             )}
 
-            <div className="flex items-center justify-between p-3 rounded-lg border">
-              <span className="text-sm font-medium">健康状态</span>
-              <Badge className={healthStatusConfig[result.healthStatus]?.color || ''}>
-                {healthStatusConfig[result.healthStatus]?.icon}
-                <span className="ml-1">{healthStatusConfig[result.healthStatus]?.label}</span>
-              </Badge>
+            <div className="flex gap-3">
+              <div className="flex-1 p-3 bg-muted/30 rounded-lg border text-center">
+                <div className="text-[11px] text-muted-foreground mb-1 flex items-center justify-center gap-1">
+                  <FileText className="h-3 w-3" /> 字数健康度
+                </div>
+                <div className={`text-xl font-bold ${getScoreColor(result.wordCountScore)}`}>
+                  {result.wordCountScore}
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">/100</div>
+                {result.wordCountIssues.length > 0 && (
+                  <Badge variant="outline" className="mt-1 text-[10px] h-4 px-1.5">
+                    {result.wordCountIssues.filter(i => i.severity === 'error').length}个严重，{result.wordCountIssues.filter(i => i.severity === 'warning').length}个轻微
+                  </Badge>
+                )}
+              </div>
+              <div className="flex-1 p-3 bg-muted/30 rounded-lg border text-center">
+                <div className="text-[11px] text-muted-foreground mb-1 flex items-center justify-center gap-1">
+                  <AlignLeft className="h-3 w-3" /> 节奏健康度
+                </div>
+                <div className={`text-xl font-bold ${getScoreColor(result.rhythmScore)}`}>
+                  {result.rhythmScore}
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">/100</div>
+                {result.rhythmIssues.length > 0 && (
+                  <Badge variant="outline" className="mt-1 text-[10px] h-4 px-1.5">
+                    {result.rhythmIssues.filter(i => i.severity === 'error').length}个严重，{result.rhythmIssues.filter(i => i.severity === 'warning').length}个轻微
+                  </Badge>
+                )}
+              </div>
+              <div className="flex-1 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800 text-center">
+                <div className="text-[11px] text-muted-foreground mb-1">综合评分</div>
+                <div className={`text-xl font-bold ${getScoreColor(result.score)}`}>
+                  {result.score}
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">/100</div>
+              </div>
             </div>
 
-            {result.risk && (
-              <div className="p-3 rounded-lg border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
-                  <div>
-                    <div className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                      风险提示：{result.risk === 'early_ending' ? '可能提前收尾' : '可能延期收尾'}
-                    </div>
-                  </div>
+            {/* 字数风险列表 */}
+            <div className="border rounded-lg overflow-hidden">
+              <button
+                onClick={() => setExpandedWordCount(!expandedWordCount)}
+                className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-blue-600" />
+                  <span className="text-sm font-medium">字数风险</span>
+                  {result.wordCountIssues.length > 0 ? (
+                    <Badge variant="destructive" className="text-[10px] h-4 px-1.5">
+                      {result.wordCountIssues.length}
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-[10px] h-4 px-1.5">
+                      无
+                    </Badge>
+                  )}
                 </div>
+                {expandedWordCount ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
+              {expandedWordCount && (
+                <div className="border-t">
+                  {result.wordCountIssues.length === 0 ? (
+                    <div className="p-3 text-xs text-muted-foreground flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      各章字数均在健康范围内
+                    </div>
+                  ) : (
+                    <ScrollArea className="max-h-48">
+                      <div className="divide-y">
+                        {result.wordCountIssues.map((issue, i) => (
+                          <div key={`wc-${i}`} className="p-3 text-xs">
+                            <div className="flex items-center gap-2 mb-1">
+                              <AlertTriangle className={`h-4 w-4 shrink-0 ${issue.severity === 'error' ? 'text-red-500' : 'text-yellow-500'}`} />
+                              <span className="font-medium">
+                                第{issue.chapterNumber}章「{issue.chapterTitle}」
+                              </span>
+                              <Badge variant="outline" className={`ml-auto text-[10px] h-4 ${issue.severity === 'error' ? 'border-red-300 text-red-600' : 'border-yellow-300 text-yellow-600'}`}>
+                                {issue.severity === 'error' ? '严重' : '轻微'}
+                              </Badge>
+                            </div>
+                            <p className="text-muted-foreground pl-6">{issue.message}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 节奏风险列表 */}
+            <div className="border rounded-lg overflow-hidden">
+              <button
+                onClick={() => setExpandedRhythm(!expandedRhythm)}
+                className="w-full flex items-center justify-center justify-between p-3 hover:bg-muted/30 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <AlignLeft className="h-4 w-4 text-purple-600" />
+                  <span className="text-sm font-medium">节奏风险</span>
+                  {result.rhythmIssues.length > 0 ? (
+                    <Badge variant="destructive" className="text-[10px] h-4 px-1.5">
+                      {result.rhythmIssues.length}
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-[10px] h-4 px-1.5">
+                      无
+                    </Badge>
+                  )}
+                </div>
+                {expandedRhythm ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
+              {expandedRhythm && (
+                <div className="border-t">
+                  {result.rhythmIssues.length === 0 ? (
+                    <div className="p-3 text-xs text-muted-foreground flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      情节走向与卷纲吻合，节奏良好
+                    </div>
+                  ) : (
+                    <ScrollArea className="max-h-48">
+                      <div className="divide-y">
+                        {result.rhythmIssues.map((issue, i) => (
+                          <div key={`rh-${i}`} className="p-3 text-xs">
+                            <div className="flex items-center gap-2 mb-1">
+                              <AlertTriangle className={`h-4 w-4 shrink-0 ${issue.severity === 'error' ? 'text-red-500' : 'text-yellow-500'}`} />
+                              <span className="font-medium">
+                                第{issue.chapterNumber}章「{issue.chapterTitle}」
+                              </span>
+                              <Badge className={`ml-auto text-[10px] h-4 ${issue.severity === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'}`}>
+                                {issue.dimension}
+                              </Badge>
+                            </div>
+                            <p className="text-muted-foreground pl-6">{issue.deviation}</p>
+                            {issue.suggestion && (
+                              <p className="text-blue-600 dark:text-blue-400 pl-6 mt-1">调整建议：{issue.suggestion}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 诊断和建议 */}
+            {result.diagnosis && (
+              <div className="p-3 bg-muted/30 rounded-lg text-xs">
+                <div className="text-muted-foreground mb-1">诊断：</div>
+                <p className="text-foreground">{result.diagnosis}</p>
               </div>
             )}
 
             {result.suggestion && (
-              <ScrollArea className="max-h-32">
-                <div className="p-3 rounded-lg bg-muted/30 text-sm leading-relaxed">
-                  <div className="text-xs text-muted-foreground mb-1">AI 建议：</div>
-                  {result.suggestion}
+              <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg text-xs">
+                <div className="text-blue-700 dark:text-blue-300 font-medium mb-1">建议：</div>
+                <p className="text-blue-600 dark:text-blue-400">{result.suggestion}</p>
+              </div>
+            )}
+
+            {(result.wordCountIssues.length > 0 || result.rhythmIssues.length > 0) && (
+              <div className="pt-2 border-t">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-2"
+                  disabled={repairing}
+                  onClick={handleRepair}
+                >
+                  {repairing ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" />修复中...</>
+                  ) : (
+                    <><Wand2 className="h-4 w-4" />根据报告修复章节</>
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {repairError && (
+              <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-600 dark:text-red-400">
+                修复失败：{repairError}
+              </div>
+            )}
+
+            {repairedContent && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 p-2 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg">
+                  <Check className="h-4 w-4 text-green-600 shrink-0" />
+                  <span className="text-xs text-green-700 dark:text-green-300 font-medium">修复完成</span>
                 </div>
-              </ScrollArea>
+                <div className="border rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setShowRepaired(!showRepaired)}
+                    className="w-full flex items-center justify-between p-2 text-left hover:bg-muted/30 transition-colors"
+                  >
+                    <span className="text-xs font-medium">查看修复后正文</span>
+                    {showRepaired ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </button>
+                  {showRepaired && (
+                    <ScrollArea className="max-h-64 border-t">
+                      <div className="p-3 text-xs leading-relaxed whitespace-pre-wrap">
+                        {repairedContent}
+                      </div>
+                    </ScrollArea>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -146,9 +354,9 @@ export function VolumeProgressCheck({ novelId, chapterId }: VolumeProgressCheckP
 
 function StatItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="p-2.5 bg-muted/30 rounded-lg text-center">
-      <div className="text-[11px] text-muted-foreground">{label}</div>
-      <div className="text-sm font-medium mt-0.5 tabular-nums">{value}</div>
+    <div className="p-2 bg-muted/30 rounded-lg text-center">
+      <div className="text-[10px] text-muted-foreground">{label}</div>
+      <div className="text-sm font-medium mt-0.5">{value}</div>
     </div>
   )
 }

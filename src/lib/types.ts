@@ -485,6 +485,25 @@ export interface EntityTreeResponse {
   totalNodes: number
 }
 
+export interface WordCountIssue {
+  chapterNumber: number
+  chapterTitle: string
+  expectedWords: number
+  actualWords: number
+  deviationPct: number
+  severity: 'warning' | 'error'
+  message: string
+}
+
+export interface RhythmIssue {
+  chapterNumber: number
+  chapterTitle: string
+  dimension: string
+  deviation: string
+  severity: 'warning' | 'error'
+  suggestion: string
+}
+
 export interface VolumeProgressResult {
   volumeId: string
   currentChapter: number
@@ -493,12 +512,15 @@ export interface VolumeProgressResult {
   targetWordCount: number | null
   chapterProgress: number
   wordProgress: number
-  healthStatus: 'healthy' | 'ahead' | 'behind' | 'critical'
-  risk: 'early_ending' | 'late_ending' | null
-  suggestion: string
-  diagnosis?: string
-  raw?: string
+  perChapterEstimate: number | null
+  wordCountIssues: WordCountIssue[]
+  rhythmIssues: RhythmIssue[]
+  wordCountScore: number
+  rhythmScore: number
   score: number
+  diagnosis: string
+  suggestion: string
+  raw?: string
 }
 
 export interface BatchTaskStatus {

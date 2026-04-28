@@ -304,7 +304,7 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
       // ----- 步骤6：卷完成程度检查 -----
       try {
         const volumeProgressResult = await checkVolumeProgress(env, chapterId, novelId)
-        console.log(`📊 [Queue] 卷完成程度: status=${volumeProgressResult.healthStatus}, risk=${volumeProgressResult.risk}`)
+        console.log(`📊 [Queue] 卷完成程度: 字数分=${volumeProgressResult.wordCountScore}, 节奏分=${volumeProgressResult.rhythmScore}, 综合=${volumeProgressResult.score}`)
 
         await saveCheckLog(env, {
           novelId,
@@ -313,7 +313,7 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
           score: volumeProgressResult.score,
           status: 'success',
           volumeProgressResult: volumeProgressResult,
-          issuesCount: volumeProgressResult.healthStatus === 'critical' ? 1 : 0,
+          issuesCount: volumeProgressResult.wordCountIssues.length + volumeProgressResult.rhythmIssues.length,
         })
       } catch (progressError) {
         console.warn('[Queue] 卷进度检查失败（非致命）:', progressError)

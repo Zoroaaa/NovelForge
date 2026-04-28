@@ -8,6 +8,8 @@ import { eq, desc, sql, and } from 'drizzle-orm'
 import type { Env } from '../../lib/types'
 import type { CoherenceCheckResult } from './types'
 import { embedText, searchSimilar } from '../../services/embedding'
+import { resolveConfig, streamGenerate } from '../llm'
+import { ERROR_MESSAGES } from './constants'
 
 export async function checkChapterCoherence(
   env: Env,
@@ -303,4 +305,96 @@ function estimatePowerLevelGap(fromLevel: string, toLevel: string): number {
 
   if (fromIndex === -1 || toIndex === -1) return 1
   return Math.abs(toIndex - fromIndex)
+}
+
+export async function repairChapterByIssues(
+  env: Env,
+  chapterId: string,
+  novelId: string,
+  issues: { severity: string; message: string; suggestion?: string; category?: string }[],
+  score: number
+): Promise<{ ok: boolean; repairedContent?: string; error?: string }> {
+  const db = drizzle(env.DB)
+
+  try {
+    const chapter = await db
+      .select({ content: chapters.content, title: chapters.title })
+      .from(chapters)
+      .where(eq(chapters.id, chapterId))
+      .get()
+
+    if (!chapter?.content) return { ok: false, error: ERROR_MESSAGES.CHAPTER_CONTENT_NOT_FOUND }
+
+    const protagonists = await db
+      .select({ name: characters.name, powerLevel: characters.powerLevel, attributes: characters.attributes })
+      .from(characters)
+      .where(and(eq(characters.novelId, novelId), eq(characters.role, 'protagonist'), sql`${characters.deletedAt} IS NULL`))
+      .all()
+
+    const protagonistSection = protagonists.map(p => {
+      let attrs: any = {}
+      try { attrs = p.attributes ? JSON.parse(p.attributes) : {} } catch {}
+      return `${p.name}：境界=${p.powerLevel || '未知'}，说话方式=${attrs.speechPattern || '未设定'}`
+    }).join('\n')
+
+    let llmConfig
+    try {
+      llmConfig = await resolveConfig(db, 'chapter_gen', novelId)
+      llmConfig.apiKey = llmConfig.apiKey || ''
+    } catch {
+      return { ok: false, error: ERROR_MESSAGES.MODEL_CONFIG_NOT_FOUND }
+    }
+
+    const issueList = issues
+      .map(
+        (issue, idx) =>
+          `${idx + 1}. [${issue.severity === 'error' ? '错误' : '警告'}] ${issue.message}${
+            issue.suggestion ? `\n   建议：${issue.suggestion}` : ''
+          }`
+      )
+      .join('\n')
+
+    const messages = [
+      {
+        role: 'system' as const,
+        content: `你是专业的小说修改编辑。根据指出的问题对章节进行针对性修改。
+修改原则：
+- 只修改有问题的部分，其余内容保持不变
+- 修改后字数与原文相近（允许±10%）
+- 不改变核心情节走向和结尾状态
+- 直接输出完整修改后的正文，不要任何解释`,
+      },
+      {
+        role: 'user' as const,
+        content: `章节《${chapter.title}》检测到问题（评分 ${score}/100），请根据问题列表修改。
+
+【修复时必须遵守的设定约束】
+主角设定：
+${protagonistSection || '无'}
+
+【发现的问题】
+${issueList}
+
+【原文内容】
+${chapter.content}
+
+请直接输出修改后的完整正文：`,
+      },
+    ]
+
+    let repairedContent = ''
+    await streamGenerate(llmConfig, messages as any, {
+      onChunk: (text) => { repairedContent += text },
+      onToolCall: () => {},
+      onDone: () => {},
+      onError: (err) => { throw err },
+    })
+
+    if (!repairedContent.trim()) return { ok: false, error: ERROR_MESSAGES.REPAIR_PRODUCED_EMPTY }
+
+    return { ok: true, repairedContent }
+  } catch (error) {
+    console.error('[repairChapterByIssues] failed:', error)
+    return { ok: false, error: (error as Error).message }
+  }
 }

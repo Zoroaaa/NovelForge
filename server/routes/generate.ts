@@ -17,6 +17,8 @@ import {
   checkCharacterConsistency,
   checkChapterCoherence,
   repairChapterByIssues,
+  repairChapterByCharacterIssues,
+  repairChapterByVolumeIssues,
   generateMasterOutlineSummary,
   generateVolumeSummary,
   checkVolumeProgress,
@@ -556,7 +558,7 @@ router.post('/volume-progress-check', zValidator('json', z.object({
       score: result.score,
       status: 'success',
       volumeProgressResult: result,
-      issuesCount: result.healthStatus === 'critical' ? 1 : 0,
+      issuesCount: result.wordCountIssues.length + result.rhythmIssues.length,
     })
 
     return c.json(result)
@@ -576,6 +578,75 @@ router.post('/volume-progress-check', zValidator('json', z.object({
       { error: '卷完成度检查失败', details: (error as Error).message },
       500
     )
+  }
+})
+
+/**
+ * POST /repair-chapter - 根据检查报告修复章节
+ * @description 将检查报告的问题和章节原文交给AI进行针对性修复
+ * @param {string} chapterId - 章节ID
+ * @param {string} novelId - 小说ID
+ * @param {string} repairType - 修复类型：'coherence' | 'character' | 'volume'
+ * @param {Object} issues - 各类型对应的检查结果问题
+ * @param {string} [volumeContext] - 卷进度修复时的诊断上下文
+ */
+router.post('/repair-chapter', zValidator('json', z.object({
+  chapterId: z.string().min(1),
+  novelId: z.string().min(1),
+  repairType: z.enum(['coherence', 'character', 'volume']),
+  coherenceIssues: z.array(z.object({
+    severity: z.string(),
+    message: z.string(),
+    suggestion: z.string().optional(),
+    category: z.string().optional(),
+  })).optional(),
+  coherenceScore: z.number().optional(),
+  characterConflicts: z.array(z.object({
+    characterName: z.string(),
+    dimension: z.string(),
+    issue: z.string(),
+    excerpt: z.string().optional(),
+    suggestion: z.string().optional(),
+  })).optional(),
+  wordCountIssues: z.array(z.object({
+    chapterNumber: z.number(),
+    chapterTitle: z.string(),
+    message: z.string(),
+  })).optional(),
+  rhythmIssues: z.array(z.object({
+    chapterNumber: z.number(),
+    chapterTitle: z.string(),
+    dimension: z.string(),
+    deviation: z.string(),
+    suggestion: z.string(),
+  })).optional(),
+  volumeContext: z.string().optional(),
+})), async (c) => {
+  const { chapterId, novelId, repairType, coherenceIssues, coherenceScore, characterConflicts, wordCountIssues, rhythmIssues, volumeContext } = c.req.valid('json')
+
+  try {
+    let result: { ok: boolean; repairedContent?: string; error?: string }
+
+    switch (repairType) {
+      case 'coherence':
+        if (!coherenceIssues) return c.json({ ok: false, error: '缺少连贯性问题数据' }, 400)
+        result = await repairChapterByIssues(c.env, chapterId, novelId, coherenceIssues as any, coherenceScore || 0)
+        break
+      case 'character':
+        if (!characterConflicts) return c.json({ ok: false, error: '缺少角色冲突数据' }, 400)
+        result = await repairChapterByCharacterIssues(c.env, chapterId, novelId, characterConflicts)
+        break
+      case 'volume':
+        result = await repairChapterByVolumeIssues(c.env, chapterId, novelId, wordCountIssues || [], rhythmIssues || [], volumeContext || '')
+        break
+      default:
+        return c.json({ ok: false, error: '未知修复类型' }, 400)
+    }
+
+    return c.json(result)
+  } catch (error) {
+    console.error('Repair chapter failed:', error)
+    return c.json({ ok: false, error: (error as Error).message }, 500)
   }
 })
 
@@ -617,7 +688,8 @@ router.post('/combined-check', zValidator('json', z.object({
       issuesCount: (characterResult.conflicts?.length || 0) +
                    (characterResult.warnings?.length || 0) +
                    (coherenceResult.issues?.length || 0) +
-                   (volumeProgressResult.healthStatus === 'critical' ? 1 : 0),
+                   volumeProgressResult.wordCountIssues.length +
+                   volumeProgressResult.rhythmIssues.length,
     })
 
     return c.json({
@@ -628,7 +700,8 @@ router.post('/combined-check', zValidator('json', z.object({
         issues: coherenceResult.issues,
       },
       volumeProgressCheck: volumeProgressResult,
-      hasIssues: characterResult.conflicts?.length > 0 || coherenceResult.hasIssues || volumeProgressResult.healthStatus === 'critical',
+      hasIssues: characterResult.conflicts?.length > 0 || coherenceResult.hasIssues ||
+                 volumeProgressResult.wordCountIssues.length > 0 || volumeProgressResult.rhythmIssues.length > 0,
     })
   } catch (error) {
     console.error('Combined check failed:', error)

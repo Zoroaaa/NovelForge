@@ -319,13 +319,13 @@ export async function generateChapter(
       // ----- 步骤6：卷完成程度检查 -----
       try {
         const volumeProgressResult = await checkVolumeProgress(env, chapterId, novelId)
-        if (volumeProgressResult.healthStatus !== 'healthy') {
-          LOG_STYLES.WARN(`卷进度检查: 状态=${volumeProgressResult.healthStatus}, 风险=${volumeProgressResult.risk || '无'}`)
+        if (volumeProgressResult.wordCountIssues.length > 0 || volumeProgressResult.rhythmIssues.length > 0) {
+          LOG_STYLES.WARN(`卷进度检查: 字数分=${volumeProgressResult.wordCountScore}, 节奏分=${volumeProgressResult.rhythmScore}, 综合=${volumeProgressResult.score}`)
           if (volumeProgressResult.suggestion) {
             LOG_STYLES.WARN(`  建议: ${volumeProgressResult.suggestion.slice(0, 100)}`)
           }
         } else {
-          LOG_STYLES.SUCCESS(`卷进度检查: 状态正常 (${volumeProgressResult.currentChapter}/${volumeProgressResult.targetChapter || '?'}章)`)
+          LOG_STYLES.SUCCESS(`卷进度检查: 正常 (字数分=${volumeProgressResult.wordCountScore}, 节奏分=${volumeProgressResult.rhythmScore})`)
         }
         await saveCheckLog(env, {
           novelId,
@@ -334,7 +334,7 @@ export async function generateChapter(
           score: volumeProgressResult.score,
           status: 'success',
           volumeProgressResult: volumeProgressResult,
-          issuesCount: volumeProgressResult.healthStatus === 'critical' ? 1 : 0,
+          issuesCount: volumeProgressResult.wordCountIssues.length + volumeProgressResult.rhythmIssues.length,
         })
       } catch (progressError) {
         LOG_STYLES.WARN(`卷进度检查失败（非致命）: ${progressError}`)

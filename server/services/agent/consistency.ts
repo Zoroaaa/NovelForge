@@ -109,15 +109,11 @@ ${chapter.content.slice(0, 10000)}
   }
 }
 
-// ============================================================
-// 根据连贯性问题修复章节（流式）
-// ============================================================
-export async function repairChapterByIssues(
+export async function repairChapterByCharacterIssues(
   env: Env,
   chapterId: string,
   novelId: string,
-  issues: CoherenceCheckResult['issues'],
-  score: number
+  conflicts: Array<{ characterName: string; dimension: string; issue: string; excerpt?: string; suggestion?: string }>
 ): Promise<{ ok: boolean; repairedContent?: string; error?: string }> {
   const db = drizzle(env.DB)
 
@@ -130,16 +126,16 @@ export async function repairChapterByIssues(
 
     if (!chapter?.content) return { ok: false, error: ERROR_MESSAGES.CHAPTER_CONTENT_NOT_FOUND }
 
-    const protagonists = await db
+    const characters_data = await db
       .select({ name: characters.name, powerLevel: characters.powerLevel, attributes: characters.attributes })
       .from(characters)
-      .where(and(eq(characters.novelId, novelId), eq(characters.role, 'protagonist'), sql`${characters.deletedAt} IS NULL`))
+      .where(and(eq(characters.novelId, novelId), sql`${characters.deletedAt} IS NULL`))
       .all()
 
-    const protagonistSection = protagonists.map(p => {
+    const characterSection = characters_data.map(p => {
       let attrs: any = {}
       try { attrs = p.attributes ? JSON.parse(p.attributes) : {} } catch {}
-      return `${p.name}：境界=${p.powerLevel || '未知'}，说话方式=${attrs.speechPattern || '未设定'}`
+      return `${p.name}：境界=${p.powerLevel || '未知'}，说话方式=${attrs.speechPattern || '未设定'}，性格=${attrs.personality || '未设定'}`
     }).join('\n')
 
     let llmConfig
@@ -150,35 +146,33 @@ export async function repairChapterByIssues(
       return { ok: false, error: ERROR_MESSAGES.MODEL_CONFIG_NOT_FOUND }
     }
 
-    const issueList = issues
+    const conflictList = conflicts
       .map(
-        (issue, idx) =>
-          `${idx + 1}. [${issue.severity === 'error' ? '错误' : '警告'}] ${issue.message}${
-            issue.suggestion ? `\n   建议：${issue.suggestion}` : ''
-          }`
+        (c, idx) =>
+          `${idx + 1}. [角色：${c.characterName}] 维度：${c.dimension}\n   问题：${c.issue}\n   原文："${c.excerpt || '无'}"\n   建议：${c.suggestion || '保持角色言行一致'}`
       )
-      .join('\n')
+      .join('\n\n')
 
     const messages = [
       {
         role: 'system' as const,
-        content: `你是专业的小说修改编辑。根据指出的问题对章节进行针对性修改。
+        content: `你是专业的小说修改编辑。根据角色一致性检查报告对章节进行针对性修改。
 修改原则：
 - 只修改有问题的部分，其余内容保持不变
 - 修改后字数与原文相近（允许±10%）
 - 不改变核心情节走向和结尾状态
+- 重点修正冲突中指出的角色言行、境界、说话方式问题
 - 直接输出完整修改后的正文，不要任何解释`,
       },
       {
         role: 'user' as const,
-        content: `章节《${chapter.title}》检测到问题（评分 ${score}/100），请根据问题列表修改。
+        content: `章节《${chapter.title}》检测到角色一致性问题（${conflicts.length}个冲突），请根据问题列表修改。
 
-【修复时必须遵守的设定约束】
-主角设定：
-${protagonistSection || '无'}
+【角色设定】
+${characterSection || '无'}
 
 【发现的问题】
-${issueList}
+${conflictList}
 
 【原文内容】
 ${chapter.content}
@@ -199,7 +193,7 @@ ${chapter.content}
 
     return { ok: true, repairedContent }
   } catch (error) {
-    console.error('[repairChapterByIssues] failed:', error)
+    console.error('[repairChapterByCharacterIssues] failed:', error)
     return { ok: false, error: (error as Error).message }
   }
 }

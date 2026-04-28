@@ -38,8 +38,7 @@ export async function buildPrevChapterAdvice(
           const result = typeof log.characterResult === 'string' ? JSON.parse(log.characterResult) : log.characterResult
           if (result?.conflicts?.length > 0) {
             sectionContent = result.conflicts.map((c: any) => {
-              const suggestion = c.suggestion || `建议保持${c.dimension}一致性`
-              return `  - [冲突] ${c.issue}\n    → ${suggestion}`
+              return `  - [冲突] ${c.characterName}（${c.dimension}）：${c.issue}\n    → ${c.suggestion || (c.excerpt ? `原文："${c.excerpt.slice(0, 60)}..."` : '注意保持角色言行一致')}`
             }).join('\n')
           }
         } catch {}
@@ -62,17 +61,21 @@ export async function buildPrevChapterAdvice(
       case 'volume_progress': {
         try {
           const result = typeof log.volumeProgressResult === 'string' ? JSON.parse(log.volumeProgressResult) : log.volumeProgressResult
-          if (result && (result.currentChapter || result.currentWordCount)) {
-            const parts: string[] = []
-            if (result.currentChapter && result.targetChapter) {
-              parts.push(`当前章节进度 ${Math.round((result.currentChapter / result.targetChapter) * 100)}%`)
-            }
-            if (result.currentWordCount && result.targetWordCount) {
-              parts.push(`字数进度 ${Math.round((result.currentWordCount / result.targetWordCount) * 100)}%`)
-            }
-            if (parts.length > 0 || result.suggestion) {
-              sectionContent = `  - ${parts.join('，')}${result.suggestion ? `\n    → ${result.suggestion}` : ''}`
-            }
+          if (!result) break
+          const parts: string[] = []
+          if (result.wordCountIssues?.length > 0) {
+            const issue = result.wordCountIssues[0]
+            parts.push(`字数风险：${issue.message}`)
+          }
+          if (result.rhythmIssues?.length > 0) {
+            const issue = result.rhythmIssues[0]
+            parts.push(`节奏风险：第${issue.chapterNumber}章"${issue.chapterTitle}"的${issue.dimension}偏离卷纲`)
+          }
+          if (result.suggestion) {
+            parts.push(`建议：${result.suggestion}`)
+          }
+          if (parts.length > 0) {
+            sectionContent = parts.map(p => `  - ${p}`).join('\n')
           }
         } catch {}
         break

@@ -18,6 +18,8 @@ import {
   Zap,
   BookOpen,
   Target,
+  FileText,
+  AlignLeft,
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -440,8 +442,8 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
         <TabsList className="grid w-full grid-cols-4 h-9">
           <TabsTrigger value="coherence" className="text-xs">连贯性</TabsTrigger>
           <TabsTrigger value="character" className="text-xs">角色一致性</TabsTrigger>
-          <TabsTrigger value="combined" className="text-xs">综合检查</TabsTrigger>
           <TabsTrigger value="volume" className="text-xs">卷进度</TabsTrigger>
+          <TabsTrigger value="combined" className="text-xs">综合检查</TabsTrigger>
         </TabsList>
 
         <TabsContent value="coherence" className="mt-4">
@@ -501,48 +503,6 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
           </div>
         </TabsContent>
 
-        <TabsContent value="combined" className="mt-4">
-          <div className="space-y-3">
-            <div className="flex justify-end">
-              <Button
-                variant="default"
-                size="sm"
-                className="gap-2"
-                onClick={handleRewriteClick}
-                disabled={isChecking}
-              >
-                {isChecking ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    检查中...
-                  </>
-                ) : (
-                  <>
-                    <Shield className="h-4 w-4" />
-                    <Link className="h-4 w-4" />
-                    执行综合检查
-                  </>
-                )}
-              </Button>
-            </div>
-            <CombinedCheck novelId={novelId} chapterId={chapterId} onCheckComplete={(result) => {
-              if (result.coherenceCheck.issues.length > 0) {
-                setCoherenceResult({
-                  score: result.coherenceCheck.score,
-                  issues: result.coherenceCheck.issues,
-                })
-              }
-              setCombinedReport({
-                characterResult: result.characterCheck,
-                coherenceResult: result.coherenceCheck,
-                volumeProgressResult: result.volumeProgressCheck,
-                score: result.score,
-              })
-              loadLatestCheckLog()
-            }} />
-          </div>
-        </TabsContent>
-
         <TabsContent value="volume" className="mt-4">
           <div className="space-y-3">
             <div className="flex justify-end">
@@ -567,6 +527,49 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
               </Button>
             </div>
             <VolumeProgressCheck novelId={novelId} chapterId={chapterId} />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="combined" className="mt-4">
+          <div className="space-y-3">
+            <div className="flex justify-end">
+              <Button
+                variant="default"
+                size="sm"
+                className="gap-2"
+                onClick={handleRewriteClick}
+                disabled={isChecking}
+              >
+                {isChecking ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    检查中...
+                  </>
+                ) : (
+                  <>
+                    <Shield className="h-4 w-4" />
+                    <Link className="h-4 w-4" />
+                    <Target className="h-4 w-4" />
+                    执行综合检查
+                  </>
+                )}
+              </Button>
+            </div>
+            <CombinedCheck novelId={novelId} chapterId={chapterId} onCheckComplete={(result) => {
+              if (result.coherenceCheck.issues.length > 0) {
+                setCoherenceResult({
+                  score: result.coherenceCheck.score,
+                  issues: result.coherenceCheck.issues,
+                })
+              }
+              setCombinedReport({
+                characterResult: result.characterCheck,
+                coherenceResult: result.coherenceCheck,
+                volumeProgressResult: result.volumeProgressCheck,
+                score: result.score,
+              })
+              loadLatestCheckLog()
+            }} />
           </div>
         </TabsContent>
       </Tabs>
@@ -628,7 +631,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
               )}
             </div>
             <AlertDialogDescription asChild>
-              <div className="text-left mt-3">
+              <div className="text-left mt-3 overflow-y-auto max-h-[60vh] pr-2">
                 {isChecking ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-3">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -754,19 +757,19 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                         )}
 
                         {/* 卷完成度部分 */}
-                        {combinedReport.volumeProgressResult && combinedReport.volumeProgressResult.healthStatus !== 'healthy' && (
+                        {combinedReport.volumeProgressResult && (combinedReport.volumeProgressResult.wordCountIssues.length > 0 || combinedReport.volumeProgressResult.rhythmIssues.length > 0) && (
                           <section className="space-y-3">
                             <header className="flex items-center gap-2.5 pb-2 border-b border-blue-200/50 dark:border-blue-800/30">
                               <Target className="h-4 w-4 text-blue-600" />
                               <h3 className="text-sm font-semibold uppercase tracking-wide">卷完成度检查</h3>
                               <Badge className={`ml-auto text-[11px] h-5 ${
-                                combinedReport.volumeProgressResult.healthStatus === 'critical'
-                                  ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-                                  : combinedReport.volumeProgressResult.healthStatus === 'behind'
+                                combinedReport.volumeProgressResult.score >= 80
+                                  ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                  : combinedReport.volumeProgressResult.score >= 60
                                   ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
-                                  : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                                  : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
                               }`}>
-                                {combinedReport.volumeProgressResult.score}分 · {combinedReport.volumeProgressResult.healthStatus === 'critical' ? '严重偏离' : combinedReport.volumeProgressResult.healthStatus === 'behind' ? '进度偏慢' : '进度稍快'}
+                                {combinedReport.volumeProgressResult.score}分 · 字数{combinedReport.volumeProgressResult.wordCountScore} · 节奏{combinedReport.volumeProgressResult.rhythmScore}
                               </Badge>
                             </header>
 
@@ -809,7 +812,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                         {!combinedReport.characterResult?.conflicts?.length &&
                          !combinedReport.characterResult?.warnings?.filter((w: string) => !w.includes('失败'))?.length &&
                          !combinedReport.coherenceResult?.issues?.length &&
-                         (!combinedReport.volumeProgressResult || combinedReport.volumeProgressResult.healthStatus === 'healthy') && (
+                         (!combinedReport.volumeProgressResult || (combinedReport.volumeProgressResult.wordCountIssues.length === 0 && combinedReport.volumeProgressResult.rhythmIssues.length === 0)) && (
                           <div className="flex flex-col items-center gap-3 p-8 bg-gradient-to-br from-green-50 via-emerald-50/30 to-transparent dark:from-green-950/40 dark:via-emerald-950/10 dark:to-transparent border border-green-200/60 dark:border-green-800/30 rounded-xl">
                             <CheckCircle className="h-12 w-12 text-green-500" />
                             <div className="text-center space-y-1">
@@ -823,7 +826,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
 
                     {(combinedReport.characterResult?.conflicts?.length > 0 ||
                      combinedReport.coherenceResult?.issues?.some((i: any) => i.severity === 'error') ||
-                     (combinedReport.volumeProgressResult && combinedReport.volumeProgressResult.healthStatus === 'critical')) && (
+                     (combinedReport.volumeProgressResult && combinedReport.volumeProgressResult.score < 60)) && (
                       <aside className="pt-3 border-t text-center">
                         <p className="text-xs text-muted-foreground flex items-center justify-center gap-1.5">
                           <Zap className="h-3.5 w-3.5 text-blue-500" />
@@ -857,7 +860,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
               )}
             </div>
             <AlertDialogDescription asChild>
-              <div className="text-left mt-3">
+              <div className="text-left mt-3 overflow-y-auto max-h-[60vh] pr-2">
                 {coherenceChecking ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-3">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -954,7 +957,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
               )}
             </div>
             <AlertDialogDescription asChild>
-              <div className="text-left mt-3">
+              <div className="text-left mt-3 overflow-y-auto max-h-[60vh] pr-2">
                 {characterChecking ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-3">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -1091,41 +1094,99 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between p-4 bg-gradient-to-r from-muted/80 to-muted/40 rounded-xl border">
-                      <span className="text-sm font-medium">健康状态</span>
-                      <Badge className={
-                        volumeReport.healthStatus === 'healthy' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
-                        volumeReport.healthStatus === 'ahead' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' :
-                        volumeReport.healthStatus === 'behind' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
-                        'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-                      }>
-                        {volumeReport.healthStatus === 'healthy' && '✓ 进度正常'}
-                        {volumeReport.healthStatus === 'ahead' && '↑ 进度稍快'}
-                        {volumeReport.healthStatus === 'behind' && '↓ 进度偏慢'}
-                        {volumeReport.healthStatus === 'critical' && '⚠ 严重偏离'}
-                      </Badge>
+                    {/* 双评分区 */}
+                    <div className="flex gap-3">
+                      <div className="flex-1 p-4 bg-blue-50 dark:bg-blue-950/30 rounded-xl border border-blue-200 dark:border-blue-800 text-center">
+                        <div className="text-[11px] text-muted-foreground mb-1">字数健康度</div>
+                        <div className={`text-2xl font-bold ${volumeReport.wordCountScore >= 80 ? 'text-green-600' : volumeReport.wordCountScore >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                          {volumeReport.wordCountScore}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">/100</div>
+                        {volumeReport.wordCountIssues.length > 0 && (
+                          <div className="text-[10px] text-muted-foreground mt-1">
+                            {volumeReport.wordCountIssues.filter((i: any) => i.severity === 'error').length}个严重，{volumeReport.wordCountIssues.filter((i: any) => i.severity === 'warning').length}个轻微
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 p-4 bg-purple-50 dark:bg-purple-950/30 rounded-xl border border-purple-200 dark:border-purple-800 text-center">
+                        <div className="text-[11px] text-muted-foreground mb-1">节奏健康度</div>
+                        <div className={`text-2xl font-bold ${volumeReport.rhythmScore >= 80 ? 'text-green-600' : volumeReport.rhythmScore >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                          {volumeReport.rhythmScore}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">/100</div>
+                        {volumeReport.rhythmIssues.length > 0 && (
+                          <div className="text-[10px] text-muted-foreground mt-1">
+                            {volumeReport.rhythmIssues.filter((i: any) => i.severity === 'error').length}个严重，{volumeReport.rhythmIssues.filter((i: any) => i.severity === 'warning').length}个轻微
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/30 rounded-xl border border-blue-300 dark:border-blue-700 text-center">
+                        <div className="text-[11px] text-muted-foreground mb-1">综合评分</div>
+                        <div className={`text-2xl font-bold ${volumeReport.score >= 80 ? 'text-green-600' : volumeReport.score >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                          {volumeReport.score}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">/100</div>
+                      </div>
                     </div>
 
-                    {volumeReport.risk && (
-                      <div className="p-4 rounded-lg border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950">
-                        <div className="flex items-start gap-2">
-                          <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
-                          <div>
-                            <div className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                              风险提示：{volumeReport.risk === 'early_ending' ? '可能提前收尾' : '可能延期收尾'}
+                    {/* 字数风险列表 */}
+                    {volumeReport.wordCountIssues.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-blue-600 flex items-center gap-1">
+                          <FileText className="h-3.5 w-3.5" />
+                          字数风险 ({volumeReport.wordCountIssues.length})
+                        </p>
+                        {volumeReport.wordCountIssues.map((issue: any, i: number) => (
+                          <div key={`wc-${i}`} className={`p-3 rounded-lg border text-xs ${issue.severity === 'error' ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800' : 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800'}`}>
+                            <div className="flex items-center gap-2 mb-1">
+                              <AlertTriangle className={`h-4 w-4 shrink-0 ${issue.severity === 'error' ? 'text-red-500' : 'text-yellow-500'}`} />
+                              <span className="font-medium">第{issue.chapterNumber}章「{issue.chapterTitle}」</span>
+                              <Badge variant="outline" className={`ml-auto text-[10px] h-4 ${issue.severity === 'error' ? 'border-red-300 text-red-600' : 'border-yellow-300 text-yellow-600'}`}>
+                                {issue.severity === 'error' ? '严重' : '轻微'}
+                              </Badge>
                             </div>
+                            <p className="text-muted-foreground pl-6">{issue.message}</p>
                           </div>
-                        </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* 节奏风险列表 */}
+                    {volumeReport.rhythmIssues.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-purple-600 flex items-center gap-1">
+                          <AlignLeft className="h-3.5 w-3.5" />
+                          节奏风险 ({volumeReport.rhythmIssues.length})
+                        </p>
+                        {volumeReport.rhythmIssues.map((issue: any, i: number) => (
+                          <div key={`rh-${i}`} className={`p-3 rounded-lg border text-xs ${issue.severity === 'error' ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800' : 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800'}`}>
+                            <div className="flex items-center gap-2 mb-1">
+                              <AlertTriangle className={`h-4 w-4 shrink-0 ${issue.severity === 'error' ? 'text-red-500' : 'text-yellow-500'}`} />
+                              <span className="font-medium">第{issue.chapterNumber}章「{issue.chapterTitle}」</span>
+                              <Badge className={`ml-auto text-[10px] h-4 ${issue.severity === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'}`}>
+                                {issue.dimension}
+                              </Badge>
+                            </div>
+                            <p className="text-muted-foreground pl-6">{issue.deviation}</p>
+                            {issue.suggestion && (
+                              <p className="text-blue-600 dark:text-blue-400 pl-6 mt-1">调整建议：{issue.suggestion}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {volumeReport.diagnosis && (
+                      <div className="p-4 bg-muted/30 rounded-lg text-sm">
+                        <div className="text-xs text-muted-foreground mb-1">诊断：</div>
+                        <p className="text-foreground">{volumeReport.diagnosis}</p>
                       </div>
                     )}
 
                     {volumeReport.suggestion && (
-                      <div className="p-4 rounded-lg bg-muted/30 text-sm leading-relaxed">
-                        <div className="flex items-center gap-2 mb-2">
-                          <BookOpen className="h-4 w-4 text-primary" />
-                          <span className="text-xs text-muted-foreground font-medium">AI 建议：</span>
-                        </div>
-                        {volumeReport.suggestion}
+                      <div className="p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg text-sm">
+                        <div className="text-blue-700 dark:text-blue-300 font-medium mb-1">建议：</div>
+                        <p className="text-blue-600 dark:text-blue-400">{volumeReport.suggestion}</p>
                       </div>
                     )}
                   </div>
@@ -1167,7 +1228,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
               )}
             </div>
             <AlertDialogDescription asChild>
-              <div className="text-left mt-3">
+              <div className="text-left mt-3 overflow-y-auto max-h-[60vh] pr-2">
                 {selectedHistoryLog ? (
                   <div className="space-y-5">
                     <div className="flex items-center justify-between p-4 bg-gradient-to-r from-muted/80 to-muted/40 rounded-xl border">
@@ -1390,7 +1451,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                                 </div>
                                 <div className="p-2 bg-muted/30 rounded">
                                   <span className="text-muted-foreground">目标章节：</span>
-                                  <span className="font-medium ml-1">{selectedHistoryLog.volumeProgressResult.targetChapter || '未设定'} 章</span>
+                                  <span className="font-medium ml-1">{selectedHistoryLog.volumeProgressResult.targetChapter ? `${selectedHistoryLog.volumeProgressResult.targetChapter} 章` : '未设定'}</span>
                                 </div>
                                 <div className="p-2 bg-muted/30 rounded">
                                   <span className="text-muted-foreground">当前字数：</span>
@@ -1401,10 +1462,57 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                                   <span className="font-medium ml-1">{selectedHistoryLog.volumeProgressResult.targetWordCount ? `${(selectedHistoryLog.volumeProgressResult.targetWordCount / 10000).toFixed(0)} 万` : '未设定'}</span>
                                 </div>
                               </div>
+                              <div className="flex gap-2">
+                                <div className="flex-1 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800 text-center">
+                                  <div className="text-[10px] text-muted-foreground">字数健康度</div>
+                                  <div className={`text-lg font-bold ${selectedHistoryLog.volumeProgressResult.wordCountScore >= 80 ? 'text-green-600' : selectedHistoryLog.volumeProgressResult.wordCountScore >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                                    {selectedHistoryLog.volumeProgressResult.wordCountScore}
+                                  </div>
+                                </div>
+                                <div className="flex-1 p-3 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-200 dark:border-purple-800 text-center">
+                                  <div className="text-[10px] text-muted-foreground">节奏健康度</div>
+                                  <div className={`text-lg font-bold ${selectedHistoryLog.volumeProgressResult.rhythmScore >= 80 ? 'text-green-600' : selectedHistoryLog.volumeProgressResult.rhythmScore >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                                    {selectedHistoryLog.volumeProgressResult.rhythmScore}
+                                  </div>
+                                </div>
+                                <div className="flex-1 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-300 dark:border-blue-700 text-center">
+                                  <div className="text-[10px] text-muted-foreground">综合评分</div>
+                                  <div className={`text-lg font-bold ${selectedHistoryLog.volumeProgressResult.score >= 80 ? 'text-green-600' : selectedHistoryLog.volumeProgressResult.score >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                                    {selectedHistoryLog.volumeProgressResult.score}
+                                  </div>
+                                </div>
+                              </div>
+                              {selectedHistoryLog.volumeProgressResult.wordCountIssues?.length > 0 && (
+                                <div className="space-y-1.5">
+                                  <p className="text-xs font-medium text-blue-600">字数风险 ({selectedHistoryLog.volumeProgressResult.wordCountIssues.length})</p>
+                                  {selectedHistoryLog.volumeProgressResult.wordCountIssues.map((issue: any, i: number) => (
+                                    <div key={`wc-${i}`} className={`p-2 rounded border text-xs ${issue.severity === 'error' ? 'bg-red-50 dark:bg-red-950/30 border-red-200' : 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200'}`}>
+                                      <span className="font-medium">第{issue.chapterNumber}章「{issue.chapterTitle}」</span>
+                                      <span className="text-muted-foreground ml-2">{issue.message}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {selectedHistoryLog.volumeProgressResult.rhythmIssues?.length > 0 && (
+                                <div className="space-y-1.5">
+                                  <p className="text-xs font-medium text-purple-600">节奏风险 ({selectedHistoryLog.volumeProgressResult.rhythmIssues.length})</p>
+                                  {selectedHistoryLog.volumeProgressResult.rhythmIssues.map((issue: any, i: number) => (
+                                    <div key={`rh-${i}`} className={`p-2 rounded border text-xs ${issue.severity === 'error' ? 'bg-red-50 dark:bg-red-950/30 border-red-200' : 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200'}`}>
+                                      <span className="font-medium">第{issue.chapterNumber}章「{issue.chapterTitle}」</span>
+                                      <Badge className={`ml-1 text-[10px] h-4 ${issue.severity === 'error' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{issue.dimension}</Badge>
+                                      <span className="text-muted-foreground ml-2">{issue.deviation}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {selectedHistoryLog.volumeProgressResult.diagnosis && (
+                                <div className="p-3 bg-muted/30 rounded text-xs">
+                                  <span className="text-muted-foreground">诊断：</span>{selectedHistoryLog.volumeProgressResult.diagnosis}
+                                </div>
+                              )}
                               {selectedHistoryLog.volumeProgressResult.suggestion && (
-                                <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded text-xs">
-                                  <div className="text-xs text-muted-foreground mb-1">AI 建议：</div>
-                                  {selectedHistoryLog.volumeProgressResult.suggestion}
+                                <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded text-xs text-blue-700 dark:text-blue-300">
+                                  <span className="font-medium">建议：</span>{selectedHistoryLog.volumeProgressResult.suggestion}
                                 </div>
                               )}
                             </div>
