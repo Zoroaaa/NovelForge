@@ -1,7 +1,7 @@
 /**
  * @file imageGen.ts
  * @description AI封面图生成服务，调用图像生成模型API生成小说封面
- * @version 1.0.0
+ * @version 1.1.0
  */
 import { drizzle } from 'drizzle-orm/d1'
 import { novels, characters, masterOutline } from '../db/schema'
@@ -14,6 +14,11 @@ interface CoverGenResult {
   r2Key?: string
   error?: string
 }
+
+const SUPPORTED_SIZES = [
+  '1024x1024', '1024x1536', '1536x1024',
+  '512x512', '768x1024', '1024x768',
+]
 
 export async function generateCover(env: Env, novelId: string): Promise<CoverGenResult> {
   const db = drizzle(env.DB)
@@ -39,26 +44,44 @@ export async function generateCover(env: Env, novelId: string): Promise<CoverGen
 
   if (config.provider === 'anthropic') {
     headers['x-api-key'] = config.apiKey
+    headers['anthropic-dangerous-direct-browser-access'] = 'true'
+  } else if (config.provider === 'google') {
+    headers['x-goog-api-key'] = config.apiKey
   } else {
     headers['Authorization'] = `Bearer ${config.apiKey}`
   }
 
+  const imageSize = (config.params as any)?.imageSize || '1024x1536'
+  const safeSize = SUPPORTED_SIZES.includes(imageSize) ? imageSize : '1024x1536'
+
   const body = JSON.stringify({
     model: config.modelId,
     prompt,
-    size: '1024x1536',
+    size: safeSize,
     n: 1,
   })
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body,
-  })
+  let response: Response
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body,
+    })
+  } catch (fetchError) {
+    console.error('[imageGen] Network error:', fetchError)
+    return { success: false, error: '图像生成API网络请求失败，请检查网络连接和API地址' }
+  }
 
   if (!response.ok) {
-    const errorText = await response.text()
+    const errorText = await response.text().catch(() => 'Unknown error')
     console.error(`[imageGen] API error: ${response.status} ${errorText}`)
+    if (response.status === 401 || response.status === 403) {
+      return { success: false, error: 'API认证失败，请检查API Key是否正确' }
+    }
+    if (response.status === 404) {
+      return { success: false, error: '图像生成API端点不存在，请检查API地址和模型ID' }
+    }
     return { success: false, error: `图像生成API调用失败 (HTTP ${response.status})` }
   }
 
@@ -81,6 +104,11 @@ export async function generateCover(env: Env, novelId: string): Promise<CoverGen
   } else {
     return { success: false, error: '图像生成API未返回图片URL或base64数据' }
   }
+
+  if (imageBuffer.byteLength === 0) {
+    return { success: false, error: '生成的图片数据为空' }
+  }
+
   const r2Key = `covers/${novelId}/${Date.now()}.jpg`
 
   if (novel.coverR2Key) {

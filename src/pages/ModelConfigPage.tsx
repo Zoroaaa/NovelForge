@@ -148,7 +148,7 @@ export default function ModelConfigPage() {
     if (!modelId) return
 
     const data = {
-      stage: stage as 'chapter_gen' | 'summary_gen' | 'analysis' | 'workshop',
+      stage: stage as 'chapter_gen' | 'summary_gen' | 'analysis' | 'workshop' | 'image_gen',
       provider,
       modelId,
       scope: 'global' as const,
@@ -334,7 +334,11 @@ export default function ModelConfigPage() {
                     id="modelId"
                     value={modelId}
                     onChange={(e) => setModelId(e.target.value)}
-                    placeholder="例如：gpt-4o, deepseek-chat, claude-3-opus"
+                    placeholder={
+                      stage === 'image_gen'
+                        ? '例如：doubao-seedream-3-0-t2i-250415, dall-e-3'
+                        : '例如：gpt-4o, deepseek-chat, claude-3-opus'
+                    }
                     className="h-10 font-mono"
                   />
                 </div>
@@ -449,6 +453,12 @@ export default function ModelConfigPage() {
                                   {`{"temperature": 0.5, "max_tokens": 3000, "top_p": 0.85}`}
                                 </code>
                               </div>
+                              <div>
+                                <p className="text-muted-foreground mb-1">封面生成（图像模型）：</p>
+                                <code className="block bg-muted px-2 py-1 rounded text-[11px] overflow-x-auto">
+                                  {`{"imageSize": "1024x1536"}`}
+                                </code>
+                              </div>
                             </div>
                           </div>
 
@@ -491,6 +501,14 @@ export default function ModelConfigPage() {
                                 <span className="text-muted-foreground"> - 存在惩罚 (-2~2)</span>
                                 <div className="text-muted-foreground mt-0.5">
                                   鼓励话题扩展。小说创作建议 0（避免制造变体词）
+                                </div>
+                              </div>
+                              <div>
+                                <span className="font-medium text-blue-600">imageSize</span>
+                                <span className="text-muted-foreground"> - 封面图片尺寸（仅 image_gen）</span>
+                                <div className="text-muted-foreground mt-0.5">
+                                  可选值：1024x1024、1024x1536（默认，竖版封面）、1536x1024、768x1024、1024x768、512x512<br />
+                                  竖版小说封面推荐 1024x1536
                                 </div>
                               </div>
                             </div>
@@ -728,6 +746,7 @@ export default function ModelConfigPage() {
               <li><strong className="text-foreground">大纲规划</strong>: GPT-4o / Claude 3 / DeepSeek（需要结构化思维）</li>
               <li><strong className="text-foreground">创作工坊</strong>: Claude 3.5 / GPT-4o（需要长对话和多轮交互能力）</li>
               <li><strong className="text-foreground">智能分析</strong>: GPT-4o / Claude 3（需要逻辑推理能力）</li>
+              <li><strong className="text-foreground">封面生成</strong>: 豆包 Seedream 3.0 / DALL·E 3 / Stable Diffusion（需要图像生成能力，非文本模型）</li>
             </ul>
           </div>
         </div>

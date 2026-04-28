@@ -3,7 +3,7 @@
  * @description 创作工坊 - 提交逻辑
  */
 import { drizzle } from 'drizzle-orm/d1'
-import { eq, and, isNull } from 'drizzle-orm'
+import { eq, and, isNull, sql, inArray } from 'drizzle-orm'
 import type { Env } from '../../lib/types'
 import * as schema from '../../db/schema'
 import { enqueue } from '../../lib/queue'
@@ -530,31 +530,64 @@ export async function generateGenreSystemPrompt(env: Env, novelId: string, data:
     }
   }
 
-  const genreInfo = [
-    `题材类型：${data.genre || '未知'}`,
-    data.coreAppeal?.length ? `核心卖点：${data.coreAppeal.join('；')}` : '',
-    data.description ? `故事简介：${data.description.slice(0, 300)}` : '',
-    data.writingRules?.length ? `写作规则：${data.writingRules.map(r => r.content || r).join('；')}` : '',
-    extraContext || '',
-  ].filter(Boolean).join('\n')
+  const contextParts: string[] = []
+
+  try {
+    const protagonist = await db.select({ name: schema.characters.name, powerLevel: schema.characters.powerLevel, description: schema.characters.description })
+      .from(schema.characters)
+      .where(and(
+        eq(schema.characters.novelId, novelId),
+        eq(schema.characters.role, 'protagonist'),
+        sql`${schema.characters.deletedAt} IS NULL`
+      ))
+      .limit(1)
+      .get()
+    if (protagonist) {
+      contextParts.push(`主角：${protagonist.name}${protagonist.powerLevel ? '，当前境界：' + protagonist.powerLevel : ''}${protagonist.description ? '，简介：' + protagonist.description.slice(0, 200) : ''}`)
+    }
+  } catch {}
+
+  try {
+    const settings = await db.select({ name: schema.novelSettings.name, type: schema.novelSettings.type, category: schema.novelSettings.category, content: schema.novelSettings.content, summary: schema.novelSettings.summary })
+      .from(schema.novelSettings)
+      .where(and(
+        eq(schema.novelSettings.novelId, novelId),
+        inArray(schema.novelSettings.category, ['worldview', 'power_system']),
+        sql`${schema.novelSettings.deletedAt} IS NULL`
+      ))
+      .limit(10)
+      .all()
+    for (const s of settings) {
+      contextParts.push(`设定【${s.category}】${s.name}：${s.summary || s.content?.slice(0, 300) || ''}`)
+    }
+  } catch {}
+
+  if (data.genre) contextParts.push(`题材类型：${data.genre}`)
+  if (data.coreAppeal?.length) contextParts.push(`核心卖点：${data.coreAppeal.join('；')}`)
+  if (data.description) contextParts.push(`故事简介：${data.description.slice(0, 300)}`)
+  if (data.writingRules?.length) contextParts.push(`写作规则：${data.writingRules.map(r => r.content || r).join('；')}`)
+  if (extraContext) contextParts.push(extraContext)
 
   const result = await generate(llmConfig, [
     {
       role: 'system',
-      content: `你是一位资深网文编辑，擅长为不同题材的小说定制写作风格指导。请根据给定的题材信息，生成一段专属的写作系统提示词（system prompt）。
+      content: `你是一位资深网文编辑，擅长为不同题材的小说定制写作风格指导。请根据给定的小说信息，生成一段专属的写作系统提示词（system prompt）。
 
 要求：
-1. 提示词应指导AI写出符合该题材风格的网文
-2. 包含该题材特有的写作技巧和注意事项
-3. 包含节奏控制、悬念设置、爽点安排的建议
-4. 语言精炼，总字数300-500字
-5. 直接输出提示词内容，不要加标题或解释
-6. 不要包含硬性约束（角色一致性、设定一致性等），这些由系统自动注入
-7. 不要包含工具使用规范，这些由系统自动注入`,
+1. 按以下类别结构输出，每个类别用【】标签标注：
+   【题材定位】一句话概括题材类型和核心路子
+   【基础信息】世界名、主角、境界体系（从设定中提取，没有则省略）
+   【写作技巧】该题材特有的写法要点
+   【节奏控制】爽点安排、悬念设置、突破节奏等
+   【注意事项】禁止项、特殊规则等
+2. 总字数400-600字
+3. 直接输出提示词内容，不要加标题或解释
+4. 不要包含硬性约束（角色一致性、设定一致性等），这些由系统自动注入
+5. 不要包含工具使用规范，这些由系统自动注入`,
     },
     {
       role: 'user',
-      content: genreInfo,
+      content: contextParts.join('\n'),
     },
   ])
 
