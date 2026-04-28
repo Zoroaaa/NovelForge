@@ -335,7 +335,7 @@ router.post('/check', zValidator('json', z.object({
         novelId,
         chapterId,
         checkType: 'character_consistency',
-        score: result.conflicts?.length > 0 ? Math.max(0, 100 - result.conflicts.length * 20) : 100,
+        score: result.score,
         status: 'success',
         characterResult: result,
         issuesCount: (result.conflicts?.length || 0) + (result.warnings?.length || 0),
@@ -553,6 +553,7 @@ router.post('/volume-progress-check', zValidator('json', z.object({
       novelId,
       chapterId,
       checkType: 'volume_progress',
+      score: result.score,
       status: 'success',
       volumeProgressResult: result,
       issuesCount: result.healthStatus === 'critical' ? 1 : 0,
@@ -595,16 +596,14 @@ router.post('/combined-check', zValidator('json', z.object({
   const { chapterId, novelId, characterIds } = c.req.valid('json')
 
   try {
-    const [characterResult, coherenceResult] = await Promise.all([
+    const [characterResult, coherenceResult, volumeProgressResult] = await Promise.all([
       checkCharacterConsistency(c.env, { chapterId, characterIds }),
       checkChapterCoherence(c.env, chapterId, novelId),
+      checkVolumeProgress(c.env, chapterId, novelId),
     ])
 
-    const characterScore = characterResult.conflicts?.length > 0
-      ? Math.max(0, 100 - characterResult.conflicts.length * 20)
-      : 100
-
-    const combinedScore = Math.round((characterScore + coherenceResult.score) / 2)
+    const characterScore = characterResult.score
+    const combinedScore = Math.round((characterScore + coherenceResult.score + volumeProgressResult.score) / 3)
 
     await saveCheckLog(c.env, {
       novelId,
@@ -614,9 +613,11 @@ router.post('/combined-check', zValidator('json', z.object({
       status: 'success',
       characterResult: characterResult,
       coherenceResult: coherenceResult,
+      volumeProgressResult: volumeProgressResult,
       issuesCount: (characterResult.conflicts?.length || 0) +
                    (characterResult.warnings?.length || 0) +
-                   (coherenceResult.issues?.length || 0),
+                   (coherenceResult.issues?.length || 0) +
+                   (volumeProgressResult.healthStatus === 'critical' ? 1 : 0),
     })
 
     return c.json({
@@ -626,7 +627,8 @@ router.post('/combined-check', zValidator('json', z.object({
         score: coherenceResult.score,
         issues: coherenceResult.issues,
       },
-      hasIssues: characterResult.conflicts?.length > 0 || coherenceResult.hasIssues,
+      volumeProgressCheck: volumeProgressResult,
+      hasIssues: characterResult.conflicts?.length > 0 || coherenceResult.hasIssues || volumeProgressResult.healthStatus === 'critical',
     })
   } catch (error) {
     console.error('Combined check failed:', error)

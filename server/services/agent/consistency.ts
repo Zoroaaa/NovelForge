@@ -16,7 +16,7 @@ import { ERROR_MESSAGES, JSON_OUTPUT_PROMPT } from './constants'
 export async function checkCharacterConsistency(
   env: Env,
   data: { chapterId: string; characterIds: string[] }
-): Promise<{ conflicts: any[]; warnings: string[]; raw?: string }> {
+): Promise<{ conflicts: any[]; warnings: string[]; raw?: string; score: number }> {
   const db = drizzle(env.DB)
   const { chapterId, characterIds } = data
 
@@ -53,6 +53,7 @@ export async function checkCharacterConsistency(
     return {
       conflicts: [],
       warnings: [ERROR_MESSAGES.MODEL_NOT_CONFIGED('智能分析') + '（用于一致性检查、境界检测、伏笔提取等分析任务）'],
+      score: 100,
     }
   }
 
@@ -99,9 +100,12 @@ ${chapter.content.slice(0, 10000)}
   ])
 
   try {
-    return JSON.parse(text)
+    const result = JSON.parse(text)
+    const conflictCount = result.conflicts?.length || 0
+    const score = conflictCount > 0 ? Math.max(0, 100 - conflictCount * 20) : 100
+    return { ...result, score }
   } catch {
-    return { conflicts: [], warnings: ['解析失败'], raw: text }
+    return { conflicts: [], warnings: ['解析失败'], raw: text, score: 100 }
   }
 }
 

@@ -80,6 +80,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
   const [combinedReport, setCombinedReport] = useState<{
     characterResult: any
     coherenceResult: any
+    volumeProgressResult: any
     score: number
   } | null>(null)
   const [isChecking, setIsChecking] = useState(false)
@@ -149,6 +150,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
         setCombinedReport({
           characterResult: cachedData.log.characterResult,
           coherenceResult: cachedData.log.coherenceResult,
+          volumeProgressResult: cachedData.log.volumeProgressResult || null,
           score: cachedData.log.score,
         })
         setIsFromCache(true)
@@ -162,6 +164,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
       setCombinedReport({
         characterResult: checkData.characterCheck,
         coherenceResult: checkData.coherenceCheck,
+        volumeProgressResult: checkData.volumeProgressCheck,
         score: checkData.score,
       })
       setIsFromCache(false)
@@ -186,6 +189,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
       setCombinedReport({
         characterResult: data.characterCheck,
         coherenceResult: data.coherenceCheck,
+        volumeProgressResult: data.volumeProgressCheck,
         score: data.score,
       })
       setIsFromCache(false)
@@ -411,6 +415,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                     setCombinedReport({
                       characterResult: latestCheckLog.characterResult || { conflicts: [], warnings: [] },
                       coherenceResult: latestCheckLog.coherenceResult,
+                      volumeProgressResult: latestCheckLog.volumeProgressResult || null,
                       score: latestCheckLog.score,
                     })
                     setCoherenceResult({
@@ -530,6 +535,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
               setCombinedReport({
                 characterResult: result.characterCheck,
                 coherenceResult: result.coherenceCheck,
+                volumeProgressResult: result.volumeProgressCheck,
                 score: result.score,
               })
               loadLatestCheckLog()
@@ -747,15 +753,68 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                           </section>
                         )}
 
+                        {/* 卷完成度部分 */}
+                        {combinedReport.volumeProgressResult && combinedReport.volumeProgressResult.healthStatus !== 'healthy' && (
+                          <section className="space-y-3">
+                            <header className="flex items-center gap-2.5 pb-2 border-b border-blue-200/50 dark:border-blue-800/30">
+                              <Target className="h-4 w-4 text-blue-600" />
+                              <h3 className="text-sm font-semibold uppercase tracking-wide">卷完成度检查</h3>
+                              <Badge className={`ml-auto text-[11px] h-5 ${
+                                combinedReport.volumeProgressResult.healthStatus === 'critical'
+                                  ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                                  : combinedReport.volumeProgressResult.healthStatus === 'behind'
+                                  ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
+                                  : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                              }`}>
+                                {combinedReport.volumeProgressResult.score}分 · {combinedReport.volumeProgressResult.healthStatus === 'critical' ? '严重偏离' : combinedReport.volumeProgressResult.healthStatus === 'behind' ? '进度偏慢' : '进度稍快'}
+                              </Badge>
+                            </header>
+
+                            <div className="space-y-2 pl-1">
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div className="p-2 bg-muted/30 rounded">
+                                  <span className="text-muted-foreground">当前章节：</span>
+                                  <span className="font-medium ml-1">第 {combinedReport.volumeProgressResult.currentChapter || '-'} 章</span>
+                                </div>
+                                <div className="p-2 bg-muted/30 rounded">
+                                  <span className="text-muted-foreground">目标章节：</span>
+                                  <span className="font-medium ml-1">{combinedReport.volumeProgressResult.targetChapter ? `${combinedReport.volumeProgressResult.targetChapter} 章` : '未设定'}</span>
+                                </div>
+                                <div className="p-2 bg-muted/30 rounded">
+                                  <span className="text-muted-foreground">当前字数：</span>
+                                  <span className="font-medium ml-1">{combinedReport.volumeProgressResult.currentWordCount ? `${(combinedReport.volumeProgressResult.currentWordCount / 10000).toFixed(1)} 万` : '-'}</span>
+                                </div>
+                                <div className="p-2 bg-muted/30 rounded">
+                                  <span className="text-muted-foreground">目标字数：</span>
+                                  <span className="font-medium ml-1">{combinedReport.volumeProgressResult.targetWordCount ? `${(combinedReport.volumeProgressResult.targetWordCount / 10000).toFixed(0)} 万` : '未设定'}</span>
+                                </div>
+                              </div>
+                              {combinedReport.volumeProgressResult.diagnosis && (
+                                <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg text-xs">
+                                  <span className="text-blue-700 dark:text-blue-300 font-medium">诊断：</span>
+                                  <span className="text-blue-600 dark:text-blue-400 ml-1">{combinedReport.volumeProgressResult.diagnosis}</span>
+                                </div>
+                              )}
+                              {combinedReport.volumeProgressResult.suggestion && (
+                                <div className="p-3 bg-muted/30 rounded-lg text-xs">
+                                  <span className="text-muted-foreground">AI 建议：</span>
+                                  <p className="mt-1 text-foreground">{combinedReport.volumeProgressResult.suggestion}</p>
+                                </div>
+                              )}
+                            </div>
+                          </section>
+                        )}
+
                         {/* 无问题提示 */}
                         {!combinedReport.characterResult?.conflicts?.length &&
                          !combinedReport.characterResult?.warnings?.filter((w: string) => !w.includes('失败'))?.length &&
-                         !combinedReport.coherenceResult?.issues?.length && (
+                         !combinedReport.coherenceResult?.issues?.length &&
+                         (!combinedReport.volumeProgressResult || combinedReport.volumeProgressResult.healthStatus === 'healthy') && (
                           <div className="flex flex-col items-center gap-3 p-8 bg-gradient-to-br from-green-50 via-emerald-50/30 to-transparent dark:from-green-950/40 dark:via-emerald-950/10 dark:to-transparent border border-green-200/60 dark:border-green-800/30 rounded-xl">
                             <CheckCircle className="h-12 w-12 text-green-500" />
                             <div className="text-center space-y-1">
                               <p className="text-base font-medium text-green-700 dark:text-green-300">质量检查全部通过 ✨</p>
-                              <p className="text-sm text-green-600/80 dark:text-green-400/80">角色一致性和章节连贯性均未发现问题。</p>
+                              <p className="text-sm text-green-600/80 dark:text-green-400/80">角色一致性、章节连贯性和卷完成度均未发现问题。</p>
                             </div>
                           </div>
                         )}
@@ -763,7 +822,8 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                     </div>
 
                     {(combinedReport.characterResult?.conflicts?.length > 0 ||
-                     combinedReport.coherenceResult?.issues?.some((i: any) => i.severity === 'error')) && (
+                     combinedReport.coherenceResult?.issues?.some((i: any) => i.severity === 'error') ||
+                     (combinedReport.volumeProgressResult && combinedReport.volumeProgressResult.healthStatus === 'critical')) && (
                       <aside className="pt-3 border-t text-center">
                         <p className="text-xs text-muted-foreground flex items-center justify-center gap-1.5">
                           <Zap className="h-3.5 w-3.5 text-blue-500" />

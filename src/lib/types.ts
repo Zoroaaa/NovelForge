@@ -496,7 +496,9 @@ export interface VolumeProgressResult {
   healthStatus: 'healthy' | 'ahead' | 'behind' | 'critical'
   risk: 'early_ending' | 'late_ending' | null
   suggestion: string
+  diagnosis?: string
   raw?: string
+  score: number
 }
 
 export interface BatchTaskStatus {

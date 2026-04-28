@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Shield,
   Link,
+  Target,
   ShieldAlert,
   AlertTriangle,
   CheckCircle,
@@ -19,6 +20,7 @@ import {
   ChevronUp,
 } from 'lucide-react'
 import { api } from '@/lib/api'
+import type { VolumeProgressResult } from '@/lib/types'
 
 interface Conflict {
   characterName: string
@@ -36,6 +38,7 @@ interface CoherenceIssue {
 interface CombinedCheckResult {
   score: number
   characterCheck: {
+    score: number
     conflicts: Conflict[]
     warnings: string[]
   }
@@ -43,6 +46,7 @@ interface CombinedCheckResult {
     score: number
     issues: CoherenceIssue[]
   }
+  volumeProgressCheck: VolumeProgressResult
   hasIssues: boolean
 }
 
@@ -50,6 +54,13 @@ interface CombinedCheckProps {
   novelId: string
   chapterId: string | null
   onCheckComplete?: (result: CombinedCheckResult) => void
+}
+
+const healthStatusConfig: Record<string, { label: string; color: string }> = {
+  healthy: { label: '进度正常', color: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' },
+  ahead: { label: '进度稍快', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' },
+  behind: { label: '进度偏慢', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' },
+  critical: { label: '严重偏离', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' },
 }
 
 export function CombinedCheck({ novelId, chapterId, onCheckComplete }: CombinedCheckProps) {
@@ -72,13 +83,20 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete }: CombinedC
       const data = await api.generate.combinedCheck({ chapterId, novelId })
       const typedResult: CombinedCheckResult = {
         ...data,
+        characterCheck: {
+          ...data.characterCheck,
+          score: data.characterCheck.score,
+          conflicts: data.characterCheck.conflicts || [],
+          warnings: data.characterCheck.warnings || [],
+        },
         coherenceCheck: {
           ...data.coherenceCheck,
-          issues: data.coherenceCheck.issues.map(i => ({
+          issues: (data.coherenceCheck.issues || []).map((i: any) => ({
             ...i,
             severity: i.severity as 'error' | 'warning'
           }))
-        }
+        },
+        volumeProgressCheck: data.volumeProgressCheck,
       }
       setResult(typedResult)
       onCheckComplete?.(typedResult)
@@ -86,8 +104,21 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete }: CombinedC
       console.error('综合检查失败:', error)
       setResult({
         score: 0,
-        characterCheck: { conflicts: [], warnings: [`检查失败: ${(error as Error).message}`] },
+        characterCheck: { score: 0, conflicts: [], warnings: [`检查失败: ${(error as Error).message}`] },
         coherenceCheck: { score: 0, issues: [] },
+        volumeProgressCheck: {
+          volumeId: '',
+          currentChapter: 0,
+          targetChapter: null,
+          currentWordCount: 0,
+          targetWordCount: null,
+          chapterProgress: 0,
+          wordProgress: 0,
+          healthStatus: 'healthy',
+          risk: null,
+          suggestion: '',
+          score: 0,
+        },
         hasIssues: true,
       })
     } finally {
@@ -119,6 +150,7 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete }: CombinedC
         <CardTitle className="text-base flex items-center gap-2">
           <Shield className="h-4 w-4" />
           <Link className="h-4 w-4" />
+          <Target className="h-4 w-4" />
           综合质量检查
         </CardTitle>
       </CardHeader>
@@ -126,7 +158,7 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete }: CombinedC
       <CardContent>
         {!result && !checking && (
           <div className="text-center py-6 text-muted-foreground text-sm">
-            同时执行角色一致性检查和章节连贯性检查，提供全面的健康评估
+            同时执行角色一致性检查、章节连贯性检查和卷完成度检查，提供全面的健康评估
           </div>
         )}
 
@@ -149,27 +181,25 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete }: CombinedC
               </div>
 
               <div className="flex items-center gap-2 ml-auto">
-                {/* 角色一致性评分 */}
                 <Badge variant="outline" className="gap-1 text-xs">
                   <Shield className="h-3 w-3" />
                   角色:
-                  <span className={getScoreColor(
-                    result.characterCheck.conflicts.length > 0
-                      ? Math.max(0, 100 - result.characterCheck.conflicts.length * 20)
-                      : 100
-                  )}>
-                    {result.characterCheck.conflicts.length > 0
-                      ? Math.max(0, 100 - result.characterCheck.conflicts.length * 20)
-                      : 100}
+                  <span className={getScoreColor(result.characterCheck.score)}>
+                    {result.characterCheck.score}
                   </span>
                 </Badge>
-
-                {/* 连贯性评分 */}
                 <Badge variant="outline" className="gap-1 text-xs">
                   <Link className="h-3 w-3" />
                   连贯:
                   <span className={getScoreColor(result.coherenceCheck.score)}>
                     {result.coherenceCheck.score}
+                  </span>
+                </Badge>
+                <Badge variant="outline" className="gap-1 text-xs">
+                  <Target className="h-3 w-3" />
+                  卷进度:
+                  <span className={getScoreColor(result.volumeProgressCheck.score)}>
+                    {result.volumeProgressCheck.score}
                   </span>
                 </Badge>
               </div>
@@ -304,12 +334,33 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete }: CombinedC
               </div>
             )}
 
+            {/* 卷进度摘要 */}
+            {result.volumeProgressCheck.healthStatus !== 'healthy' && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-blue-600 flex items-center gap-1">
+                  <Target className="h-3.5 w-3.5" />
+                  卷进度提醒
+                </p>
+                <div className="p-2.5 border rounded-md bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs">{result.volumeProgressCheck.diagnosis || '卷进度存在偏差'}</span>
+                    <Badge className={healthStatusConfig[result.volumeProgressCheck.healthStatus]?.color || ''}>
+                      {healthStatusConfig[result.volumeProgressCheck.healthStatus]?.label}
+                    </Badge>
+                  </div>
+                  {result.volumeProgressCheck.suggestion && (
+                    <p className="text-xs text-muted-foreground mt-1">{result.volumeProgressCheck.suggestion}</p>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* 无问题提示 */}
             {!result.hasIssues && (
               <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded">
                 <CheckCircle className="h-4 w-4 text-green-600" />
                 <span className="text-xs text-green-700 dark:text-green-300">
-                  恭喜！角色一致性和章节连贯性均未发现问题。
+                  恭喜！角色一致性、章节连贯性和卷完成度均未发现问题。
                 </span>
               </div>
             )}

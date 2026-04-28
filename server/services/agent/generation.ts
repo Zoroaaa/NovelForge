@@ -269,6 +269,7 @@ export async function generateChapter(
               novelId,
               chapterId,
               checkType: 'character_consistency',
+              score: consistencyResult.score,
               status: 'success',
               characterResult: consistencyResult,
               issuesCount: consistencyResult.conflicts.length + consistencyResult.warnings.length,
@@ -298,6 +299,7 @@ export async function generateChapter(
           novelId,
           chapterId,
           checkType: 'chapter_coherence',
+          score: coherenceResult.score,
           status: 'success',
           coherenceResult: coherenceResult,
           issuesCount: coherenceResult.issues.length,
@@ -329,8 +331,9 @@ export async function generateChapter(
           novelId,
           chapterId,
           checkType: 'volume_progress',
+          score: volumeProgressResult.score,
           status: 'success',
-          coherenceResult: volumeProgressResult,
+          volumeProgressResult: volumeProgressResult,
           issuesCount: volumeProgressResult.healthStatus === 'critical' ? 1 : 0,
         })
       } catch (progressError) {

@@ -22,6 +22,7 @@ export interface VolumeProgressResult {
   suggestion: string
   diagnosis?: string
   raw?: string
+  score: number
 }
 
 export async function checkVolumeProgress(
@@ -91,6 +92,7 @@ export async function checkVolumeProgress(
       healthStatus: 'healthy',
       risk: null,
       suggestion: ERROR_MESSAGES.MODEL_NOT_CONFIGED('智能分析') + '（用于卷完成度检查）',
+      score: 100,
     }
   }
 
@@ -137,6 +139,16 @@ export async function checkVolumeProgress(
     const aiResult = JSON.parse(text)
     const chapterProgress = targetChapter ? (currentChapterInVolume / targetChapter) * 100 : 0
     const wordProgress = targetWordCount ? (volumeData.wordCount / targetWordCount) * 100 : 0
+    const healthStatus = aiResult.healthStatus || 'healthy'
+    const risk = aiResult.risk || null
+
+    const statusDeduction: Record<string, number> = {
+      healthy: 0,
+      ahead: 10,
+      behind: 30,
+      critical: 50,
+    }
+    const score = Math.max(0, 100 - (statusDeduction[healthStatus] || 0) - (risk ? 10 : 0))
 
     return {
       volumeId: chapter.volumeId,
@@ -146,11 +158,12 @@ export async function checkVolumeProgress(
       targetWordCount: targetWordCount,
       chapterProgress: Math.round(chapterProgress * 10) / 10,
       wordProgress: Math.round(wordProgress * 10) / 10,
-      healthStatus: aiResult.healthStatus || 'healthy',
-      risk: aiResult.risk || null,
+      healthStatus,
+      risk,
       diagnosis: aiResult.diagnosis || '',
       suggestion: aiResult.suggestion || '无法获取AI评估建议',
       raw: text,
+      score,
     }
   } catch {
     const chapterProgress = targetChapter ? (currentChapterInVolume / targetChapter) * 100 : 0
@@ -168,6 +181,7 @@ export async function checkVolumeProgress(
       risk: null,
       suggestion: 'AI评估解析失败',
       raw: text,
+      score: 100,
     }
   }
 }

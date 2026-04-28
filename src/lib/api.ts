@@ -11,7 +11,7 @@ import type {
   ForeshadowingProgress, ForeshadowingHealthReport, ForeshadowingSuggestion, ForeshadowingStats,
   PowerLevelDetectionResult, PowerLevelBatchResult, PowerLevelHistoryItem,
   PowerLevelValidationResult, PowerLevelApplyResult,
-  BatchTaskStatus, QualityScore
+  BatchTaskStatus, QualityScore, VolumeProgressResult
 } from './types'
 
 const TOKEN_KEY = 'auth_token'
@@ -429,6 +429,9 @@ export const api = {
         healthStatus: 'healthy' | 'ahead' | 'behind' | 'critical'
         risk: 'early_ending' | 'late_ending' | null
         suggestion: string
+        diagnosis?: string
+        raw?: string
+        score: number
         error?: string
       }>('/api/generate/volume-progress-check', { method: 'POST', body: j(body), timeout: 120000 }),
     getLogs: (novelId?: string, limit?: number) =>
@@ -498,8 +501,9 @@ export const api = {
       }>(`/api/generate/check-logs/history?chapterId=${chapterId}&limit=${limit || 20}`),
     combinedCheck: (body: { chapterId: string; novelId: string }) =>
       req<{
-        characterCheck: { conflicts: Array<{ characterName: string; conflict: string; excerpt: string }>; warnings: string[] }
+        characterCheck: { score: number; conflicts: Array<{ characterName: string; conflict: string; excerpt: string }>; warnings: string[] }
         coherenceCheck: { score: number; issues: Array<{ severity: string; message: string }> }
+        volumeProgressCheck: VolumeProgressResult
         score: number
         hasIssues: boolean
       }>('/api/generate/combined-check', { method: 'POST', body: j(body), timeout: 180000 }),
