@@ -437,9 +437,9 @@ export function CombinedReportDialog({
                       )}
 
                       {!(
-                        (combinedReport.characterCheck?.conflicts?.length > 0 || combinedReport.characterCheck?.warnings?.filter((w: string) => !w.includes('失败'))?.length > 0) ||
-                        combinedReport.coherenceCheck?.issues?.length > 0 ||
-                        (combinedReport.volumeProgressCheck && (combinedReport.volumeProgressCheck.wordCountIssues.length > 0 || combinedReport.volumeProgressCheck.rhythmIssues.length > 0))
+                        (combinedReport.characterCheck?.conflicts?.length > 0 || (combinedReport.characterCheck?.warnings?.length ?? 0) > 0) ||
+                        (combinedReport.coherenceCheck?.issues?.length ?? 0) > 0 ||
+                        (combinedReport.volumeProgressCheck && ((combinedReport.volumeProgressCheck.wordCountIssues?.length ?? 0) > 0 || (combinedReport.volumeProgressCheck.rhythmIssues?.length ?? 0) > 0))
                       ) && (
                         <div className="flex flex-col items-center gap-3 p-8 bg-gradient-to-br from-green-50 via-emerald-50/30 to-transparent dark:from-green-950/40 dark:via-emerald-950/10 dark:to-transparent border border-green-200/60 dark:border-green-800/30 rounded-xl">
                           <CheckCircle className="h-12 w-12 text-green-500" />
