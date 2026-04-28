@@ -154,7 +154,21 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
             characterResult: cachedData.log.characterResult,
             coherenceResult: cachedData.log.coherenceResult,
             volumeProgressResult: cachedVolumeProgress,
-            score: cachedData.log.score,
+            score: cachedData.log.score ?? 100,
+          })
+          setIsFromCache(true)
+          setReportCachedAt(cachedData.log.createdAt)
+          setIsChecking(false)
+          return
+        }
+
+        const volumeProgressData = await api.generate.getCheckLogsLatest(chapterId!, 'volume_progress')
+        if (volumeProgressData.log && volumeProgressData.log.volumeProgressResult) {
+          setCombinedReport({
+            characterResult: cachedData.log.characterResult,
+            coherenceResult: cachedData.log.coherenceResult,
+            volumeProgressResult: volumeProgressData.log.volumeProgressResult,
+            score: cachedData.log.score ?? 100,
           })
           setIsFromCache(true)
           setReportCachedAt(cachedData.log.createdAt)
