@@ -13,9 +13,11 @@ import { AGENT_LABELS, CHAPTER_GEN_DEFAULTS } from './constants'
 const TOOL_GUIDE = `
 ${AGENT_LABELS.TOOL_USAGE_GUIDE}
 在正式创作前，如果资料包中某项信息不足，可以调用工具补充：
-- queryOutline：查询大纲（世界观、卷纲、章节大纲）
-- queryCharacter：查询角色信息
-- searchSemantic：语义搜索相关历史内容
+- searchChapterHistory：在历史章节摘要中检索关键词（确认道具/功法/地点首次出现、角色过去行为）
+- queryCharacterByName：按名称精确查询角色完整卡片（资料包未包含的角色）
+- queryForeshadowing：查询所有未收尾的伏笔列表（资料包只含高优先级伏笔）
+- querySettingByName：按名称精确查询世界设定完整内容（资料包只有摘要时查细节）
+- searchSemantic：语义模糊搜索（不知道确切名称时的兜底搜索）
 
 注意：
 1. 资料包中已有的信息无需再调用工具
@@ -27,7 +29,7 @@ ${AGENT_LABELS.TOOL_USAGE_GUIDE}
 // ============================================================
 const HARD_CONSTRAINTS = `【硬性约束——以下任意一条违反即为生成失败，优先级高于一切】
 A. 角色约束：所有出场角色的姓名、境界、说话方式必须与资料包"本章出场角色"完全一致，不得自造昵称或升降境界
-B. 设定约束：境界名称、势力名称、地名、功法名称必须与资料包"相关世界设定"完全一致，不得创造变体
+B. 设定约束：资料包"相关世界设定"中已有的境界名称、势力名称、地名、功法名称必须严格沿用，不得创造变体；资料包中未涉及的设定允许合理自创，但不得与已有设定矛盾
 C. 衔接约束：本章开头必须自然承接资料包"上一章回顾"的结尾状态，时间、地点、情绪不得跳变
 D. 伏笔约束：资料包"待回收伏笔"中的伏笔，本章可推进但不得无故终结；未列出的伏笔不得擅自回收
 E. 规则约束：资料包"创作规则"中所有条目的禁止行为一律不得出现`
@@ -102,16 +104,15 @@ export function buildMessages(
 ): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
   const { mode = 'generate', existingContent, targetWords, issuesContext } = options
 
-  // 解析 system prompt：key 命中预设则用预设，否则当作完整 prompt 直接使用，默认 fantasy
-  const basePrompt =
-    systemPromptOverride && SYSTEM_PROMPTS[systemPromptOverride]
-      ? SYSTEM_PROMPTS[systemPromptOverride]
-      : (systemPromptOverride || SYSTEM_PROMPTS.fantasy)
+  const genreStyleGuide = novelSystemNote || ''
+  const systemPrompt = genreStyleGuide
+    ? `你是一位专业的网文小说作家，正在创作一部长篇连载作品的某一章节。
 
-  // 如果有小说专属引言，拼在base之后（以system message权重注入）
-  const systemPrompt = novelSystemNote
-    ? `${basePrompt}\n\n【本小说专属约束】\n${novelSystemNote}`
-    : basePrompt
+${genreStyleGuide}
+
+${HARD_CONSTRAINTS}
+${TOOL_GUIDE}`
+    : SYSTEM_PROMPTS.fantasy
 
   // ── 续写模式 ──────────────────────────────────────────────
   if (mode === 'continue' && existingContent) {
@@ -206,7 +207,7 @@ ${AGENT_LABELS.FORCE_REQUIREMENTS}
 创作前请依次确认：
 1. 【衔接确认】上一章回顾的结尾状态是什么？本章第一段如何自然承接？
 2. 【角色确认】本章出场角色的当前境界和说话方式是否已对照角色卡？
-3. 【设定确认】本章涉及的境界名称、地名、功法名称是否与世界设定一致？
+3. 【设定确认】本章涉及的境界名称、地名、功法名称，资料包中有则沿用，没有则可自创但不与已有设定矛盾
 4. 【伏笔确认】待回收伏笔中，哪些可以在本章推进（不收尾）？
 5. 【规则确认】创作规则中的禁忌，本章是否全部规避？
 

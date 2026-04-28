@@ -65,54 +65,13 @@ export async function triggerAutoSummary(
   generationUsage: { prompt_tokens: number; completion_tokens: number }
 ): Promise<void> {
   try {
-    const db = drizzle(env.DB)
-
-    const chapter = await db
-      .select({ title: chapters.title, content: chapters.content })
-      .from(chapters)
-      .where(eq(chapters.id, chapterId))
-      .get()
-
-    if (!chapter?.content) {
-      LOG_STYLES.INFO('无内容需要摘要')
-      return
-    }
-
-    const summaryText = await callSummaryLLM({
-      db,
-      novelId,
-      stage: 'summary_gen',
-      systemPrompt: SUMMARY_SYSTEM_PROMPT,
-      userPrompt: `请为以下小说章节生成结构化摘要。
-
-【章节标题】《${chapter.title}》
-
-【正文内容】
-${chapter.content}
-
-【输出格式】严格按以下四个标签输出，每项如确实没有内容则写"无"，不得省略标签：
-
-【角色状态变化】本章中角色的境界突破、能力获得、重要属性变化。必须包含具体境界名称，如"林岩从炼气三层突破至炼气四层"。
-【关键事件】本章主线剧情，2-3句话，包含起因、过程、结果。
-【道具/功法】本章新出现、获得或使用的重要道具、功法、丹药（名称+一句话说明）。
-【章末状态】本章结束时主角的：所在位置·当前处境·下一步明确方向或悬念。
-
-字数要求：总计300-400字（四个标签合计）`,
-      maxTokens: 1000,
+    const result = await generateChapterSummary(env, chapterId, novelId, {
+      source: 'auto',
+      usage: generationUsage,
     })
-
-    await db
-      .update(chapters)
-      .set({
-        summary: summaryText,
-        summaryAt: Math.floor(Date.now() / 1000),
-        summaryModel: 'auto',
-        promptTokens: generationUsage.prompt_tokens,
-        completionTokens: generationUsage.completion_tokens,
-      })
-      .where(eq(chapters.id, chapterId))
-
-    LOG_STYLES.SUCCESS(`章节 ${chapterId} 摘要生成成功: ${summaryText.slice(0, 100)}`)
+    if (result.ok) {
+      LOG_STYLES.SUCCESS(`章节 ${chapterId} 摘要生成成功: ${result.summary?.slice(0, 100)}`)
+    }
   } catch (error) {
     LOG_STYLES.WARN(`${ERROR_MESSAGES.SUMMARY_FAILED}: ${error}`)
   }
@@ -124,23 +83,42 @@ export async function triggerChapterSummary(
   novelId: string
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    const db = drizzle(env.DB)
+    const result = await generateChapterSummary(env, chapterId, novelId, {
+      source: 'manual',
+    })
+    return result
+  } catch (error) {
+    LOG_STYLES.ERROR(`${ERROR_MESSAGES.SUMMARY_FAILED}: ${error}`)
+    return { ok: false, error: (error as Error).message }
+  }
+}
 
-    const chapter = await db
-      .select({ title: chapters.title, content: chapters.content })
-      .from(chapters)
-      .where(eq(chapters.id, chapterId))
-      .get()
+async function generateChapterSummary(
+  env: Env,
+  chapterId: string,
+  novelId: string,
+  opts: {
+    source: 'auto' | 'manual'
+    usage?: { prompt_tokens: number; completion_tokens: number }
+  }
+): Promise<{ ok: boolean; summary?: string; error?: string }> {
+  const db = drizzle(env.DB)
 
-    if (!chapter) return { ok: false, error: 'Chapter not found' }
-    if (!chapter?.content) return { ok: false, error: ERROR_MESSAGES.CHAPTER_CONTENT_EMPTY }
+  const chapter = await db
+    .select({ title: chapters.title, content: chapters.content })
+    .from(chapters)
+    .where(eq(chapters.id, chapterId))
+    .get()
 
-    const summaryText = await callSummaryLLM({
-      db,
-      novelId,
-      stage: 'summary_gen',
-      systemPrompt: SUMMARY_SYSTEM_PROMPT,
-      userPrompt: `请为以下小说章节生成结构化摘要。
+  if (!chapter) return { ok: false, error: 'Chapter not found' }
+  if (!chapter?.content) return { ok: false, error: ERROR_MESSAGES.CHAPTER_CONTENT_EMPTY }
+
+  const summaryText = await callSummaryLLM({
+    db,
+    novelId,
+    stage: 'summary_gen',
+    systemPrompt: SUMMARY_SYSTEM_PROMPT,
+    userPrompt: `请为以下小说章节生成结构化摘要。
 
 【章节标题】《${chapter.title}》
 
@@ -155,24 +133,31 @@ ${chapter.content}
 【章末状态】本章结束时主角的：所在位置·当前处境·下一步明确方向或悬念。
 
 字数要求：总计300-400字（四个标签合计）`,
-      maxTokens: 1000,
-    })
+    maxTokens: 1000,
+  })
 
-    await db
-      .update(chapters)
-      .set({
-        summary: summaryText,
-        summaryAt: Math.floor(Date.now() / 1000),
-        summaryModel: 'manual',
-      })
-      .where(eq(chapters.id, chapterId))
-
-    LOG_STYLES.SUCCESS(`章节 ${chapterId} 摘要生成成功: ${summaryText.slice(0, 100)}`)
-    return { ok: true }
-  } catch (error) {
-    LOG_STYLES.ERROR(`${ERROR_MESSAGES.SUMMARY_FAILED}: ${error}`)
-    return { ok: false, error: (error as Error).message }
+  const updateData: Record<string, unknown> = {
+    summary: summaryText,
+    summaryAt: Math.floor(Date.now() / 1000),
+    summaryModel: opts.source,
   }
+
+  if (!validateSummaryStructure(summaryText)) {
+    updateData.summaryModel = 'malformed'
+    console.warn(`[summarizer] 摘要结构不完整，标记为 malformed: ${summaryText.slice(0, 100)}`)
+  }
+
+  if (opts.source === 'auto' && opts.usage) {
+    updateData.promptTokens = opts.usage.prompt_tokens
+    updateData.completionTokens = opts.usage.completion_tokens
+  }
+
+  await db
+    .update(chapters)
+    .set(updateData)
+    .where(eq(chapters.id, chapterId))
+
+  return { ok: true, summary: summaryText }
 }
 
 // ============================================================
@@ -389,4 +374,9 @@ function extractBlueprintCore(blueprint: string): string {
     if (match) parts.push(`【${tag}】${match[1].trim().slice(0, 150)}`)
   }
   return parts.length > 0 ? parts.join('\n') : blueprint.slice(0, 500)
+}
+
+function validateSummaryStructure(text: string): boolean {
+  return ['【角色状态变化】', '【关键事件】', '【道具/功法】', '【章末状态】']
+    .every(tag => text.includes(tag))
 }

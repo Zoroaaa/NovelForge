@@ -4,46 +4,58 @@
  */
 import { drizzle } from 'drizzle-orm/d1'
 import { chapters, characters } from '../../db/schema'
-import { eq, and, sql } from 'drizzle-orm'
+import { eq, and, sql, inArray, isNull } from 'drizzle-orm'
 import type { Env } from '../../lib/types'
 import { resolveConfig, generate, streamGenerate } from '../llm'
-import type { CoherenceCheckResult } from './types'
 import { ERROR_MESSAGES, JSON_OUTPUT_PROMPT } from './constants'
 
-// ============================================================
-// 角色一致性检查（AI分析）
-// ============================================================
 export async function checkCharacterConsistency(
   env: Env,
   data: { chapterId: string; characterIds: string[] }
 ): Promise<{ conflicts: any[]; warnings: string[]; raw?: string; score: number }> {
   const db = drizzle(env.DB)
-  const { chapterId, characterIds } = data
+  const { chapterId } = data
+  let { characterIds } = data
 
   const chapter = await db.select().from(chapters).where(eq(chapters.id, chapterId)).get()
   if (!chapter?.content) throw new Error(ERROR_MESSAGES.CHAPTER_NOT_FOUND_OR_EMPTY)
 
-  let characterInfo = ''
-  if (characterIds.length > 0) {
-    const chars = await db
-      .select()
+  if (characterIds.length === 0) {
+    const mainChars = await db.select({ id: characters.id })
       .from(characters)
-      .where(characterIds.map(id => eq(characters.id, id)).reduce((a, b) => sql`${a} OR ${b}`))
+      .where(and(
+        eq(characters.novelId, chapter.novelId),
+        inArray(characters.role, ['protagonist', 'supporting', 'antagonist']),
+        isNull(characters.deletedAt)
+      ))
+      .limit(10)
       .all()
-    characterInfo = chars.map(c => {
-      let attrs: any = {}
-      try { attrs = c.attributes ? JSON.parse(c.attributes) : {} } catch {}
-
-      return [
-        `【${c.name}】角色定位：${c.role}`,
-        `当前境界：${c.powerLevel || '未设定'}`,
-        `性格：${attrs.personality || '未设定'}`,
-        `说话方式：${attrs.speechPattern || '未设定'}`,
-        `性格弱点：${attrs.weakness || '未设定'}`,
-        `性格描述：${(c.description || '').slice(0, 200)}`,
-      ].join('\n')
-    }).join('\n\n---\n')
+    characterIds = mainChars.map(c => c.id)
   }
+
+  if (characterIds.length === 0) {
+    return { conflicts: [], warnings: ['未设置角色，跳过检查'], score: -1 }
+  }
+
+  let characterInfo = ''
+  const chars = await db
+    .select()
+    .from(characters)
+    .where(characterIds.map(id => eq(characters.id, id)).reduce((a, b) => sql`${a} OR ${b}`))
+    .all()
+  characterInfo = chars.map(c => {
+    let attrs: any = {}
+    try { attrs = c.attributes ? JSON.parse(c.attributes) : {} } catch {}
+
+    return [
+      `【${c.name}】角色定位：${c.role}`,
+      `当前境界：${c.powerLevel || '未设定'}`,
+      `性格：${attrs.personality || '未设定'}`,
+      `说话方式：${attrs.speechPattern || '未设定'}`,
+      `性格弱点：${attrs.weakness || '未设定'}`,
+      `性格描述：${(c.description || '').slice(0, 200)}`,
+    ].join('\n')
+  }).join('\n\n---\n')
 
   let analysisConfig
   try {

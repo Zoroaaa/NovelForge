@@ -83,7 +83,7 @@ export interface ModelConfig {
   id: string
   novelId: string | null
   scope: 'global' | 'novel'
-  stage: 'chapter_gen' | 'summary_gen' | 'analysis' | 'workshop'
+  stage: 'chapter_gen' | 'summary_gen' | 'analysis' | 'workshop' | 'image_gen'
   provider: string
   modelId: string
   apiBase: string | null
@@ -550,4 +550,43 @@ export interface QualityScore {
   fluencyScore: number | null
   details: string | null
   createdAt: number
+}
+
+export interface PlotNode {
+  id: string
+  novelId: string
+  type: 'event' | 'character' | 'location' | 'item' | 'foreshadowing'
+  title: string
+  description: string | null
+  chapterId: string | null
+  meta: string | null
+  createdAt: number
+}
+
+export interface PlotEdge {
+  id: string
+  novelId: string
+  fromId: string
+  toId: string
+  relation: 'caused_by' | 'participated_in' | 'occurred_at' | 'owned_by' | 'related_to' | 'leads_to'
+  createdAt: number
+}
+
+export interface GraphData {
+  nodes: PlotNode[]
+  edges: PlotEdge[]
+}
+
+export interface GraphResponse {
+  ok: boolean
+  graph: GraphData
+  meta: {
+    novelId?: string
+    novelTitle?: string
+    genre?: string
+    volumeId?: string
+    volumeTitle?: string
+    chapterId?: string
+    chapterTitle?: string
+  }
 }

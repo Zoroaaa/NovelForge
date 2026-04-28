@@ -26,9 +26,11 @@ import {
   Swords,
   TreePine,
   Trash2,
+  Network,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 interface SidebarProps {
   novelId: string
@@ -71,6 +73,7 @@ const TAB_GROUPS: TabGroup[] = [
     label: '管理',
     items: [
       { value: 'entity-tree', label: '实体树', icon: TreePine },
+      { value: 'graph', label: '图谱', icon: Network },
       { value: 'trash', label: '回收站', icon: Trash2 },
     ] as const,
   },
@@ -78,6 +81,7 @@ const TAB_GROUPS: TabGroup[] = [
 
 export function Sidebar({ novelId, onChapterSelect }: SidebarProps) {
   const { sidebarTab, setSidebarTab } = useNovelStore()
+  const navigate = useNavigate()
 
   // 计算当前激活的Tab分组
   const activeGroup = useMemo(
@@ -116,6 +120,9 @@ export function Sidebar({ novelId, onChapterSelect }: SidebarProps) {
         return <PowerLevelPanel novelId={novelId} />
       case 'entity-tree':
         return <EntityTreePanel novelId={novelId} onChapterSelect={onChapterSelect} />
+      case 'graph':
+        navigate(`/novels/${novelId}/graph`)
+        return null
       case 'trash':
         return <TrashPanel novelId={novelId} />
       default:

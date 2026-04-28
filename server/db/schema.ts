@@ -464,3 +464,37 @@ export const qualityScores = sqliteTable('quality_scores', {
   index('idx_quality_chapter').on(table.chapterId),
   index('idx_quality_novel').on(table.novelId, sql`${table.createdAt} DESC`),
 ])
+
+// ============================================================
+// 23. 情节图谱节点表（Phase 4）
+// ============================================================
+export const plotNodes = sqliteTable('plot_nodes', {
+  id: text('id').primaryKey(),
+  novelId: text('novel_id').notNull(),
+  type: text('type').notNull(),
+  title: text('title').notNull(),
+  description: text('description'),
+  chapterId: text('chapter_id'),
+  meta: text('meta'),
+  createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
+}, (table) => [
+  index('idx_plot_nodes_novel').on(table.novelId),
+  index('idx_plot_nodes_type').on(table.novelId, table.type),
+  index('idx_plot_nodes_chapter').on(table.chapterId),
+])
+
+// ============================================================
+// 24. 情节图谱边表（Phase 4）
+// ============================================================
+export const plotEdges = sqliteTable('plot_edges', {
+  id: text('id').primaryKey(),
+  novelId: text('novel_id').notNull(),
+  fromId: text('from_id').notNull(),
+  toId: text('to_id').notNull(),
+  relation: text('relation').notNull(),
+  createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
+}, (table) => [
+  index('idx_plot_edges_novel').on(table.novelId),
+  index('idx_plot_edges_from').on(table.fromId),
+  index('idx_plot_edges_to').on(table.toId),
+])

@@ -11,7 +11,7 @@ import type {
   ForeshadowingProgress, ForeshadowingHealthReport, ForeshadowingSuggestion, ForeshadowingStats,
   PowerLevelDetectionResult, PowerLevelBatchResult, PowerLevelHistoryItem,
   PowerLevelValidationResult, PowerLevelApplyResult,
-  BatchTaskStatus, QualityScore, VolumeProgressResult
+  BatchTaskStatus, QualityScore, VolumeProgressResult, GraphResponse
 } from './types'
 
 const TOKEN_KEY = 'auth_token'
@@ -136,7 +136,7 @@ export function streamGenerate(
             try {
               const data = JSON.parse(line.slice(6))
               onChunk(data)
-            } catch {}
+            } catch { /* ignore non-JSON lines */ }
           }
         }
       }
@@ -170,6 +170,9 @@ export const api = {
     /** 更新小说信息 */
     update: (id: string, body: Partial<NovelInput>) =>
                                    req<Novel>(`/api/novels/${id}`, { method: 'PATCH', body: j(body) }),
+    /** AI生成专属System Prompt */
+    generateSystemPrompt: (id: string) =>
+                                   req<{ ok: boolean; systemPrompt: string }>(`/api/novels/${id}/generate-system-prompt`, { method: 'POST' }),
     /** 删除小说 */
     delete: (id: string)          => req(`/api/novels/${id}`, { method: 'DELETE' }),
     /** 恢复已删除的小说 */
@@ -650,6 +653,32 @@ export const api = {
       req<QualityScore>(`/api/quality/chapter/${chapterId}`),
     getNovelTrend: (novelId: string) =>
       req<QualityScore[]>(`/api/quality/novel/${novelId}`),
+  },
+
+  cover: {
+    generate: (novelId: string) =>
+      req<{ ok: boolean; message: string }>(`/api/cover/${novelId}/generate`, { method: 'POST' }),
+    upload: (novelId: string, formData: FormData) =>
+      fetch(`/api/cover/${novelId}/upload`, {
+        method: 'POST',
+        headers: { ...((getToken() && { 'Authorization': `Bearer ${getToken()}` }) || {}) },
+        body: formData,
+      }),
+  },
+
+  graph: {
+    novel: (novelId: string) =>
+      req<GraphResponse>(`/api/graph/novel/${novelId}`),
+    volume: (volumeId: string) =>
+      req<GraphResponse>(`/api/graph/volume/${volumeId}`),
+    chapter: (chapterId: string) =>
+      req<GraphResponse>(`/api/graph/chapter/${chapterId}`),
+    characters: (novelId: string) =>
+      req<GraphResponse>(`/api/graph/characters/${novelId}`),
+    extractChapter: (chapterId: string) =>
+      req<{ ok: boolean; message: string }>(`/api/graph/extract/${chapterId}`, { method: 'POST' }),
+    extractNovel: (novelId: string) =>
+      req<{ ok: boolean; message: string }>(`/api/graph/extract-novel/${novelId}`, { method: 'POST' }),
   },
 }
 

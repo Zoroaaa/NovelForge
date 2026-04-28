@@ -207,7 +207,14 @@ export function extractStructuredData(
 
           if (vol.eventLine && Array.isArray(vol.eventLine) && vol.targetChapterCount) {
             if (vol.eventLine.length !== vol.targetChapterCount) {
-              vol.eventLine = vol.eventLine.slice(0, vol.targetChapterCount)
+              if (vol.eventLine.length > vol.targetChapterCount) {
+                vol.eventLine = vol.eventLine.slice(0, vol.targetChapterCount)
+              } else {
+                vol.targetChapterCount = vol.eventLine.length
+                if (vol.targetWordCount) {
+                  vol.targetWordCount = Math.round(vol.eventLine.length * 4000)
+                }
+              }
             }
           }
 

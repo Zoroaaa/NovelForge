@@ -40,18 +40,6 @@ export interface WorkshopExtractedData {
     targetWordCount?: number | null
     targetChapterCount?: number | null
   }>
-  chapters?: Array<{
-    title: string
-    outline: string
-    summary?: string
-    characters?: string[]
-    foreshadowingActions?: Array<{
-      action: string
-      target: string
-      description: string
-    }>
-    keyScenes?: string[]
-  }>
   writingRules?: Array<{
     category: string
     title: string

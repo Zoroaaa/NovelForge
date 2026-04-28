@@ -66,6 +66,7 @@ async function checkContinuityWithPrevChapter(
       .select({
         summary: chapters.summary,
         title: chapters.title,
+        content: chapters.content,
       })
       .from(chapters)
       .where(and(
@@ -77,9 +78,13 @@ async function checkContinuityWithPrevChapter(
       .limit(1)
       .get()
 
-    if (!prevChapter?.summary) return
+    if (!prevChapter) return
 
-    const prevEndingKeywords = extractKeyPhrases(prevChapter.summary.slice(-200))
+    const prevChapterRef = prevChapter.summary
+      ?? (prevChapter.content ? `（摘要未生成，使用章节末尾片段）\n${prevChapter.content.slice(-800)}` : null)
+    if (!prevChapterRef) return
+
+    const prevEndingKeywords = extractKeyPhrases(prevChapterRef.slice(-200))
     const currentBeginning = (currentChapter.content || '').slice(0, 500)
 
     const matchedKeywords = prevEndingKeywords.filter((kw: string) =>

@@ -2,20 +2,17 @@ import type { Env } from './lib/types'
 import type { QueueMessage } from './lib/queue'
 import { indexContent, deindexContent, deleteVector } from './services/embedding'
 import { rebuildEntityIndex } from './services/entity-index'
-import { triggerAutoSummary } from './services/agent'
-import { detectPowerLevelBreakthrough } from './services/powerLevel'
+import { runPostProcess } from './services/agent/postProcess'
 import { extractForeshadowingFromChapter } from './services/foreshadowing'
-import { checkCharacterConsistency } from './services/agent/consistency'
-import { checkChapterCoherence } from './services/agent/coherence'
-import { checkVolumeProgress } from './services/agent/volumeProgress'
 import { logGeneration } from './services/agent/logging'
-import { saveCheckLog } from './services/agent/checkLogService'
 import { commitWorkshopSessionCore } from './services/workshop'
 import { generateChapter } from './services/agent/generation'
 import { startBatchGeneration as enqueueNextBatchChapter, incrementCompleted, markTaskDone, markTaskFailed, getBatchTask } from './services/agent/batchGenerate'
 import { checkAndCompleteVolume } from './services/agent/volumeCompletion'
 import { buildPrevChapterAdvice } from './services/agent/prevChapterAdvice'
 import { checkQuality } from './services/agent/qualityCheck'
+import { generateCover } from './services/imageGen'
+import { extractPlotGraph } from './services/plotGraph'
 import { drizzle } from 'drizzle-orm/d1'
 import { novelSettings, characters, foreshadowing, chapters, queueTaskLogs, vectorIndex } from './db/schema'
 import { eq, and, sql } from 'drizzle-orm'
@@ -126,214 +123,27 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
     }
 
     case 'post_process_chapter': {
-      // ============================================================
-      // 章节后处理（异步模式，通过队列执行）
-      // 与 generation.ts 的同步模式 setTimeout 部分保持一致
-      // ============================================================
       const { chapterId, novelId, enableAutoSummary, usage } = msg.payload
 
-      // ----- 步骤1：自动摘要 -----
-      if (enableAutoSummary) {
-        try {
-          const usage = msg.payload.usage || { prompt_tokens: 0, completion_tokens: 0 }
-          await triggerAutoSummary(env, chapterId, novelId, usage)
-          console.log(`✅ [Queue] 自动摘要完成 for chapter ${chapterId}`)
-
-          // 写入生成日志
-          await logGeneration(env, {
-            novelId,
-            chapterId,
-            stage: 'auto_summary',
-            modelId: 'N/A',
-            promptTokens: usage.prompt_tokens,
-            completionTokens: usage.completion_tokens,
-            durationMs: 0,
-            status: 'success',
-            contextSnapshot: JSON.stringify({ enabled: true }),
-          })
-        } catch (summaryError) {
-          console.warn('[Queue] 自动摘要失败（非致命）:', summaryError)
-
-          await logGeneration(env, {
-            novelId,
-            chapterId,
-            stage: 'auto_summary',
-            modelId: 'N/A',
-            durationMs: 0,
-            status: 'error',
-            errorMsg: (summaryError as Error).message,
-            contextSnapshot: JSON.stringify({ enabled: true, error: (summaryError as Error).message }),
-          })
-        }
-      }
-
-      // ----- 步骤2：伏笔提取 -----
-      try {
-        const foreshadowingResult = await extractForeshadowingFromChapter(env, chapterId, novelId)
-        console.log(`📝 [Queue] 伏笔提取: ${foreshadowingResult.newForeshadowing.length} 个新伏笔, ${foreshadowingResult.resolvedForeshadowingIds.length} 个已解决`)
-
-        await logGeneration(env, {
-          novelId,
-          chapterId,
-          stage: 'foreshadowing_extraction',
-          modelId: 'N/A',
-          contextSnapshot: JSON.stringify({
-            newCount: foreshadowingResult.newForeshadowing.length,
-            resolvedCount: foreshadowingResult.resolvedForeshadowingIds.length,
-            progressedCount: foreshadowingResult.progresses?.length || 0,
-          }),
-          durationMs: 0,
-          status: 'success',
-        })
-      } catch (foreshadowError) {
-        console.warn('[Queue] 伏笔提取失败（非致命）:', foreshadowError)
-
-        await logGeneration(env, {
-          novelId,
-          chapterId,
-          stage: 'foreshadowing_extraction',
-          modelId: 'N/A',
-          contextSnapshot: JSON.stringify({ error: (foreshadowError as Error).message }),
-          durationMs: 0,
-          status: 'error',
-          errorMsg: (foreshadowError as Error).message,
-        })
-      }
-
-      // ----- 步骤3：境界突破检测 -----
-      try {
-        const powerLevelResult = await detectPowerLevelBreakthrough(env, chapterId, novelId)
-        console.log(`⚡ [Queue] 境界检测: 检测到 ${powerLevelResult.updates.length} 个突破`)
-
-        await logGeneration(env, {
-          novelId,
-          chapterId,
-          stage: 'power_level_detection',
-          modelId: 'N/A',
-          contextSnapshot: JSON.stringify({
-            hasBreakthrough: powerLevelResult.hasBreakthrough,
-            updatesCount: powerLevelResult.updates.length,
-            updates: powerLevelResult.updates.map(u => ({
-              characterName: u.characterName,
-              from: u.previousPowerLevel?.current,
-              to: u.newPowerLevel.current,
-            })),
-          }),
-          durationMs: 0,
-          status: 'success',
-        })
-      } catch (powerLevelError) {
-        console.warn('[Queue] 境界检测失败（非致命）:', powerLevelError)
-
-        await logGeneration(env, {
-          novelId,
-          chapterId,
-          stage: 'power_level_detection',
-          modelId: 'N/A',
-          contextSnapshot: JSON.stringify({ error: (powerLevelError as Error).message }),
-          durationMs: 0,
-          status: 'error',
-          errorMsg: (powerLevelError as Error).message,
-        })
-      }
-
-      // ----- 步骤4：角色一致性检查 -----
-      try {
-        const db = drizzle(env.DB)
-        const chapterData = await db.select({ volumeId: chapters.volumeId }).from(chapters).where(eq(chapters.id, chapterId)).get()
-
-        if (chapterData?.volumeId) {
-          const charList = await db.select({ id: characters.id }).from(characters).where(eq(characters.novelId, novelId)).limit(10).all()
-          const characterIds = charList.map(c => c.id)
-
-          if (characterIds.length > 0) {
-            const consistencyResult = await checkCharacterConsistency(env, { chapterId, characterIds })
-            console.log(`🎭 [Queue] 角色一致性: ${consistencyResult.conflicts.length} 个冲突, ${consistencyResult.warnings.length} 个警告`)
-
-            await saveCheckLog(env, {
-              novelId,
-              chapterId,
-              checkType: 'character_consistency',
-              score: consistencyResult.score,
-              status: 'success',
-              characterResult: consistencyResult,
-              issuesCount: consistencyResult.conflicts.length + consistencyResult.warnings.length,
-            })
-          }
-        }
-      } catch (consistencyError) {
-        console.warn('[Queue] 角色一致性检查失败（非致命）:', consistencyError)
-
-        await saveCheckLog(env, {
-          novelId,
-          chapterId,
-          checkType: 'character_consistency',
-          status: 'error',
-          errorMessage: (consistencyError as Error).message,
-          issuesCount: 0,
-        })
-      }
-
-      // ----- 步骤5：章节连贯性检查 -----
-      try {
-        const coherenceResult = await checkChapterCoherence(env, chapterId, novelId)
-        console.log(`🔗 [Queue] 章节连贯性: score=${coherenceResult.score}, issues=${coherenceResult.issues?.length || 0}`)
-
-        await saveCheckLog(env, {
-          novelId,
-          chapterId,
-          checkType: 'chapter_coherence',
-          score: coherenceResult.score,
-          status: 'success',
-          coherenceResult: coherenceResult,
-          issuesCount: coherenceResult.issues?.length || 0,
-        })
-      } catch (coherenceError) {
-        console.warn('[Queue] 章节连贯性检查失败（非致命）:', coherenceError)
-
-        await saveCheckLog(env, {
-          novelId,
-          chapterId,
-          checkType: 'chapter_coherence',
-          status: 'error',
-          errorMessage: (coherenceError as Error).message,
-          issuesCount: 0,
-        })
-      }
-
-      // ----- 步骤6：卷完成程度检查 -----
-      try {
-        const volumeProgressResult = await checkVolumeProgress(env, chapterId, novelId)
-        console.log(`📊 [Queue] 卷完成程度: 字数分=${volumeProgressResult.wordCountScore}, 节奏分=${volumeProgressResult.rhythmScore}, 综合=${volumeProgressResult.score}`)
-
-        await saveCheckLog(env, {
-          novelId,
-          chapterId,
-          checkType: 'volume_progress',
-          score: volumeProgressResult.score,
-          status: 'success',
-          volumeProgressResult: volumeProgressResult,
-          issuesCount: volumeProgressResult.wordCountIssues.length + volumeProgressResult.rhythmIssues.length,
-        })
-      } catch (progressError) {
-        console.warn('[Queue] 卷进度检查失败（非致命）:', progressError)
-
-        await saveCheckLog(env, {
-          novelId,
-          chapterId,
-          checkType: 'volume_progress',
-          status: 'error',
-          errorMessage: (progressError as Error).message,
-          issuesCount: 0,
-        })
-      }
+      await runPostProcess(env, {
+        chapterId,
+        novelId,
+        enableAutoSummary,
+        usage: usage || { prompt_tokens: 0, completion_tokens: 0 },
+      })
 
       console.log(`✅ [Queue] 章节后处理全部完成 for chapter ${chapterId}`)
 
-      // ----- 步骤7：质量评分（Phase 2）-----
       if (env.TASK_QUEUE) {
         await env.TASK_QUEUE.send({
           type: 'quality_check',
+          payload: { chapterId, novelId },
+        })
+      }
+
+      if (env.TASK_QUEUE) {
+        await env.TASK_QUEUE.send({
+          type: 'extract_plot_graph',
           payload: { chapterId, novelId },
         })
       }
@@ -421,6 +231,25 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
           })
         }
 
+        try {
+          const qScore = await checkQuality(env, { chapterId: chapter.id, novelId })
+          const BATCH_QUALITY_GATE = 45
+          if (qScore.totalScore < BATCH_QUALITY_GATE) {
+            console.warn(`[Queue] 章节质量过低（${qScore.totalScore}分），暂停批量生成`)
+            await markTaskFailed(env, taskId, `章节质量过低（${qScore.totalScore}分），请人工介入`)
+
+            if (env.TASK_QUEUE) {
+              await env.TASK_QUEUE.send({
+                type: 'batch_chapter_done',
+                payload: { taskId, novelId, volumeId, chapterId: chapter.id, success: false },
+              })
+            }
+            break
+          }
+        } catch (qError) {
+          console.warn('[Queue] 质量检查失败，继续生成:', qError)
+        }
+
         if (env.TASK_QUEUE) {
           await env.TASK_QUEUE.send({
             type: 'batch_chapter_done',
@@ -470,6 +299,36 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
         console.log(`✅ [Queue] 质量评分完成 for chapter ${chapterId}`)
       } catch (qualityError) {
         console.warn('[Queue] 质量评分失败（非致命）:', qualityError)
+      }
+
+      break
+    }
+
+    case 'generate_cover': {
+      const { novelId } = msg.payload
+
+      try {
+        const result = await generateCover(env, novelId)
+        if (result.success) {
+          console.log(`✅ [Queue] 封面生成完成 for novel ${novelId}, r2Key=${result.r2Key}`)
+        } else {
+          console.error(`[Queue] 封面生成失败 for novel ${novelId}: ${result.error}`)
+        }
+      } catch (coverError) {
+        console.error('[Queue] 封面生成异常:', coverError)
+      }
+
+      break
+    }
+
+    case 'extract_plot_graph': {
+      const { chapterId, novelId } = msg.payload
+
+      try {
+        await extractPlotGraph(env, chapterId, novelId)
+        console.log(`✅ [Queue] 图谱提取完成 for chapter ${chapterId}`)
+      } catch (graphError) {
+        console.warn('[Queue] 图谱提取失败（非致命）:', graphError)
       }
 
       break
@@ -677,6 +536,10 @@ function getNovelId(msg: QueueMessage): string {
     case 'batch_chapter_done':
       return msg.payload.novelId
     case 'quality_check':
+      return msg.payload.novelId
+    case 'generate_cover':
+      return msg.payload.novelId
+    case 'extract_plot_graph':
       return msg.payload.novelId
   }
 }

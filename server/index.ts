@@ -40,6 +40,8 @@ import { entityIndexRouter } from './routes/entity-index'
 import { workshop } from './routes/workshop'
 import { batch } from './routes/batch'
 import { quality } from './routes/quality'
+import { cover } from './routes/cover'
+import { graph } from './routes/graph'
 import { workshopFormatImport } from './routes/workshop-format-import'
 import { workshopImport } from './routes/workshop-import'
 
@@ -278,6 +280,8 @@ protectedApi.route('/config', settings)
 protectedApi.route('/workshop', workshop)
 protectedApi.route('/batch', batch)
 protectedApi.route('/quality', quality)
+protectedApi.route('/cover', cover)
+protectedApi.route('/graph', graph)
 protectedApi.route('/workshop-format-import', workshopFormatImport)
 protectedApi.route('/workshop-import', workshopImport)
 

@@ -5,7 +5,7 @@
  * @modified 2026-04-26 - 增加小说设置Tab（System Prompt）
  */
 import { Link } from 'react-router-dom'
-import { ArrowLeft, BookOpen, Settings2, Home, Save } from 'lucide-react'
+import { ArrowLeft, BookOpen, Settings2, Home, Save, Network, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -46,8 +46,22 @@ export function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
     onError: (error) => toast.error(`保存失败: ${error.message}`),
   })
 
+  const generatePromptMutation = useMutation({
+    mutationFn: () => api.novels.generateSystemPrompt(novel.id),
+    onSuccess: (data) => {
+      setSystemPrompt(data.systemPrompt)
+      queryClient.invalidateQueries({ queryKey: ['novel', novel.id] })
+      toast.success('AI 已生成专属 System Prompt')
+    },
+    onError: (error) => toast.error(`生成失败: ${error.message}`),
+  })
+
   const handleSaveSystemPrompt = () => {
     updateNovelMutation.mutate({ systemPrompt })
+  }
+
+  const handleGenerateSystemPrompt = () => {
+    generatePromptMutation.mutate()
   }
 
   return (
@@ -112,12 +126,24 @@ export function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
               </TabsContent>
               <TabsContent value="novel-settings" className="mt-3 space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="system-prompt" className="text-sm font-medium">
-                    小说专属 System Prompt（可选）
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="system-prompt" className="text-sm font-medium">
+                      小说专属 System Prompt
+                    </Label>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGenerateSystemPrompt}
+                      disabled={generatePromptMutation.isPending}
+                      className="gap-1.5 h-7 text-xs"
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      {generatePromptMutation.isPending ? '生成中...' : 'AI 生成'}
+                    </Button>
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     填写后将作为 System Message 注入每次生成，优先级高于通用提示词。
-                    可用于指定世界观名称、主角信息、境界体系权威名称等约束。
+                    点击「AI 生成」可基于小说题材和设定自动生成专属提示词。
                   </p>
                   <Textarea
                     id="system-prompt"
@@ -142,6 +168,13 @@ export function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
             </Tabs>
           </DialogContent>
         </Dialog>
+
+        <Button variant="outline" size="sm" className="gap-2" asChild>
+          <Link to={`/novels/${novel.id}/graph`}>
+            <Network className="h-4 w-4" />
+            <span className="hidden sm:inline">图谱</span>
+          </Link>
+        </Button>
 
         <Button variant="outline" size="sm" className="gap-2" asChild>
           <Link to={`/novels/${novel.id}/read`}>

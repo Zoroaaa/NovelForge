@@ -34,10 +34,8 @@ import {
   Cpu,
   Globe,
   Zap,
-  Brain,
   Eye,
   MessageSquare,
-  Layers,
   FileText,
 } from 'lucide-react'
 
@@ -46,6 +44,7 @@ const STAGE_CONFIG = [
   { id: 'summary_gen', label: '摘要生成', icon: FileText, description: '章节摘要、总纲摘要、卷摘要、设定摘要' },
   { id: 'analysis', label: '智能分析', icon: Cpu, description: '角色一致性、伏笔检测/提取/建议、战力检测/验证、卷进度检查' },
   { id: 'workshop', label: '创作工坊', icon: MessageSquare, description: 'AI创作助手对话（仅全局配置）' },
+  { id: 'image_gen', label: '封面生成', icon: Eye, description: 'AI封面图生成（调用图像生成模型API，如豆包Seedream等）' },
 ]
 
 export default function ModelConfigPage() {

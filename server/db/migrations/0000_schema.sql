@@ -581,3 +581,37 @@ updated_at = unixepoch();
 -- ============================================================
 -- Schema 完成
 -- ============================================================
+
+-- ============================================================
+-- 23. 情节图谱节点表（Phase 4）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS plot_nodes (
+  id            TEXT PRIMARY KEY,
+  novel_id      TEXT NOT NULL,
+  type          TEXT NOT NULL CHECK(type IN ('event', 'character', 'location', 'item', 'foreshadowing')),
+  title         TEXT NOT NULL,
+  description   TEXT,
+  chapter_id    TEXT,
+  meta          TEXT,
+  created_at    INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE INDEX idx_plot_nodes_novel ON plot_nodes(novel_id);
+CREATE INDEX idx_plot_nodes_type ON plot_nodes(novel_id, type);
+CREATE INDEX idx_plot_nodes_chapter ON plot_nodes(chapter_id);
+
+-- ============================================================
+-- 24. 情节图谱边表（Phase 4）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS plot_edges (
+  id            TEXT PRIMARY KEY,
+  novel_id      TEXT NOT NULL,
+  from_id       TEXT NOT NULL,
+  to_id         TEXT NOT NULL,
+  relation      TEXT NOT NULL CHECK(relation IN ('caused_by', 'participated_in', 'occurred_at', 'owned_by', 'related_to', 'leads_to')),
+  created_at    INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE INDEX idx_plot_edges_novel ON plot_edges(novel_id);
+CREATE INDEX idx_plot_edges_from ON plot_edges(from_id);
+CREATE INDEX idx_plot_edges_to ON plot_edges(to_id);

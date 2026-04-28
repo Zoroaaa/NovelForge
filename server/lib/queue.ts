@@ -86,6 +86,19 @@ export type QueueMessage =
         enableAutoSummary?: boolean
       }
     }
+  | {
+      type: 'generate_cover'
+      payload: {
+        novelId: string
+      }
+    }
+  | {
+      type: 'extract_plot_graph'
+      payload: {
+        chapterId: string
+        novelId: string
+      }
+    }
 
 export async function enqueue(
   env: Env,

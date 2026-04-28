@@ -12,6 +12,7 @@ import { novels as t, chapters, characters, novelSettings, masterOutline, volume
 import { eq, isNull, desc, and, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { deindexContent } from '../services/embedding'
+import { generateGenreSystemPrompt } from '../services/workshop/commit'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -160,6 +161,14 @@ router.delete('/trash', async (c) => {
     ).bind(novelId).run()
 
     await c.env.DB.prepare(
+      `DELETE FROM plot_edges WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM plot_nodes WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
       `DELETE FROM chapters WHERE novel_id = ?`
     ).bind(novelId).run()
 
@@ -235,6 +244,56 @@ router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
     .where(eq(t.id, c.req.param('id')))
     .returning()
   return c.json(row)
+})
+
+router.post('/:id/generate-system-prompt', async (c) => {
+  const novelId = c.req.param('id')
+  const db = drizzle(c.env.DB)
+
+  const novel = await db.select().from(t).where(eq(t.id, novelId)).get()
+  if (!novel || novel.deletedAt) {
+    return c.json({ error: '小说不存在' }, 404)
+  }
+
+  const charList = await db.select({ name: characters.name, role: characters.role, description: characters.description, powerLevel: characters.powerLevel })
+    .from(characters)
+    .where(and(eq(characters.novelId, novelId), sql`${characters.deletedAt} IS NULL`))
+    .limit(10)
+    .all()
+
+  const settingList = await db.select({ name: novelSettings.name, type: novelSettings.type, summary: novelSettings.summary })
+    .from(novelSettings)
+    .where(and(eq(novelSettings.novelId, novelId), sql`${novelSettings.deletedAt} IS NULL`))
+    .limit(10)
+    .all()
+
+  const ruleList = await db.select({ category: writingRules.category, title: writingRules.title, content: writingRules.content })
+    .from(writingRules)
+    .where(eq(writingRules.novelId, novelId))
+    .limit(10)
+    .all()
+
+  const data: import('../services/workshop/types').WorkshopExtractedData = {
+    title: novel.title,
+    genre: novel.genre || undefined,
+    description: novel.description || undefined,
+    coreAppeal: undefined,
+    writingRules: ruleList.map(r => ({ category: 'general', title: r.title, content: r.content || '' })),
+  }
+
+  const extraContext = [
+    charList.length > 0 ? `主要角色：${charList.map(c => `${c.name}（${c.role}${c.powerLevel ? '，' + c.powerLevel : ''}）`).join('、')}` : '',
+    settingList.length > 0 ? `世界设定：${settingList.map(s => `${s.name}（${s.type}）`).join('、')}` : '',
+  ].filter(Boolean).join('\n')
+
+  try {
+    const systemPrompt = await generateGenreSystemPrompt(c.env, novelId, data, extraContext)
+    await db.update(t).set({ systemPrompt, updatedAt: sql`(unixepoch())` }).where(eq(t.id, novelId)).run()
+    return c.json({ ok: true, systemPrompt })
+  } catch (e) {
+    console.error('[generate-system-prompt] 生成失败:', e)
+    return c.json({ error: '生成失败: ' + (e as Error).message }, 500)
+  }
 })
 
 /**

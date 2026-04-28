@@ -170,20 +170,33 @@ export async function loadNovelContextData(
 
     if (chars.length > 0) {
       extractedData.characters = chars.map((c: typeof chars[number]) => {
-        let parsedAttrs = {}
+        let parsedAttrs: Record<string, any> = {}
         try {
           parsedAttrs = c.attributes ? JSON.parse(c.attributes) : {}
         } catch (e) {
           console.warn('[workshop] 解析角色attributes失败:', e)
         }
 
+        if (parsedAttrs.relationships && typeof parsedAttrs.relationships === 'string') {
+          try { parsedAttrs.relationships = JSON.parse(parsedAttrs.relationships) } catch {}
+        }
+
+        let parsedAliases: string[] | undefined
+        if (c.aliases) {
+          if (typeof c.aliases === 'string') {
+            try { parsedAliases = JSON.parse(c.aliases) } catch { parsedAliases = [c.aliases] }
+          } else if (Array.isArray(c.aliases)) {
+            parsedAliases = c.aliases
+          }
+        }
+
         return {
           name: c.name,
           role: c.role || 'supporting',
           description: c.description || '',
-          aliases: c.aliases ? JSON.parse(c.aliases) : undefined,
+          aliases: parsedAliases,
           attributes: parsedAttrs,
-          relationships: (parsedAttrs as any).relationships || undefined,
+          relationships: parsedAttrs.relationships || undefined,
           powerLevel: c.powerLevel || undefined,
         }
       })
@@ -204,10 +217,22 @@ export async function loadNovelContextData(
         let foreshadowingSetup: string[] = []
         let foreshadowingResolve: string[] = []
         try {
-          if (v.eventLine) eventLine = JSON.parse(v.eventLine)
-          if (v.notes) notes = JSON.parse(v.notes)
-          if (v.foreshadowingSetup) foreshadowingSetup = JSON.parse(v.foreshadowingSetup)
-          if (v.foreshadowingResolve) foreshadowingResolve = JSON.parse(v.foreshadowingResolve)
+          if (v.eventLine) {
+            const parsed = JSON.parse(v.eventLine)
+            eventLine = Array.isArray(parsed) ? parsed : (typeof parsed === 'string' ? [parsed] : [])
+          }
+          if (v.notes) {
+            const parsed = JSON.parse(v.notes)
+            notes = Array.isArray(parsed) ? parsed : (typeof parsed === 'string' ? [parsed] : [])
+          }
+          if (v.foreshadowingSetup) {
+            const parsed = JSON.parse(v.foreshadowingSetup)
+            foreshadowingSetup = Array.isArray(parsed) ? parsed : (typeof parsed === 'string' ? [parsed] : [])
+          }
+          if (v.foreshadowingResolve) {
+            const parsed = JSON.parse(v.foreshadowingResolve)
+            foreshadowingResolve = Array.isArray(parsed) ? parsed : (typeof parsed === 'string' ? [parsed] : [])
+          }
         } catch (e) {
           console.warn('[workshop] 解析卷字段失败:', e)
         }

@@ -357,6 +357,11 @@ ${readonlyCtx}
 - 例如：20万字 = 40-67章，约50章；30万字 = 60-100章，约75章
 - eventLine 条数必须等于 targetChapterCount，多或少都必须对齐
 
+【换算公式（硬性执行）】
+该卷 targetChapterCount = round(该卷 targetWordCount ÷ 4000)
+eventLine 条数 = targetChapterCount（一条不多，一条不少）
+示例：单卷 20 万字 → targetChapterCount=50 → eventLine 必须有 50 条
+
 ---
 
 ## 关键格式要求（与章节生成系统的接口规范）

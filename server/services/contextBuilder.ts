@@ -207,11 +207,15 @@ export async function buildChapterContext(
   const chapterTypeHint = inferChapterType(volumeInfo.eventLine, currentChapter.title)
 
   // ── Step 2: 组装查询向量（聚焦当前章节语义，≤800字） ──
-  const queryText = [
-    currentChapter.title,
-    extractCurrentChapterEvent(volumeInfo.eventLine, chapterIndexInVolume),
-    prevContent?.slice(0, 300),
-  ].filter(Boolean).join('\n').slice(0, 800)
+  const currentChapterEvent = extractCurrentChapterEvent(volumeInfo.eventLine, chapterIndexInVolume)
+  const queryTextParts = [currentChapter.title, currentChapterEvent, prevContent?.slice(0, 300)]
+
+  if (!currentChapterEvent && recentSummaries.length > 0) {
+    const lastSummary = recentSummaries[recentSummaries.length - 1]
+    queryTextParts.push(lastSummary.slice(-300))
+  }
+
+  const queryText = queryTextParts.filter(Boolean).join('\n').slice(0, 800)
 
   // ── Step 3: Dynamic 层分槽检索 ──
   let characterCards: string[] = []
@@ -952,7 +956,7 @@ function inferChapterType(eventLine: string, chapterTitle: string): string {
 // ============================================================
 
 /**
- * 从整卷eventLine中提取当前章节对应的事件描述
+ * 从整卷eventLine中提取当前章节及上下章事件描述
  * 支持两种格式：
  * 1. 按行编号：每行以"第X章"或数字序号开头
  * 2. 整段文本：按当前章在卷内的相对位置截取片段
@@ -963,14 +967,34 @@ function extractCurrentChapterEvent(
 ): string {
   if (!eventLine) return ''
 
-  // 尝试按行匹配章节序号
   const lines = eventLine.split('\n').filter(l => l.trim())
-  const numbered = lines.find(l =>
-    l.match(new RegExp(`第${currentSortOrder}章|^${currentSortOrder}[.、：:]`))
-  )
-  if (numbered) return numbered.trim().slice(0, 200)
 
-  // fallback：取前500字（整段eventLine的开头通常是本卷主线）
+  const findChapterLine = (chapterNum: number): string | null => {
+    const line = lines.find(l =>
+      l.match(new RegExp(`第${chapterNum}章|^${chapterNum}[.、：:]`))
+    )
+    return line ? line.trim().slice(0, 200) : null
+  }
+
+  const currentEvent = findChapterLine(currentSortOrder)
+  if (currentEvent) {
+    const parts: string[] = []
+
+    const prevEvent = findChapterLine(currentSortOrder - 1)
+    if (prevEvent) {
+      parts.push(`【上章事件】${prevEvent}`)
+    }
+
+    parts.push(`【本章任务】${currentEvent}  ← 核心，必须完成`)
+
+    const nextEvent = findChapterLine(currentSortOrder + 1)
+    if (nextEvent) {
+      parts.push(`【下章预告】${nextEvent}  ← 仅供结尾钩子参考，本章不得提前完成`)
+    }
+
+    return parts.join('\n')
+  }
+
   return eventLine.slice(0, 500)
 }
 

@@ -9,6 +9,7 @@ import * as schema from '../../db/schema'
 import { enqueue } from '../../lib/queue'
 import type { WorkshopExtractedData } from './types'
 import { buildOutlineContentWithAI } from './helpers'
+import { resolveConfig, generate } from '../llm'
 
 const {
   workshopSessions,
@@ -81,6 +82,15 @@ export async function commitWorkshopSessionCore(
       updateData.targetChapterCount = parseInt(data.targetChapters, 10)
     }
     await db.update(novels).set(updateData).where(eq(novels.id, novelId)).run()
+  }
+
+  if (isNewNovel && data.genre) {
+    try {
+      const genrePrompt = await generateGenreSystemPrompt(env, novelId, data)
+      await db.update(novels).set({ systemPrompt: genrePrompt }).where(eq(novels.id, novelId)).run()
+    } catch (e) {
+      console.warn('[commit] 生成genre专属systemPrompt失败，使用默认:', e)
+    }
   }
 
   if (data.title && (isNewNovel || stage === 'concept')) {
@@ -377,13 +387,18 @@ export async function commitWorkshopSessionCore(
           const title = parenMatch ? parenMatch[1].trim() : item.split('（')[0].trim()
           const desc = parenMatch ? parenMatch[2].trim() : item
 
+          const importanceMatch = title.match(/^【([高中低])】/)
+          const cleanTitle = importanceMatch ? title.slice(importanceMatch[0].length) : title
+          const importanceMap: Record<string, string> = { '高': 'high', '中': 'normal', '低': 'low' }
+          const importance = importanceMatch ? (importanceMap[importanceMatch[1]] || 'normal') : 'normal'
+
           await db.insert(foreshadowing).values({
             novelId,
             volumeId: volume.id,
-            title,
+            title: cleanTitle,
             description: `【埋入计划】${desc}\n【所属卷】${vol.title}`,
             status: 'open',
-            importance: 'normal',
+            importance,
           }).run()
         }
       }
@@ -394,13 +409,18 @@ export async function commitWorkshopSessionCore(
           const title = parenMatch ? parenMatch[1].trim() : item.split('（')[0].trim()
           const desc = parenMatch ? parenMatch[2].trim() : item
 
+          const importanceMatch = title.match(/^【([高中低])】/)
+          const cleanTitle = importanceMatch ? title.slice(importanceMatch[0].length) : title
+          const importanceMap: Record<string, string> = { '高': 'high', '中': 'normal', '低': 'low' }
+          const importance = importanceMatch ? (importanceMap[importanceMatch[1]] || 'normal') : 'normal'
+
           await db.insert(foreshadowing).values({
             novelId,
             volumeId: volume.id,
-            title,
+            title: cleanTitle,
             description: `【回收计划】${desc}\n【所属卷】${vol.title}`,
             status: 'open',
-            importance: 'normal',
+            importance,
           }).run()
         }
       }
@@ -408,7 +428,7 @@ export async function commitWorkshopSessionCore(
     createdItems.volumes = createdVolumes
   }
 
-  await rebuildEntityIndex(db, novelId, data)
+  await rebuildEntityIndex(db, novelId, data, createdItems)
 
   await db.update(workshopSessions)
     .set({ status: 'committed', novelId })
@@ -420,7 +440,8 @@ export async function commitWorkshopSessionCore(
 export async function rebuildEntityIndex(
   db: any,
   novelId: string,
-  data: WorkshopExtractedData
+  data: WorkshopExtractedData,
+  createdItems?: any
 ): Promise<void> {
   const now = Math.floor(Date.now() / 1000)
 
@@ -437,11 +458,12 @@ export async function rebuildEntityIndex(
   })
 
   if (data.worldSettings) {
+    const settingIds: string[] = createdItems?.worldSettings?.map((s: any) => s.id) || []
     for (let i = 0; i < data.worldSettings.length; i++) {
       const setting = data.worldSettings[i]
       entries.push({
         entityType: 'setting',
-        entityId: `ws_${i}`,
+        entityId: settingIds[i] || `ws_${i}`,
         novelId,
         parentId: novelId,
         title: setting.title,
@@ -453,11 +475,12 @@ export async function rebuildEntityIndex(
   }
 
   if (data.characters) {
+    const charIds: string[] = createdItems?.characters?.map((c: any) => c.id) || []
     for (let i = 0; i < data.characters.length; i++) {
       const char = data.characters[i]
       entries.push({
         entityType: 'character',
-        entityId: `char_${i}`,
+        entityId: charIds[i] || `char_${i}`,
         novelId,
         parentId: novelId,
         title: char.name,
@@ -469,11 +492,12 @@ export async function rebuildEntityIndex(
   }
 
   if (data.volumes) {
+    const volIds: string[] = createdItems?.volumes?.map((v: any) => v.id) || []
     for (let i = 0; i < data.volumes.length; i++) {
       const vol = data.volumes[i]
       entries.push({
         entityType: 'volume',
-        entityId: `vol_${i}`,
+        entityId: volIds[i] || `vol_${i}`,
         novelId,
         parentId: novelId,
         title: vol.title,
@@ -491,4 +515,39 @@ export async function rebuildEntityIndex(
       }).onConflictDoNothing().run()
     }
   }
+}
+
+export async function generateGenreSystemPrompt(env: Env, novelId: string, data: WorkshopExtractedData, extraContext?: string): Promise<string> {
+  const db = drizzle(env.DB)
+  const llmConfig = await resolveConfig(db, 'summary', novelId)
+
+  const genreInfo = [
+    `题材类型：${data.genre || '未知'}`,
+    data.coreAppeal?.length ? `核心卖点：${data.coreAppeal.join('；')}` : '',
+    data.description ? `故事简介：${data.description.slice(0, 300)}` : '',
+    data.writingRules?.length ? `写作规则：${data.writingRules.map(r => r.content || r).join('；')}` : '',
+    extraContext || '',
+  ].filter(Boolean).join('\n')
+
+  const result = await generate(llmConfig, [
+    {
+      role: 'system',
+      content: `你是一位资深网文编辑，擅长为不同题材的小说定制写作风格指导。请根据给定的题材信息，生成一段专属的写作系统提示词（system prompt）。
+
+要求：
+1. 提示词应指导AI写出符合该题材风格的网文
+2. 包含该题材特有的写作技巧和注意事项
+3. 包含节奏控制、悬念设置、爽点安排的建议
+4. 语言精炼，总字数300-500字
+5. 直接输出提示词内容，不要加标题或解释
+6. 不要包含硬性约束（角色一致性、设定一致性等），这些由系统自动注入
+7. 不要包含工具使用规范，这些由系统自动注入`,
+    },
+    {
+      role: 'user',
+      content: genreInfo,
+    },
+  ])
+
+  return result.text.trim()
 }

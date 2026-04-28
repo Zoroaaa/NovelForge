@@ -6,6 +6,7 @@
  */
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -30,6 +31,8 @@ import {
   Globe,
   Users,
   Layers,
+  Wand2,
+  Loader2,
 } from 'lucide-react'
 import type { Novel } from '@/lib/types'
 
@@ -77,6 +80,7 @@ const statusConfig: Record<string, { label: string; color: string; icon: React.R
 export function NovelCard({ novel, onEdit, onDelete, onStatusChange, onWorkshopOpen }: NovelCardProps) {
   const navigate = useNavigate()
   const [uploading, setUploading] = useState(false)
+  const [generating, setGenerating] = useState(false)
   const [coverUrl, setCoverUrl] = useState(novel.coverR2Key ? `/api/novels/${novel.id}/cover?t=${novel.updatedAt}` : null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -87,14 +91,53 @@ export function NovelCard({ novel, onEdit, onDelete, onStatusChange, onWorkshopO
     setUploading(true)
     try {
       const formData = new FormData()
-      formData.append('file', file)
-      const resp = await api.novels.uploadCover(novel.id, formData)
+      formData.append('image', file)
+      const resp = await api.cover.upload(novel.id, formData)
       if (!resp.ok) throw new Error('上传失败')
       setCoverUrl(`/api/novels/${novel.id}/cover?t=${Date.now()}`)
+      toast.success('封面上传成功')
     } catch (error) {
       console.error('Cover upload failed:', error)
+      toast.error('封面上传失败')
     } finally {
       setUploading(false)
+    }
+  }
+
+  const handleAIGenerate = async () => {
+    setGenerating(true)
+    try {
+      await api.cover.generate(novel.id)
+      toast.success('封面生成任务已提交，请稍候...')
+      let elapsed = 0
+      const MAX_WAIT = 120000
+      const INTERVAL = 3000
+
+      const pollInterval = setInterval(async () => {
+        elapsed += INTERVAL
+        if (elapsed >= MAX_WAIT) {
+          clearInterval(pollInterval)
+          setGenerating(false)
+          toast.info('生成超时，请稍后刷新查看')
+          return
+        }
+
+        try {
+          const updated = await api.novels.get(novel.id)
+          if (updated.coverR2Key && updated.coverR2Key !== novel.coverR2Key) {
+            setCoverUrl(`/api/novels/${novel.id}/cover?t=${Date.now()}`)
+            setGenerating(false)
+            clearInterval(pollInterval)
+            toast.success('封面生成完成！')
+          }
+        } catch {
+          // 继续轮询
+        }
+      }, INTERVAL)
+    } catch (error) {
+      console.error('AI cover generation failed:', error)
+      toast.error('封面生成任务提交失败')
+      setGenerating(false)
     }
   }
 
@@ -135,23 +178,38 @@ export function NovelCard({ novel, onEdit, onDelete, onStatusChange, onWorkshopO
               </button>
             </div>
           ) : (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                inputRef.current?.click()
-              }}
-              disabled={uploading}
-              className="w-24 h-32 shrink-0 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 transition-colors flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-primary"
-            >
-              {uploading ? (
-                <div className="h-5 w-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            <div className="w-24 h-32 shrink-0 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 transition-colors flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-primary">
+              {uploading || generating ? (
+                <div className="flex flex-col items-center gap-1">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span className="text-[10px]">{generating ? 'AI生成中' : '上传中'}</span>
+                </div>
               ) : (
                 <>
-                  <ImagePlus className="h-5 w-5" />
-                  <span className="text-[10px]">上传封面</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      inputRef.current?.click()
+                    }}
+                    className="flex flex-col items-center gap-0.5 hover:text-primary transition-colors"
+                  >
+                    <ImagePlus className="h-4 w-4" />
+                    <span className="text-[10px]">上传封面</span>
+                  </button>
+                  <div className="w-8 h-px bg-muted-foreground/30 my-0.5" />
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleAIGenerate()
+                    }}
+                    className="flex flex-col items-center gap-0.5 hover:text-primary transition-colors"
+                  >
+                    <Wand2 className="h-4 w-4" />
+                    <span className="text-[10px]">AI生成</span>
+                  </button>
                 </>
               )}
-            </button>
+            </div>
           )}
 
           <div className="flex-1 min-w-0">
