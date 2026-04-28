@@ -20,6 +20,8 @@ import {
   Target,
   FileText,
   AlignLeft,
+  Wand2,
+  Check,
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -104,6 +106,14 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
   const [volumeReport, setVolumeReport] = useState<any>(null)
   const [volumeFromCache, setVolumeFromCache] = useState(false)
   const [volumeCachedAt, setVolumeCachedAt] = useState<number | null>(null)
+
+  // 修复相关 state（各弹窗共用，由 repairTarget 区分）
+  const [repairing, setRepairing] = useState<string | null>(null)
+  const [repairedContent, setRepairedContent] = useState<string | null>(null)
+  const [repairError, setRepairError] = useState<string | null>(null)
+  const [repairTarget, setRepairTarget] = useState<string | null>(null) // 'coherence'|'character'|'volume'|'combined_*'|'history_*'
+  const [applyingRepair, setApplyingRepair] = useState(false)
+  const [applyRepairSuccess, setApplyRepairSuccess] = useState(false)
 
   const loadLatestCheckLog = useCallback(async () => {
     try {
@@ -302,6 +312,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
       const characters = await api.characters.list(novelId)
       const data = await api.generate.checkCharacterConsistency({
         chapterId: chapterId!,
+        novelId,
         characterIds: characters?.map(c => c.id) || [],
       })
       setCharacterReport(data)
@@ -310,7 +321,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
       loadLatestCheckLog()
     } catch (error) {
       console.error('角色一致性检查失败:', error)
-      setCharacterReport({ conflicts: [], warnings: [`检查失败: ${(error as Error).message}`] })
+      setCharacterReport({ conflicts: [], warnings: [`检查失败: ${(error as Error).message}`], score: 0 })
     } finally {
       setCharacterChecking(false)
     }
@@ -324,6 +335,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
       const characters = await api.characters.list(novelId)
       const data = await api.generate.checkCharacterConsistency({
         chapterId: chapterId!,
+        novelId,
         characterIds: characters?.map(c => c.id) || [],
       })
       setCharacterReport(data)
@@ -378,6 +390,74 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
       console.error('卷进度检查失败:', error)
     } finally {
       setVolumeChecking(false)
+    }
+  }
+
+  // 通用修复：target = 'coherence'|'character'|'volume'，report 为对应检查结果
+  const handleRepair = async (
+    type: 'coherence' | 'character' | 'volume',
+    target: string,
+    report: any
+  ) => {
+    if (!chapterId) return
+    setRepairTarget(target)
+    setRepairing(type)
+    setRepairedContent(null)
+    setRepairError(null)
+    setApplyRepairSuccess(false)
+
+    try {
+      let body: Parameters<typeof api.generate.repairChapter>[0] = { chapterId, novelId, repairType: type }
+
+      if (type === 'coherence') {
+        body.coherenceIssues = report.issues?.map((i: any) => ({
+          severity: i.severity, message: i.message, suggestion: i.suggestion, category: i.category,
+        })) || []
+        body.coherenceScore = report.score
+      } else if (type === 'character') {
+        body.characterConflicts = report.conflicts?.map((c: any) => ({
+          characterName: c.characterName,
+          dimension: c.dimension || '角色一致性',
+          issue: c.issue || c.conflict,
+          excerpt: c.excerpt,
+          suggestion: c.suggestion,
+        })) || []
+      } else if (type === 'volume') {
+        body.wordCountIssues = report.wordCountIssues?.map((w: any) => ({
+          chapterNumber: w.chapterNumber, chapterTitle: w.chapterTitle, message: w.message,
+        })) || []
+        body.rhythmIssues = report.rhythmIssues?.map((r: any) => ({
+          chapterNumber: r.chapterNumber, chapterTitle: r.chapterTitle,
+          dimension: r.dimension, deviation: r.deviation, suggestion: r.suggestion,
+        })) || []
+        body.volumeContext = `${report.diagnosis || ''}。${report.suggestion || ''}`
+      }
+
+      const data = await api.generate.repairChapter(body)
+      if (data.ok && data.repairedContent) {
+        setRepairedContent(data.repairedContent)
+      } else {
+        setRepairError(data.error || '修复失败')
+      }
+    } catch (error) {
+      setRepairError((error as Error).message)
+    } finally {
+      setRepairing(null)
+    }
+  }
+
+  // 应用修复内容写回章节
+  const handleApplyRepair = async () => {
+    if (!chapterId || !repairedContent) return
+    setApplyingRepair(true)
+    try {
+      await api.chapters.update(chapterId, { content: repairedContent })
+      setApplyRepairSuccess(true)
+      setRepairedContent(null)
+    } catch (error) {
+      setRepairError(`应用失败: ${(error as Error).message}`)
+    } finally {
+      setApplyingRepair(false)
     }
   }
 
@@ -661,8 +741,10 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                 <span className="text-xs text-muted-foreground">上次检查：{formatTimeAgo(reportCachedAt)}</span>
               )}
             </div>
-            <AlertDialogDescription asChild>
-              <div className="text-left mt-3" style={{ overflowY: 'auto', maxHeight: '60vh' }}>
+          </AlertDialogHeader>
+          <AlertDialogDescription asChild>
+            <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+              <div className="text-left">
                 {isChecking ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-3">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -697,7 +779,73 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                       </Button>
                     </div>
 
-                    <div className="overflow-y-auto max-h-[45vh] pr-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent rounded-lg">
+                    {/* 修复操作区 */}
+                    {(combinedReport.characterCheck?.conflicts?.length > 0 ||
+                      combinedReport.coherenceCheck?.issues?.length > 0 ||
+                      (combinedReport.volumeProgressCheck?.wordCountIssues?.length > 0 || combinedReport.volumeProgressCheck?.rhythmIssues?.length > 0)) && (
+                      <div className="flex flex-wrap gap-2 p-3 bg-muted/20 rounded-lg border">
+                        <span className="text-xs text-muted-foreground self-center mr-1">AI修复：</span>
+                        {combinedReport.characterCheck?.conflicts?.length > 0 && (
+                          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" disabled={repairing !== null}
+                            onClick={() => handleRepair('character', 'combined_character', combinedReport.characterCheck)}>
+                            {repairing === 'character' && repairTarget === 'combined_character'
+                              ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
+                            角色一致性
+                          </Button>
+                        )}
+                        {combinedReport.coherenceCheck?.issues?.length > 0 && (
+                          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" disabled={repairing !== null}
+                            onClick={() => handleRepair('coherence', 'combined_coherence', combinedReport.coherenceCheck)}>
+                            {repairing === 'coherence' && repairTarget === 'combined_coherence'
+                              ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
+                            章节连贯性
+                          </Button>
+                        )}
+                        {(combinedReport.volumeProgressCheck?.wordCountIssues?.length > 0 || combinedReport.volumeProgressCheck?.rhythmIssues?.length > 0) && (
+                          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" disabled={repairing !== null}
+                            onClick={() => handleRepair('volume', 'combined_volume', combinedReport.volumeProgressCheck)}>
+                            {repairing === 'volume' && repairTarget === 'combined_volume'
+                              ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
+                            卷进度
+                          </Button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 修复结果 */}
+                    {repairTarget?.startsWith('combined_') && (repairedContent || repairError || applyRepairSuccess) && (
+                      <div className="space-y-2">
+                        {applyRepairSuccess && (
+                          <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg">
+                            <Check className="h-4 w-4 text-green-600 shrink-0" />
+                            <span className="text-sm text-green-700 dark:text-green-300 font-medium">已成功应用到章节</span>
+                          </div>
+                        )}
+                        {repairError && (
+                          <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 rounded-lg text-xs text-red-600">{repairError}</div>
+                        )}
+                        {repairedContent && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+                              <div className="flex items-center gap-2">
+                                <Check className="h-4 w-4 text-blue-600 shrink-0" />
+                                <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">修复完成，共 {repairedContent.length} 字</span>
+                              </div>
+                              <Button size="sm" className="h-7 gap-1.5" disabled={applyingRepair} onClick={handleApplyRepair}>
+                                {applyingRepair ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                                应用到章节
+                              </Button>
+                            </div>
+                            <details className="border rounded-lg overflow-hidden">
+                              <summary className="px-3 py-2 text-xs cursor-pointer hover:bg-muted/30 text-muted-foreground">查看修复后正文</summary>
+                              <div className="p-3 text-xs leading-relaxed whitespace-pre-wrap text-foreground border-t max-h-48 overflow-y-auto">{repairedContent}</div>
+                            </details>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="pr-2">
                       <div className="space-y-5 pb-2">
                         {/* 角色一致性部分 */}
                         {(combinedReport.characterCheck?.conflicts?.length > 0 || combinedReport.characterCheck?.warnings?.length > 0) && (
@@ -788,19 +936,19 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                         )}
 
                         {/* 卷完成度部分 */}
-                        {combinedReport.volumeProgressResult && (combinedReport.volumeProgressResult.wordCountIssues.length > 0 || combinedReport.volumeProgressResult.rhythmIssues.length > 0) && (
+                        {combinedReport.volumeProgressCheck && (combinedReport.volumeProgressCheck.wordCountIssues.length > 0 || combinedReport.volumeProgressCheck.rhythmIssues.length > 0) && (
                           <section className="space-y-3">
                             <header className="flex items-center gap-2.5 pb-2 border-b border-blue-200/50 dark:border-blue-800/30">
                               <Target className="h-4 w-4 text-blue-600" />
                               <h3 className="text-sm font-semibold uppercase tracking-wide">卷完成度检查</h3>
                               <Badge className={`ml-auto text-[11px] h-5 ${
-                                combinedReport.volumeProgressResult.score >= 80
+                                combinedReport.volumeProgressCheck.score >= 80
                                   ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                                  : combinedReport.volumeProgressResult.score >= 60
+                                  : combinedReport.volumeProgressCheck.score >= 60
                                   ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
                                   : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
                               }`}>
-                                {combinedReport.volumeProgressResult.score}分 · 字数{combinedReport.volumeProgressResult.wordCountScore} · 节奏{combinedReport.volumeProgressResult.rhythmScore}
+                                {combinedReport.volumeProgressCheck.score}分 · 字数{combinedReport.volumeProgressCheck.wordCountScore} · 节奏{combinedReport.volumeProgressCheck.rhythmScore}
                               </Badge>
                             </header>
 
@@ -808,31 +956,31 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                               <div className="grid grid-cols-2 gap-2 text-xs">
                                 <div className="p-2 bg-muted/30 rounded">
                                   <span className="text-muted-foreground">当前章节：</span>
-                                  <span className="font-medium ml-1">第 {combinedReport.volumeProgressResult.currentChapter || '-'} 章</span>
+                                  <span className="font-medium ml-1">第 {combinedReport.volumeProgressCheck.currentChapter || '-'} 章</span>
                                 </div>
                                 <div className="p-2 bg-muted/30 rounded">
                                   <span className="text-muted-foreground">目标章节：</span>
-                                  <span className="font-medium ml-1">{combinedReport.volumeProgressResult.targetChapter ? `${combinedReport.volumeProgressResult.targetChapter} 章` : '未设定'}</span>
+                                  <span className="font-medium ml-1">{combinedReport.volumeProgressCheck.targetChapter ? `${combinedReport.volumeProgressCheck.targetChapter} 章` : '未设定'}</span>
                                 </div>
                                 <div className="p-2 bg-muted/30 rounded">
                                   <span className="text-muted-foreground">当前字数：</span>
-                                  <span className="font-medium ml-1">{combinedReport.volumeProgressResult.currentWordCount ? `${(combinedReport.volumeProgressResult.currentWordCount / 10000).toFixed(1)} 万` : '-'}</span>
+                                  <span className="font-medium ml-1">{combinedReport.volumeProgressCheck.currentWordCount ? `${(combinedReport.volumeProgressCheck.currentWordCount / 10000).toFixed(1)} 万` : '-'}</span>
                                 </div>
                                 <div className="p-2 bg-muted/30 rounded">
                                   <span className="text-muted-foreground">目标字数：</span>
-                                  <span className="font-medium ml-1">{combinedReport.volumeProgressResult.targetWordCount ? `${(combinedReport.volumeProgressResult.targetWordCount / 10000).toFixed(0)} 万` : '未设定'}</span>
+                                  <span className="font-medium ml-1">{combinedReport.volumeProgressCheck.targetWordCount ? `${(combinedReport.volumeProgressCheck.targetWordCount / 10000).toFixed(0)} 万` : '未设定'}</span>
                                 </div>
                               </div>
-                              {combinedReport.volumeProgressResult.diagnosis && (
+                              {combinedReport.volumeProgressCheck.diagnosis && (
                                 <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg text-xs">
                                   <span className="text-blue-700 dark:text-blue-300 font-medium">诊断：</span>
-                                  <span className="text-blue-600 dark:text-blue-400 ml-1">{combinedReport.volumeProgressResult.diagnosis}</span>
+                                  <span className="text-blue-600 dark:text-blue-400 ml-1">{combinedReport.volumeProgressCheck.diagnosis}</span>
                                 </div>
                               )}
-                              {combinedReport.volumeProgressResult.suggestion && (
+                              {combinedReport.volumeProgressCheck.suggestion && (
                                 <div className="p-3 bg-muted/30 rounded-lg text-xs">
                                   <span className="text-muted-foreground">AI 建议：</span>
-                                  <p className="mt-1 text-foreground">{combinedReport.volumeProgressResult.suggestion}</p>
+                                  <p className="mt-1 text-foreground">{combinedReport.volumeProgressCheck.suggestion}</p>
                                 </div>
                               )}
                             </div>
@@ -843,7 +991,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                         {!combinedReport.characterCheck?.conflicts?.length &&
                          !combinedReport.characterCheck?.warnings?.filter((w: string) => !w.includes('失败'))?.length &&
                          !combinedReport.coherenceCheck?.issues?.length &&
-                         (!combinedReport.volumeProgressResult || (combinedReport.volumeProgressResult.wordCountIssues.length === 0 && combinedReport.volumeProgressResult.rhythmIssues.length === 0)) && (
+                         (!combinedReport.volumeProgressCheck || (combinedReport.volumeProgressCheck.wordCountIssues.length === 0 && combinedReport.volumeProgressCheck.rhythmIssues.length === 0)) && (
                           <div className="flex flex-col items-center gap-3 p-8 bg-gradient-to-br from-green-50 via-emerald-50/30 to-transparent dark:from-green-950/40 dark:via-emerald-950/10 dark:to-transparent border border-green-200/60 dark:border-green-800/30 rounded-xl">
                             <CheckCircle className="h-12 w-12 text-green-500" />
                             <div className="text-center space-y-1">
@@ -857,7 +1005,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
 
                     {(combinedReport.characterCheck?.conflicts?.length > 0 ||
                      combinedReport.coherenceCheck?.issues?.some((i: any) => i.severity === 'error') ||
-                     (combinedReport.volumeProgressResult && combinedReport.volumeProgressResult.score < 60)) && (
+                     (combinedReport.volumeProgressCheck && combinedReport.volumeProgressCheck.score < 60)) && (
                       <aside className="pt-3 border-t text-center">
                         <p className="text-xs text-muted-foreground flex items-center justify-center gap-1.5">
                           <Zap className="h-3.5 w-3.5 text-blue-500" />
@@ -872,8 +1020,8 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                   </div>
                 )}
               </div>
+            </div>
             </AlertDialogDescription>
-          </AlertDialogHeader>
           <AlertDialogFooter className="flex-shrink-0 px-6 py-4 border-t bg-muted/30 rounded-b-xl gap-3">
             <AlertDialogCancel className="h-9">关闭</AlertDialogCancel>
           </AlertDialogFooter>
@@ -890,8 +1038,10 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                 <span className="text-xs text-muted-foreground">上次检查：{formatTimeAgo(coherenceCachedAt)}</span>
               )}
             </div>
-            <AlertDialogDescription asChild>
-              <div className="text-left mt-3 overflow-y-auto" style={{ maxHeight: '60vh' }}>
+          </AlertDialogHeader>
+          <AlertDialogDescription asChild>
+            <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+              <div className="text-left">
                 {coherenceChecking ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-3">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -910,12 +1060,61 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                         </span>
                         <span className="text-lg text-muted-foreground">/100</span>
                       </div>
-                      <Button variant="secondary" size="sm" className="gap-2 h-9 shadow-sm hover:shadow-md transition-shadow" onClick={handleCoherenceRecheck}>
-                        <RefreshCw className="h-4 w-4" />重新生成报告
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        {coherenceReport.issues.length > 0 && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="gap-1.5 h-8"
+                            disabled={repairing !== null}
+                            onClick={() => handleRepair('coherence', 'coherence', coherenceReport)}
+                          >
+                            {repairing === 'coherence' && repairTarget === 'coherence'
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <Wand2 className="h-3.5 w-3.5" />}
+                            AI修复
+                          </Button>
+                        )}
+                        <Button variant="secondary" size="sm" className="gap-2 h-8 shadow-sm" onClick={handleCoherenceRecheck}>
+                          <RefreshCw className="h-4 w-4" />重新生成报告
+                        </Button>
+                      </div>
                     </div>
 
-                    <div className="overflow-y-auto max-h-[45vh] pr-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent rounded-lg">
+                    {/* 修复结果 */}
+                    {repairTarget === 'coherence' && (repairedContent || repairError || applyRepairSuccess) && (
+                      <div className="space-y-2">
+                        {applyRepairSuccess && (
+                          <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg">
+                            <Check className="h-4 w-4 text-green-600 shrink-0" />
+                            <span className="text-sm text-green-700 dark:text-green-300 font-medium">已成功应用到章节</span>
+                          </div>
+                        )}
+                        {repairError && (
+                          <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 rounded-lg text-xs text-red-600">{repairError}</div>
+                        )}
+                        {repairedContent && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+                              <div className="flex items-center gap-2">
+                                <Check className="h-4 w-4 text-blue-600 shrink-0" />
+                                <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">修复完成，共 {repairedContent.length} 字</span>
+                              </div>
+                              <Button size="sm" className="h-7 gap-1.5" disabled={applyingRepair} onClick={handleApplyRepair}>
+                                {applyingRepair ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                                应用到章节
+                              </Button>
+                            </div>
+                            <details className="border rounded-lg overflow-hidden">
+                              <summary className="px-3 py-2 text-xs cursor-pointer hover:bg-muted/30 text-muted-foreground">查看修复后正文</summary>
+                              <div className="p-3 text-xs leading-relaxed whitespace-pre-wrap text-foreground border-t max-h-48 overflow-y-auto">{repairedContent}</div>
+                            </details>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="pr-2">
                       <div className="space-y-5 pb-2">
                         {coherenceReport.issues.length > 0 ? (
                           coherenceReport.issues.map((issue: any, i: number) => (
@@ -969,8 +1168,8 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                   </div>
                 )}
               </div>
+            </div>
             </AlertDialogDescription>
-          </AlertDialogHeader>
           <AlertDialogFooter className="flex-shrink-0 px-6 py-4 border-t bg-muted/30 rounded-b-xl gap-3">
             <AlertDialogCancel className="h-9">关闭</AlertDialogCancel>
           </AlertDialogFooter>
@@ -987,8 +1186,10 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                 <span className="text-xs text-muted-foreground">上次检查：{formatTimeAgo(characterCachedAt)}</span>
               )}
             </div>
-            <AlertDialogDescription asChild>
-              <div className="text-left mt-3 overflow-y-auto max-h-[60vh] pr-2">
+          </AlertDialogHeader>
+          <AlertDialogDescription asChild>
+            <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+              <div className="text-left">
                 {characterChecking ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-3">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -998,20 +1199,71 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                   <div className="space-y-5">
                     <div className="flex items-center justify-between p-4 bg-gradient-to-r from-muted/80 to-muted/40 rounded-xl border">
                       <div className="flex items-baseline gap-4">
-                        <span className="text-sm font-medium text-muted-foreground">冲突</span>
+                        <span className="text-sm font-medium text-muted-foreground">评分</span>
                         <span className={`text-3xl font-bold tabular-nums ${
-                          (characterReport.conflicts?.length || 0) === 0 ? 'text-green-600' : 'text-red-600'
+                          (characterReport.score ?? 100) >= 80 ? 'text-green-600' :
+                          (characterReport.score ?? 100) >= 60 ? 'text-amber-600' : 'text-red-600'
                         }`}>
-                          {characterReport.conflicts?.length || 0}
+                          {characterReport.score ?? 100}
                         </span>
-                        <span className="text-lg text-muted-foreground">个</span>
+                        <span className="text-lg text-muted-foreground">/100</span>
+                        <span className="text-sm text-muted-foreground ml-2">冲突 {characterReport.conflicts?.length || 0} 个</span>
                       </div>
-                      <Button variant="secondary" size="sm" className="gap-2 h-9 shadow-sm hover:shadow-md transition-shadow" onClick={handleCharacterRecheck}>
-                        <RefreshCw className="h-4 w-4" />重新生成报告
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        {characterReport.conflicts?.length > 0 && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="gap-1.5 h-8"
+                            disabled={repairing !== null}
+                            onClick={() => handleRepair('character', 'character', characterReport)}
+                          >
+                            {repairing === 'character' && repairTarget === 'character'
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <Wand2 className="h-3.5 w-3.5" />}
+                            AI修复
+                          </Button>
+                        )}
+                        <Button variant="secondary" size="sm" className="gap-2 h-8 shadow-sm" onClick={handleCharacterRecheck}>
+                          <RefreshCw className="h-4 w-4" />重新生成报告
+                        </Button>
+                      </div>
                     </div>
 
-                    <div className="overflow-y-auto max-h-[45vh] pr-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent rounded-lg">
+                    {/* 修复结果 */}
+                    {repairTarget === 'character' && (repairedContent || repairError || applyRepairSuccess) && (
+                      <div className="space-y-2">
+                        {applyRepairSuccess && (
+                          <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg">
+                            <Check className="h-4 w-4 text-green-600 shrink-0" />
+                            <span className="text-sm text-green-700 dark:text-green-300 font-medium">已成功应用到章节</span>
+                          </div>
+                        )}
+                        {repairError && (
+                          <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 rounded-lg text-xs text-red-600">{repairError}</div>
+                        )}
+                        {repairedContent && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+                              <div className="flex items-center gap-2">
+                                <Check className="h-4 w-4 text-blue-600 shrink-0" />
+                                <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">修复完成，共 {repairedContent.length} 字</span>
+                              </div>
+                              <Button size="sm" className="h-7 gap-1.5" disabled={applyingRepair} onClick={handleApplyRepair}>
+                                {applyingRepair ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                                应用到章节
+                              </Button>
+                            </div>
+                            <details className="border rounded-lg overflow-hidden">
+                              <summary className="px-3 py-2 text-xs cursor-pointer hover:bg-muted/30 text-muted-foreground">查看修复后正文</summary>
+                              <div className="p-3 text-xs leading-relaxed whitespace-pre-wrap text-foreground border-t max-h-48 overflow-y-auto">{repairedContent}</div>
+                            </details>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="pr-2">
                       <div className="space-y-5 pb-2">
                         {(characterReport.conflicts?.length > 0 || characterReport.warnings?.filter((w: string) => !w.includes('失败')).length > 0) ? (
                           <>
@@ -1054,8 +1306,8 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                   </div>
                 )}
               </div>
+            </div>
             </AlertDialogDescription>
-          </AlertDialogHeader>
           <AlertDialogFooter className="flex-shrink-0 px-6 py-4 border-t bg-muted/30 rounded-b-xl gap-3">
             <AlertDialogCancel className="h-9">关闭</AlertDialogCancel>
           </AlertDialogFooter>
@@ -1072,8 +1324,10 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                 <span className="text-xs text-muted-foreground">上次检查：{formatTimeAgo(volumeCachedAt)}</span>
               )}
             </div>
-            <AlertDialogDescription asChild>
-              <div className="text-left mt-3 overflow-y-auto max-h-[45vh] pr-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent rounded-lg">
+          </AlertDialogHeader>
+          <AlertDialogDescription asChild>
+            <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+              <div className="text-left">
                 {volumeChecking ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-3">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -1160,6 +1414,57 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                       </div>
                     </div>
 
+                    {/* AI修复按钮 */}
+                    {(volumeReport.wordCountIssues.length > 0 || volumeReport.rhythmIssues.length > 0) && (
+                      <div className="flex justify-end">
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="gap-1.5 h-8"
+                          disabled={repairing !== null}
+                          onClick={() => handleRepair('volume', 'volume', volumeReport)}
+                        >
+                          {repairing === 'volume' && repairTarget === 'volume'
+                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            : <Wand2 className="h-3.5 w-3.5" />}
+                          AI修复当前章节
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* 修复结果 */}
+                    {repairTarget === 'volume' && (repairedContent || repairError || applyRepairSuccess) && (
+                      <div className="space-y-2">
+                        {applyRepairSuccess && (
+                          <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg">
+                            <Check className="h-4 w-4 text-green-600 shrink-0" />
+                            <span className="text-sm text-green-700 dark:text-green-300 font-medium">已成功应用到章节</span>
+                          </div>
+                        )}
+                        {repairError && (
+                          <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 rounded-lg text-xs text-red-600">{repairError}</div>
+                        )}
+                        {repairedContent && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+                              <div className="flex items-center gap-2">
+                                <Check className="h-4 w-4 text-blue-600 shrink-0" />
+                                <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">修复完成，共 {repairedContent.length} 字</span>
+                              </div>
+                              <Button size="sm" className="h-7 gap-1.5" disabled={applyingRepair} onClick={handleApplyRepair}>
+                                {applyingRepair ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                                应用到章节
+                              </Button>
+                            </div>
+                            <details className="border rounded-lg overflow-hidden">
+                              <summary className="px-3 py-2 text-xs cursor-pointer hover:bg-muted/30 text-muted-foreground">查看修复后正文</summary>
+                              <div className="p-3 text-xs leading-relaxed whitespace-pre-wrap text-foreground border-t max-h-48 overflow-y-auto">{repairedContent}</div>
+                            </details>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* 字数风险列表 */}
                     {volumeReport.wordCountIssues.length > 0 && (
                       <div className="space-y-2">
@@ -1227,8 +1532,8 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                   </div>
                 )}
               </div>
+            </div>
             </AlertDialogDescription>
-          </AlertDialogHeader>
           <AlertDialogFooter className="flex-shrink-0 px-6 py-4 border-t bg-muted/30 rounded-b-xl gap-3">
             <Button variant="secondary" size="sm" className="gap-2 h-9 shadow-sm hover:shadow-md transition-shadow" onClick={handleVolumeRecheck}>
               <RefreshCw className="h-4 w-4" />重新检查
@@ -1258,8 +1563,10 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                 </span>
               )}
             </div>
-            <AlertDialogDescription asChild>
-              <div className="text-left mt-3 overflow-y-auto max-h-[60vh] pr-2">
+          </AlertDialogHeader>
+          <AlertDialogDescription asChild>
+            <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+              <div className="text-left">
                 {selectedHistoryLog ? (
                   <div className="space-y-5">
                     <div className="flex items-center justify-between p-4 bg-gradient-to-r from-muted/80 to-muted/40 rounded-xl border">
@@ -1273,12 +1580,132 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                         </span>
                         <span className="text-lg text-muted-foreground">/100</span>
                       </div>
-                      <span className="text-xs text-muted-foreground">
-                        {selectedHistoryLog.issuesCount > 0 ? `${selectedHistoryLog.issuesCount}个问题` : '✓ 通过'}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {selectedHistoryLog.checkType === 'character_consistency' && selectedHistoryLog.characterResult?.conflicts?.length > 0 && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="gap-1.5 h-8"
+                            disabled={repairing !== null}
+                            onClick={() => handleRepair('character', 'history_character', selectedHistoryLog.characterResult)}
+                          >
+                            {repairing === 'character' && repairTarget === 'history_character'
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <Wand2 className="h-3.5 w-3.5" />}
+                            AI修复
+                          </Button>
+                        )}
+                        {selectedHistoryLog.checkType === 'chapter_coherence' && selectedHistoryLog.coherenceResult?.issues?.length > 0 && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="gap-1.5 h-8"
+                            disabled={repairing !== null}
+                            onClick={() => handleRepair('coherence', 'history_coherence', selectedHistoryLog.coherenceResult)}
+                          >
+                            {repairing === 'coherence' && repairTarget === 'history_coherence'
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <Wand2 className="h-3.5 w-3.5" />}
+                            AI修复
+                          </Button>
+                        )}
+                        {selectedHistoryLog.checkType === 'combined' && (
+                          <>
+                            {selectedHistoryLog.characterResult?.conflicts?.length > 0 && (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                className="gap-1.5 h-8"
+                                disabled={repairing !== null}
+                                onClick={() => handleRepair('character', 'history_character', selectedHistoryLog.characterResult)}
+                              >
+                                {repairing === 'character' && repairTarget === 'history_character'
+                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  : <Wand2 className="h-3.5 w-3.5" />}
+                                修复角色
+                              </Button>
+                            )}
+                            {selectedHistoryLog.coherenceResult?.issues?.length > 0 && (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                className="gap-1.5 h-8"
+                                disabled={repairing !== null}
+                                onClick={() => handleRepair('coherence', 'history_coherence', selectedHistoryLog.coherenceResult)}
+                              >
+                                {repairing === 'coherence' && repairTarget === 'history_coherence'
+                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  : <Wand2 className="h-3.5 w-3.5" />}
+                                修复连贯
+                              </Button>
+                            )}
+                            {selectedHistoryLog.volumeProgressResult?.wordCountIssues?.length > 0 || selectedHistoryLog.volumeProgressResult?.rhythmIssues?.length > 0 ? (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                className="gap-1.5 h-8"
+                                disabled={repairing !== null}
+                                onClick={() => handleRepair('volume', 'history_volume', selectedHistoryLog.volumeProgressResult)}
+                              >
+                                {repairing === 'volume' && repairTarget === 'history_volume'
+                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  : <Wand2 className="h-3.5 w-3.5" />}
+                                修复卷进度
+                              </Button>
+                            ) : null}
+                          </>
+                        )}
+                        {selectedHistoryLog.checkType === 'volume_progress' && (selectedHistoryLog.volumeProgressResult?.wordCountIssues?.length > 0 || selectedHistoryLog.volumeProgressResult?.rhythmIssues?.length > 0) && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="gap-1.5 h-8"
+                            disabled={repairing !== null}
+                            onClick={() => handleRepair('volume', 'history_volume', selectedHistoryLog.volumeProgressResult)}
+                          >
+                            {repairing === 'volume' && repairTarget === 'history_volume'
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <Wand2 className="h-3.5 w-3.5" />}
+                            AI修复
+                          </Button>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="overflow-y-auto max-h-[45vh] pr-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent rounded-lg">
+                    {/* 修复结果 */}
+                    {repairTarget?.startsWith('history_') && (repairedContent || repairError || applyRepairSuccess) && (
+                      <div className="space-y-2">
+                        {applyRepairSuccess && (
+                          <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg">
+                            <Check className="h-4 w-4 text-green-600 shrink-0" />
+                            <span className="text-sm text-green-700 dark:text-green-300 font-medium">已成功应用到章节</span>
+                          </div>
+                        )}
+                        {repairError && (
+                          <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 rounded-lg text-xs text-red-600">{repairError}</div>
+                        )}
+                        {repairedContent && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+                              <div className="flex items-center gap-2">
+                                <Check className="h-4 w-4 text-blue-600 shrink-0" />
+                                <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">修复完成，共 {repairedContent.length} 字</span>
+                              </div>
+                              <Button size="sm" className="h-7 gap-1.5" disabled={applyingRepair} onClick={handleApplyRepair}>
+                                {applyingRepair ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                                应用到章节
+                              </Button>
+                            </div>
+                            <details className="border rounded-lg overflow-hidden">
+                              <summary className="px-3 py-2 text-xs cursor-pointer hover:bg-muted/30 text-muted-foreground">查看修复后正文</summary>
+                              <div className="p-3 text-xs leading-relaxed whitespace-pre-wrap text-foreground border-t max-h-48 overflow-y-auto">{repairedContent}</div>
+                            </details>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="pr-2">
                       <div className="space-y-5 pb-2">
                         {selectedHistoryLog.checkType === 'character_consistency' && selectedHistoryLog.characterResult && (
                           <section className="space-y-3">
@@ -1641,8 +2068,8 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                   </div>
                 )}
               </div>
+            </div>
             </AlertDialogDescription>
-          </AlertDialogHeader>
           <AlertDialogFooter className="flex-shrink-0 px-6 py-4 border-t bg-muted/30 rounded-b-xl gap-3">
             <AlertDialogCancel className="h-9">关闭</AlertDialogCancel>
           </AlertDialogFooter>

@@ -21,6 +21,7 @@ interface Conflict {
 }
 
 interface CheckResult {
+  score: number
   conflicts: Conflict[]
   warnings: string[]
 }
@@ -54,12 +55,13 @@ export function CharacterConsistencyCheck({ novelId, chapterId }: CharacterConsi
     try {
       const data = await api.generate.checkCharacterConsistency({
         chapterId,
+        novelId,
         characterIds: characters?.map(c => c.id) || [],
       })
       setResult(data)
     } catch (error) {
       console.error('角色一致性检查失败:', error)
-      setResult({ conflicts: [], warnings: [`检查失败: ${(error as Error).message}`] })
+      setResult({ score: 0, conflicts: [], warnings: [`检查失败: ${(error as Error).message}`] })
     } finally {
       setChecking(false)
     }

@@ -411,12 +411,13 @@ export const api = {
         issues: Array<{ severity: 'error' | 'warning'; category?: string; message: string; suggestion?: string }>
         error?: string
       }>('/api/generate/coherence-check', { method: 'POST', body: j(body), timeout: 120000 }),
-    checkCharacterConsistency: (body: { characterIds: string[]; chapterId: string }) =>
+    checkCharacterConsistency: (body: { characterIds: string[]; chapterId: string; novelId: string }) =>
       req<{
+        score: number
         conflicts: Array<{ characterName: string; conflict: string; excerpt: string }>
         warnings: string[]
         error?: string
-      }>('/api/generate/check-character-consistency', { method: 'POST', body: j(body), timeout: 120000 }),
+      }>('/api/generate/check', { method: 'POST', body: j(body), timeout: 120000 }),
     checkVolumeProgress: (body: { chapterId: string; novelId: string }) =>
       req<{
         volumeId: string
