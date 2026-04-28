@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
 import { api } from '@/lib/api'
 import { useReaderStore } from '@/store/readerStore'
 import { formatForReading } from '@/lib/formatContent'
@@ -326,7 +327,7 @@ export default function ReaderPage() {
       >
         {chapter?.content ? (
           <article className="reader-content max-w-none">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
               {displayContent}
             </ReactMarkdown>
           </article>
