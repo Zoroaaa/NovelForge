@@ -124,7 +124,7 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
     }
 
     case 'post_process_chapter': {
-      const { chapterId, novelId, enableAutoSummary, usage } = msg.payload
+      const { chapterId, novelId, enableAutoSummary, usage, taskId: batchTaskId, volumeId: batchVolumeId } = msg.payload
 
       // 幂等锁：用 post_processed_at 原子抢占执行权
       // 防止 Cloudflare Queue visibility timeout（~5分钟）导致同一章节后处理重复执行
@@ -149,19 +149,30 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
       })
 
       console.log(`✅ [Queue] 章节后处理全部完成 for chapter ${chapterId}`)
+      
+      // 批量模式：runPostProcess 完成后发送 quality_check（带批量参数）
+      if (batchTaskId && batchVolumeId) {
+        if (env.TASK_QUEUE) {
+          await env.TASK_QUEUE.send({
+            type: 'quality_check',
+            payload: { chapterId, novelId, taskId: batchTaskId, volumeId: batchVolumeId },
+          })
+        }
+      } else {
+        // 单个模式：发送 quality_check 和 extract_plot_graph
+        if (env.TASK_QUEUE) {
+          await env.TASK_QUEUE.send({
+            type: 'quality_check',
+            payload: { chapterId, novelId },
+          })
+        }
 
-      if (env.TASK_QUEUE) {
-        await env.TASK_QUEUE.send({
-          type: 'quality_check',
-          payload: { chapterId, novelId },
-        })
-      }
-
-      if (env.TASK_QUEUE) {
-        await env.TASK_QUEUE.send({
-          type: 'extract_plot_graph',
-          payload: { chapterId, novelId },
-        })
+        if (env.TASK_QUEUE) {
+          await env.TASK_QUEUE.send({
+            type: 'extract_plot_graph',
+            payload: { chapterId, novelId },
+          })
+        }
       }
 
       break
@@ -288,12 +299,17 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
           { issuesContext: prevChapterAdvice ? [prevChapterAdvice] : undefined, skipPostProcess: true }
         )
 
-        // 修复: 不再在此直接调用 checkQuality，避免与 post_process_chapter→quality_check 链重复执行
-        // 改由 quality_check handler 统一处理门控逻辑，通过 taskId 关联触发
+        // 修复: 手动触发 post_process_chapter，等待后处理完成后再推进到下一章节
         if (env.TASK_QUEUE) {
           await env.TASK_QUEUE.send({
-            type: 'quality_check',
-            payload: { chapterId: chapter.id, novelId, taskId, volumeId },
+            type: 'post_process_chapter',
+            payload: {
+              chapterId: chapter.id,
+              novelId,
+              enableAutoSummary: true,
+              taskId,
+              volumeId,
+            },
           })
         }
       } catch (genError) {
@@ -338,31 +354,30 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
         const qScore = await checkQuality(env, { chapterId, novelId })
         console.log(`✅ [Queue] 质量评分完成 for chapter ${chapterId}, score=${qScore.totalScore}`)
 
-        // 批量生成时：执行质量门控，分数过低则标记失败；否则推进到下一章
+        // 批量生成时：质量检查完成后发送图谱提取请求，然后再推进到下一章节
         if (batchTaskId && batchVolumeId) {
-          const BATCH_QUALITY_GATE = 45
-          if (qScore.totalScore < BATCH_QUALITY_GATE) {
-            console.warn(`[Queue] 批量生成质量过低（${qScore.totalScore}分），暂停任务`)
-            await markTaskFailed(env, batchTaskId, `章节质量过低（${qScore.totalScore}分），请人工介入`)
-            if (env.TASK_QUEUE) {
-              await env.TASK_QUEUE.send({
-                type: 'batch_chapter_done',
-                payload: { taskId: batchTaskId, novelId, volumeId: batchVolumeId, chapterId, success: false },
-              })
-            }
-          } else {
-            if (env.TASK_QUEUE) {
-              await env.TASK_QUEUE.send({
-                type: 'batch_chapter_done',
-                payload: { taskId: batchTaskId, novelId, volumeId: batchVolumeId, chapterId, success: true },
-              })
-            }
+          if (env.TASK_QUEUE) {
+            await env.TASK_QUEUE.send({
+              type: 'extract_plot_graph',
+              payload: { chapterId, novelId },
+            })
+          }
+          if (env.TASK_QUEUE) {
+            await env.TASK_QUEUE.send({
+              type: 'batch_chapter_done',
+              payload: { taskId: batchTaskId, novelId, volumeId: batchVolumeId, chapterId, success: true },
+            })
           }
         }
       } catch (qualityError) {
         console.warn('[Queue] 质量评分失败（非致命）:', qualityError)
-        // 批量生成时质量检查失败，仍推进（不卡死流程）
+
+        // 批量生成时：质量检查失败仍发送图谱提取并推进，不卡死流程
         if (batchTaskId && batchVolumeId && env.TASK_QUEUE) {
+          await env.TASK_QUEUE.send({
+            type: 'extract_plot_graph',
+            payload: { chapterId, novelId },
+          })
           await env.TASK_QUEUE.send({
             type: 'batch_chapter_done',
             payload: { taskId: batchTaskId, novelId, volumeId: batchVolumeId, chapterId, success: true },

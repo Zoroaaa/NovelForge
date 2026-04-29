@@ -40,6 +40,9 @@ export type QueueMessage =
         novelId: string
         enableAutoSummary: boolean
         usage?: { prompt_tokens: number; completion_tokens: number }
+        /** 批量生成时传入，用于后处理完成后推进到下一章节 */
+        taskId?: string
+        volumeId?: string
       }
     }
   | {
@@ -71,7 +74,7 @@ export type QueueMessage =
       payload: {
         chapterId: string
         novelId: string
-        /** 批量生成时传入，用于质量门控（分数过低则标记task failed） */
+        /** 批量生成时传入，用于质量检查完成后继续流程 */
         taskId?: string
         volumeId?: string
       }
