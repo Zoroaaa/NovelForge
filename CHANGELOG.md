@@ -7,6 +7,106 @@
 
 ---
 
+## [2.2.0] - 2026-04-29
+
+### 🎉 重大更新：Phase 13 · 情节图谱与封面生成系统
+
+#### 新增功能
+
+##### 情节图谱系统 🗺️
+- **情节图谱路由** (`server/routes/graph.ts`)
+  - `GET /api/graph/:novelId/overview` - 获取小说图谱概览
+  - `GET /api/graph/:novelId/characters` - 获取角色关系图
+  - `GET /api/graph/:novelId/factions` - 获取势力关系图
+  - `POST /api/graph/:novelId/regenerate` - 重新生成图谱
+
+- **情节图谱服务** (`server/services/plotGraph.ts`)
+  - 角色关系网络构建
+  - 势力关系图谱管理
+  - 情节发展追踪
+  - 交互式图数据导出
+
+##### 封面生成系统 🎨
+- **封面生成路由** (`server/routes/cover.ts`)
+  - `POST /api/novels/:id/cover/generate` - AI生成封面
+  - `GET /api/novels/:id/cover` - 获取封面信息
+  - `POST /api/novels/:id/cover/upload` - 上传自定义封面
+
+- **封面生成服务** (`server/services/imageGen.ts`)
+  - 支持多种图像生成模型
+  - 自动上传到 R2 存储
+  - 封面 URL 管理
+
+##### 后处理服务 📋
+- **后处理服务** (`server/services/agent/postProcess.ts`)
+  - 章节生成后自动执行后处理
+  - 统一的后处理任务调度
+  - 支持摘要生成、伏笔提取、境界检测等任务
+
+#### 架构优化
+
+##### 卷进度检查增强 📊
+- **卷进度服务增强** (`server/services/agent/volumeProgress.ts`)
+  - 增强的进度计算算法
+  - 更精确的完成度评估
+  - 新增历史记录追踪
+  - 改进的 AI 创作建议生成
+
+##### 上下文构建器优化 🚀
+- **上下文构建器增强** (`server/services/contextBuilder.ts`)
+  - 优化查询文本构建逻辑
+  - 增强 RAG 召回质量
+  - 改进的 Slot 预算分配
+  - 新增调试信息支持
+
+##### 队列任务系统优化 ⚡
+- **队列处理器重构** (`server/queue-handler.ts`)
+  - 优化任务调度逻辑
+  - 改进错误处理机制
+  - 增强任务状态追踪
+
+##### 小说管理增强 📖
+- **小说管理路由** (`server/routes/novels.ts`)
+  - 增强的小说 CRUD 操作
+  - 封面图片管理
+  - 小说统计信息
+
+##### 数据库 Schema 更新 🗄️
+- **Schema 更新** (`server/db/schema.ts`)
+  - 新增字段支持封面管理
+  - 向量索引表增强
+  - 数据库迁移优化
+
+#### 前端组件增强
+
+- 📝 **AiMonitorPage** 增强
+  - 新增图谱可视化入口
+  - 改进的服务状态监控
+
+- 📝 **ModelConfigPage** 增强
+  - 新增封面生成模型配置
+  - 优化模型配置界面
+
+- 📝 **GeneratePanel** 增强
+  - 新增上下文诊断功能
+  - 改进的生成状态展示
+
+- 📝 **ContextPreview** 增强
+  - 新增 RAG 原始结果展示
+  - 改进的调试信息显示
+
+#### 改进
+
+- 🔧 情节图谱系统提供角色关系可视化
+- 🔧 封面生成支持 AI 智能创作
+- 🔧 后处理服务统一任务调度
+- 🔧 卷进度检查算法优化
+- 🔧 上下文构建质量提升
+- 🔧 队列任务处理更稳定
+- 🔧 数据库查询性能优化
+
+---
+
 ## [2.1.0] - 2026-04-28
 
 ### 🎉 重大更新：Phase 12 · 批量生成与质量评分系统
@@ -1336,6 +1436,30 @@
 ---
 
 ## 升级指南
+
+### 升级到 2.2.0
+
+```bash
+# 拉取最新代码
+git pull origin main
+
+# 更新依赖
+pnpm update
+
+# 运行数据库迁移
+wrangler d1 migrations apply novelforge --remote
+
+# 重新部署
+pnpm build
+wrangler pages deploy dist
+```
+
+**重要变更说明**：
+- 新增情节图谱系统：提供角色关系可视化和势力关系图谱
+- 新增封面生成系统：支持 AI 智能生成小说封面
+- 新增后处理服务：统一章节生成后的任务调度
+- 卷进度检查算法优化：更精确的完成度评估
+- 上下文构建器优化：增强 RAG 召回质量
 
 ### 升级到 2.1.0
 

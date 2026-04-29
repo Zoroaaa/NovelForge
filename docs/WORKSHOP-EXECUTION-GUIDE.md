@@ -1,6 +1,6 @@
 # NovelForge 创作工坊 — 完整执行指南
 
-> 版本: 1.2.0 | 模块: `server/services/workshop/` (v1.11.0 模块化)
+> 版本: 1.3.0 | 模块: `server/services/workshop/` (v1.11.0 模块化)
 > 前端页面: [WorkshopPage.tsx](file:///d:/开发项目/NovelForge/src/pages/WorkshopPage.tsx)
 > 创建日期: 2026-04-25 | 更新日期: 2026-04-29
 
@@ -853,6 +853,6 @@ while (true) {
 
 ---
 
-> 文档版本：1.2.0
+> 文档版本：1.3.0
 > 最后更新：2026-04-29
 > 维护者：NovelForge 开发团队

@@ -45,4 +45,4 @@ router.get('/novel/:novelId', async (c) => {
   }))
 })
 
-export { router as quality }
+export default router

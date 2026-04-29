@@ -7,7 +7,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Loader2, Link, Shield, Target } from 'lucide-react'
 import { api } from '@/lib/api'
-import { ChapterCoherenceCheck } from './ChapterCoherenceCheck'
 import { CharacterConsistencyCheck } from './CharacterConsistencyCheck'
 import { CombinedCheck } from './CombinedCheck'
 import { VolumeProgressCheck } from './VolumeProgressCheck'
@@ -495,10 +494,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                 )}
               </Button>
             </div>
-            <ChapterCoherenceCheck novelId={novelId} chapterId={chapterId} onCheckComplete={(result) => {
-              setCoherenceResult(result)
-              loadLatestCheckLog()
-            }} />
+
           </div>
         </TabsContent>
 

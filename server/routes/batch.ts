@@ -83,4 +83,4 @@ router.get('/novels/:id/active', async (c) => {
   return c.json(task)
 })
 
-export { router as batch }
+export default router

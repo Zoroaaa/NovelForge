@@ -65,6 +65,9 @@ export interface ContextBundle {
     volumeEventLine: string
     volumeNotes: string
     prevChapterContent: string
+    prevEvent: string
+    currentEvent: string
+    nextThreeChapters: string
     protagonistStateCards: string[]
     allActiveRules: string[]
     rhythmStats: RhythmStats | null
@@ -207,10 +210,10 @@ export async function buildChapterContext(
   const chapterTypeHint = inferChapterType(volumeInfo.eventLine, currentChapter.title)
 
   // ── Step 2: 组装查询向量（聚焦当前章节语义，≤800字） ──
-  const currentChapterEvent = extractCurrentChapterEvent(volumeInfo.eventLine, chapterIndexInVolume)
-  const queryTextParts = [currentChapter.title, currentChapterEvent, prevContent?.slice(0, 300)]
+  const { prevEvent, currentEvent, nextThreeChapters } = extractCurrentChapterEvent(volumeInfo.eventLine, chapterIndexInVolume)
+  const queryTextParts = [currentChapter.title, prevEvent, currentEvent, nextThreeChapters]
 
-  if (!currentChapterEvent && recentSummaries.length > 0) {
+  if (!currentEvent && recentSummaries.length > 0) {
     const lastSummary = recentSummaries[recentSummaries.length - 1]
     queryTextParts.push(lastSummary.slice(-300))
   }
@@ -350,6 +353,9 @@ export async function buildChapterContext(
       volumeEventLine: volumeInfo.eventLine,
       volumeNotes: volumeInfo.notes,
       prevChapterContent: prevContent,
+      prevEvent,
+      currentEvent,
+      nextThreeChapters,
       protagonistStateCards,
       allActiveRules: mutableRules,
       rhythmStats,
@@ -965,6 +971,7 @@ function inferChapterType(eventLine: string, chapterTitle: string): string {
 
 /**
  * 从整卷eventLine中提取当前章节及上下章事件描述
+ * 返回对象包含：prevEvent（上章事件）、currentEvent（本章任务）、nextThreeChapters（下3章预告）
  * 支持两种格式：
  * 1. 换行分隔：每行以"第X章"开头（逐行匹配）
  * 2. 连续文本：以"第N章："开头的段落（整段截取）
@@ -972,8 +979,8 @@ function inferChapterType(eventLine: string, chapterTitle: string): string {
 function extractCurrentChapterEvent(
   eventLine: string,
   currentSortOrder: number,
-): string {
-  if (!eventLine) return ''
+): { prevEvent: string; currentEvent: string; nextThreeChapters: string } {
+  if (!eventLine) return { prevEvent: '', currentEvent: '', nextThreeChapters: '' }
 
   const lines = eventLine.split('\n').filter(l => l.trim())
 
@@ -987,47 +994,51 @@ function extractCurrentChapterEvent(
 
     const currentEvent = findChapterLine(currentSortOrder)
     if (currentEvent) {
-      const parts: string[] = []
-
-      const prevEvent = findChapterLine(currentSortOrder - 1)
-      if (prevEvent) parts.push(`【上章事件】${prevEvent}`)
-
-      parts.push(`【本章任务】${currentEvent}  ← 核心，必须完成`)
-
-      const nextEvent = findChapterLine(currentSortOrder + 1)
-      if (nextEvent) parts.push(`【下章预告】${nextEvent}  ← 仅供结尾钩子参考，本章不得提前完成`)
-
-      return parts.join('\n')
+      const prev = findChapterLine(currentSortOrder - 1)
+      const nextEvents: string[] = []
+      for (let i = 1; i <= 3; i++) {
+        const next = findChapterLine(currentSortOrder + i)
+        if (next) nextEvents.push(next)
+      }
+      return {
+        prevEvent: prev ? `【上章事件】${prev}` : '',
+        currentEvent: `${currentEvent}  ← 核心，必须完成`,
+        nextThreeChapters: nextEvents.length > 0 ? nextEvents.join('\n') + '  ← 仅供结尾钩子参考，本章不得提前完成' : '',
+      }
     }
   }
 
   const currentPattern = new RegExp(`第${currentSortOrder}章[：:\\s]`)
   const nextPattern = new RegExp(`第${currentSortOrder + 1}章[：:\\s]`)
   const prevPattern = new RegExp(`第${currentSortOrder - 1}章[：:\\s]`)
+  const afterNextPattern = new RegExp(`第${currentSortOrder + 4}章[：:\\s]`)
 
   const currentStart = eventLine.search(currentPattern)
-  if (currentStart === -1) return eventLine.slice(0, 500)
+  if (currentStart === -1) return { prevEvent: '', currentEvent: eventLine.slice(0, 500), nextThreeChapters: '' }
 
-  const parts: string[] = []
+  const currentEnd = eventLine.search(nextPattern) !== -1 ? eventLine.search(nextPattern) : eventLine.length
+  const currentContent = eventLine.slice(currentStart, currentEnd).trim().slice(0, 200)
 
   const prevMatch = eventLine.match(prevPattern)
+  let prevEvent = ''
   if (prevMatch) {
     const prevStart = prevMatch.index!
     const prevContent = eventLine.slice(prevStart, currentStart).trim()
-    if (prevContent) parts.push(`【上章事件】${prevContent.slice(0, 200)}`)
+    if (prevContent) prevEvent = `【上章事件】${prevContent.slice(0, 200)}`
   }
+
+  const currentEvent = `${currentContent}  ← 核心，必须完成`
 
   const nextMatch = eventLine.match(nextPattern)
-  const currentEnd = nextMatch ? nextMatch.index! : eventLine.length
-  const currentContent = eventLine.slice(currentStart, currentEnd).trim()
-  parts.push(`【本章任务】${currentContent}  ← 核心，必须完成`)
-
+  let nextThreeChapters = ''
   if (nextMatch) {
-    const remaining = eventLine.slice(nextMatch.index!).trim()
-    parts.push(`【下章预告】${remaining.slice(0, 200)}  ← 仅供结尾钩子参考，本章不得提前完成`)
+    const afterNextMatch = eventLine.match(afterNextPattern)
+    const nextEnd = afterNextMatch ? afterNextMatch.index! : eventLine.length
+    const nextContent = eventLine.slice(nextMatch.index!, nextEnd).trim()
+    nextThreeChapters = nextContent.slice(0, 200) + '  ← 仅供结尾钩子参考，本章不得提前完成'
   }
 
-  return parts.join('\n')
+  return { prevEvent, currentEvent, nextThreeChapters }
 }
 
 export function estimateTokens(text: string): number {
@@ -1042,7 +1053,7 @@ export function estimateTokens(text: string): number {
 // ============================================================
 
 export interface AssembleOptions {
-  slotFilter?: Array<'masterOutline' | 'volume' | 'prevChapter' | 'protagonist' | 'rules' | 'summaryChain' | 'characters' | 'foreshadowing' | 'worldSettings' | 'chapterTypeRules' | 'rhythmStats'>
+  slotFilter?: Array<'masterOutline' | 'volume' | 'prevChapter' | 'currentEvent' | 'nextThreeChapters' | 'protagonist' | 'rules' | 'summaryChain' | 'characters' | 'foreshadowing' | 'worldSettings' | 'chapterTypeRules' | 'rhythmStats'>
 }
 
 export function assemblePromptContext(bundle: ContextBundle, options?: AssembleOptions): string {
@@ -1090,6 +1101,10 @@ export function assemblePromptContext(bundle: ContextBundle, options?: AssembleO
   }
 
   if (shouldInclude('prevChapter') && bundle.core.prevChapterContent) sections.push(`## 上一章正文\n${bundle.core.prevChapterContent}`)
+
+  if (shouldInclude('currentEvent') && bundle.core.currentEvent) sections.push(`## 本章任务\n${bundle.core.currentEvent}`)
+
+  if (shouldInclude('nextThreeChapters') && bundle.core.nextThreeChapters) sections.push(`## 下3章预告\n${bundle.core.nextThreeChapters}`)
 
   if (shouldInclude('protagonist') && bundle.core.protagonistStateCards.length > 0) sections.push(`## 主角状态\n${bundle.core.protagonistStateCards.join('\n\n')}`)
 
