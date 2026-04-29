@@ -1,23 +1,22 @@
 /**
  * @file ChapterList.tsx
  * @description 章节列表组件，提供章节的展示、创建、排序和删除功能，按卷分组显示
- * @version 2.0.0
+ * @version 2.1.0
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useMemo, useRef, useCallback } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { api, streamGenerate } from '@/lib/api'
+import { api } from '@/lib/api'
 import type { Chapter, ChapterInput, Volume } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Square, BookOpen, Trash2, FileText, Sparkles, CheckCircle, RefreshCw, ChevronDown, ChevronRight, Library, Wand2, Loader2, Zap, Plus, CloudUpload } from 'lucide-react'
+import { BookOpen, Trash2, FileText, Sparkles, CheckCircle, RefreshCw, ChevronDown, ChevronRight, Library, Zap, Plus } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -58,175 +57,6 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
   const [volumeId, setVolumeId] = useState('')
   const [expandedVolumes, setExpandedVolumes] = useState<Set<string>>(new Set(['uncategorized']))
   const [expandedChapters, setExpandedChapters] = useState<Set<string>>(new Set())
-  
-  const [nextChapterDialogOpen, setNextChapterDialogOpen] = useState(false)
-  const [selectedVolumeForNext, setSelectedVolumeForNext] = useState<Volume | null>(null)
-  const [isGeneratingNext, setIsGeneratingNext] = useState(false)
-  const [isQueueSubmitting, setIsQueueSubmitting] = useState(false)
-  const [isQueueSubmitted, setIsQueueSubmitted] = useState(false)
-
-  const [generatingChapterId, setGeneratingChapterId] = useState<string | null>(null)
-  const [generatingOutput, setGeneratingOutput] = useState('')
-  const [isGeneratingContent, setIsGeneratingContent] = useState(false)
-  const stopGenerateRef = useRef<(() => void) | null>(null)
-  const generatedContentRef = useRef<string>('')
-
-  const extractTitleFromContent = (content: string): string | null => {
-    const match = content.match(/^#\s+(.+)$/m)
-    return match?.[1]?.trim() || null
-  }
-
-  const handleStartGenerateNext = async () => {
-    if (!selectedVolumeForNext || !chapters) return
-    setIsGeneratingNext(true)
-    setGeneratingOutput('')
-    generatedContentRef.current = ''
-
-    const maxOrder = chapters.length > 0 ? Math.max(...chapters.map(c => c.sortOrder)) : -1
-    const chapterNumber = chapters.length + 1
-    const tempTitle = `第${chapterNumber}章`
-
-    try {
-      const newChapter = await api.chapters.create({
-        novelId,
-        title: tempTitle,
-        sortOrder: maxOrder + 1,
-        content: null,
-        volumeId: selectedVolumeForNext.id,
-        summary: '',
-      })
-
-      setGeneratingChapterId(newChapter.id)
-      setIsGeneratingNext(false)
-      setIsGeneratingContent(true)
-
-      const stop = streamGenerate(
-        { chapterId: newChapter.id, novelId, mode: 'generate' },
-        (data: unknown) => {
-          if (typeof data === 'object' && data !== null && 'content' in data) {
-            const content = (data as { content: string }).content
-            generatedContentRef.current += content
-            setGeneratingOutput(prev => prev + content)
-          }
-        },
-        async () => {
-          const fullContent = generatedContentRef.current
-          const extractedTitle = extractTitleFromContent(fullContent)
-
-          if (extractedTitle) {
-            await api.chapters.update(newChapter.id, { title: extractedTitle })
-            toast.success(`章节已生成：${extractedTitle}`)
-          } else {
-            toast.success('章节已生成')
-          }
-
-          queryClient.invalidateQueries({ queryKey: ['chapters', novelId] })
-          setIsGeneratingContent(false)
-          setGeneratingChapterId(null)
-          setNextChapterDialogOpen(false)
-          setSelectedVolumeForNext(null)
-          setGeneratingOutput('')
-
-          if (onChapterSelect) {
-            onChapterSelect(newChapter.id)
-          }
-        },
-        (e: Error) => {
-          toast.error(`生成失败: ${e.message}`)
-          api.chapters.delete(newChapter.id).catch(() => {})
-          queryClient.invalidateQueries({ queryKey: ['chapters', novelId] })
-          setIsGeneratingContent(false)
-          setGeneratingChapterId(null)
-        }
-      )
-
-      stopGenerateRef.current = stop
-    } catch (err) {
-      toast.error(`创建章节失败: ${(err as Error).message}`)
-      setIsGeneratingNext(false)
-    }
-  }
-
-  const handleCancelGenerate = useCallback(() => {
-    if (stopGenerateRef.current) {
-      stopGenerateRef.current()
-      stopGenerateRef.current = null
-    }
-    if (generatingChapterId) {
-      api.chapters.delete(generatingChapterId).catch(() => {})
-      queryClient.invalidateQueries({ queryKey: ['chapters', novelId] })
-    }
-    setIsGeneratingContent(false)
-    setGeneratingChapterId(null)
-    setGeneratingOutput('')
-    generatedContentRef.current = ''
-    setNextChapterDialogOpen(false)
-    setSelectedVolumeForNext(null)
-  }, [generatingChapterId, novelId, queryClient])
-
-  const handleStartGenerateNextQueue = async () => {
-    if (!selectedVolumeForNext || !chapters) return
-    setIsQueueSubmitting(true)
-
-    const maxOrder = chapters.length > 0 ? Math.max(...chapters.map(c => c.sortOrder)) : -1
-    const chapterNumber = chapters.length + 1
-    const tempTitle = `第${chapterNumber}章`
-
-    try {
-      const newChapter = await api.chapters.create({
-        novelId,
-        title: tempTitle,
-        sortOrder: maxOrder + 1,
-        content: null,
-        volumeId: selectedVolumeForNext.id,
-        summary: '',
-      })
-
-      const result = await api.generate.chapterQueue({
-        chapterId: newChapter.id,
-        novelId,
-        mode: 'generate',
-      })
-
-      if (result.ok) {
-        setIsQueueSubmitted(true)
-        setIsQueueSubmitting(false)
-        toast.success('章节生成任务已提交到后台队列', {
-          description: '您可以关闭页面，任务将在后台继续执行',
-          duration: 5000,
-        })
-        queryClient.invalidateQueries({ queryKey: ['chapters', novelId] })
-
-        setTimeout(() => {
-          setNextChapterDialogOpen(false)
-          setSelectedVolumeForNext(null)
-          setIsQueueSubmitted(false)
-        }, 2000)
-
-        if (onChapterSelect) {
-          onChapterSelect(newChapter.id)
-        }
-      } else {
-        throw new Error(result.error || '提交失败')
-      }
-    } catch (err) {
-      toast.error(`提交失败: ${(err as Error).message}`)
-      setIsQueueSubmitting(false)
-    }
-  }
-
-  const handleCloseDialog = (open: boolean) => {
-    if (!open && isGeneratingContent) {
-      handleCancelGenerate()
-      return
-    }
-    setNextChapterDialogOpen(open)
-    if (!open) {
-      setSelectedVolumeForNext(null)
-      setGeneratingOutput('')
-      setGeneratingChapterId(null)
-    }
-  }
 
   const { data: chapters, isLoading } = useQuery({
     queryKey: ['chapters', novelId],
@@ -314,6 +144,41 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
       summary: '',
     })
   }
+
+  const handleCreateNext = useCallback(() => {
+    if (!chapters || !volumes || volumes.length === 0) {
+      toast.error('请先创建卷')
+      return
+    }
+
+    const sortedVolumes = [...volumes].sort((a, b) => a.sortOrder - b.sortOrder)
+
+    let targetVolume: Volume | null = null
+    for (const vol of sortedVolumes) {
+      if (vol.status === 'completed') continue
+      if (vol.targetChapterCount && vol.chapterCount >= vol.targetChapterCount) continue
+      targetVolume = vol
+      break
+    }
+
+    if (!targetVolume) {
+      toast.error('所有卷都已满或已完成，请先创建新卷')
+      return
+    }
+
+    const maxOrder = chapters.length > 0 ? Math.max(...chapters.map(c => c.sortOrder)) : -1
+    const chapterNumber = chapters.length + 1
+    const tempTitle = `第${chapterNumber}章`
+
+    createMutation.mutate({
+      novelId,
+      title: tempTitle,
+      sortOrder: maxOrder + 1,
+      content: null,
+      volumeId: targetVolume.id,
+      summary: '',
+    })
+  }, [chapters, volumes, novelId, createMutation])
 
   const toggleVolume = (volumeId: string) => {
     setExpandedVolumes(prev => {
@@ -528,11 +393,21 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* 操作栏 */}
       <div className="px-3 py-2.5 border-b flex items-center justify-between gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleCreateNext}
+          disabled={createMutation.isPending}
+          className="flex-1 gap-2 h-8"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          添加下一章
+        </Button>
+
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="w-full gap-2 h-8">
+            <Button variant="outline" size="sm" className="flex-1 gap-2 h-8">
               <Plus className="h-3.5 w-3.5" />
               添加章节
             </Button>
@@ -571,130 +446,8 @@ export function ChapterList({ novelId, onChapterSelect }: ChapterListProps) {
             </form>
           </DialogContent>
         </Dialog>
-
-        <Dialog open={nextChapterDialogOpen} onOpenChange={handleCloseDialog}>
-          <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="w-full gap-2 h-8">
-              <Wand2 className="h-3.5 w-3.5" />
-              生成下一章
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Wand2 className="h-5 w-5 text-primary" />
-                AI 生成下一章
-              </DialogTitle>
-              <DialogDescription>
-                {isGeneratingContent
-                  ? '正在生成章节内容...'
-                  : '选择目标卷，即时生成或后台生成章节正文'}
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4 flex-1 overflow-hidden">
-              {!isGeneratingContent ? (
-                <div className="space-y-4">
-                  <div className="bg-muted/50 p-3 rounded-lg">
-                    <p className="text-sm font-medium">目标卷：《{selectedVolumeForNext?.title || '请选择卷'}》</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      选择卷后可选择"即时生成"（等待完成）或"后台生成"（可关闭页面）
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>选择卷</Label>
-                    <Select value={selectedVolumeForNext?.id || ''} onValueChange={(v) => {
-                      const volume = volumes?.find(vol => vol.id === v)
-                      if (volume) setSelectedVolumeForNext(volume)
-                    }}>
-                      <SelectTrigger><SelectValue placeholder="选择目标卷" /></SelectTrigger>
-                      <SelectContent>
-                        {volumes?.map(v => (
-                          <SelectItem key={v.id} value={v.id}>{v.title}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Button
-                    onClick={handleStartGenerateNext}
-                    disabled={isGeneratingNext || !selectedVolumeForNext || isQueueSubmitting || isQueueSubmitted}
-                    className="flex-1 gap-2"
-                  >
-                    {isGeneratingNext ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        创建中...
-                      </>
-                    ) : (
-                      <>
-                        <Wand2 className="h-4 w-4" />
-                        即时生成
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleStartGenerateNextQueue}
-                    disabled={isGeneratingNext || !selectedVolumeForNext || isQueueSubmitting || isQueueSubmitted}
-                    className="flex-1 gap-2"
-                    title="提交到后台队列生成，可关闭页面"
-                  >
-                    {isQueueSubmitting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        提交中...
-                      </>
-                    ) : isQueueSubmitted ? (
-                      <>
-                        <Wand2 className="h-4 w-4 text-green-600" />
-                        已提交
-                      </>
-                    ) : (
-                      <>
-                        <CloudUpload className="h-4 w-4" />
-                        后台生成
-                      </>
-                    )}
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-3 flex-1 overflow-hidden flex flex-col">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                      <span className="text-sm font-medium">正在生成...</span>
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {generatingOutput.length.toLocaleString()} 字
-                    </span>
-                  </div>
-
-                  <ScrollArea className="flex-1 h-[400px] border rounded-lg p-3 bg-muted/30">
-                    <pre className="text-sm whitespace-pre-wrap font-mono leading-relaxed">
-                      {generatingOutput || '等待内容...'}
-                    </pre>
-                  </ScrollArea>
-
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={handleCancelGenerate}
-                      className="flex-1 gap-2"
-                    >
-                      <Square className="h-4 w-4" />
-                      取消生成
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
       </div>
 
-      {/* 章节列表 */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {chapters && chapters.length > 0 ? (
           <>
