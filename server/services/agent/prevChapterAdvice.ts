@@ -64,15 +64,21 @@ export async function buildPrevChapterAdvice(
           if (!result) break
           const parts: string[] = []
           if (result.wordCountIssues?.length > 0) {
-            const issue = result.wordCountIssues[0]
-            parts.push(`字数风险：${issue.message}`)
+            result.wordCountIssues.forEach((issue: any) => {
+              parts.push(`字数风险：${issue.message}`)
+            })
           }
           if (result.rhythmIssues?.length > 0) {
-            const issue = result.rhythmIssues[0]
-            parts.push(`节奏风险：第${issue.chapterNumber}章"${issue.chapterTitle}"的${issue.dimension}偏离卷纲`)
+            result.rhythmIssues.forEach((issue: any) => {
+              const suggestion = issue.suggestion || '建议调整剧情节奏'
+              parts.push(`节奏风险：第${issue.chapterNumber}章"${issue.chapterTitle}"的${issue.dimension}偏离卷纲\n    → ${suggestion}`)
+            })
+          }
+          if (result.diagnosis) {
+            parts.push(`诊断：${result.diagnosis}`)
           }
           if (result.suggestion) {
-            parts.push(`建议：${result.suggestion}`)
+            parts.push(`总体建议：${result.suggestion}`)
           }
           if (parts.length > 0) {
             sectionContent = parts.map(p => `  - ${p}`).join('\n')
