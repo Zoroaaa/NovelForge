@@ -5,11 +5,11 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Shield, ShieldAlert, AlertTriangle, CheckCircle, Loader2, ChevronDown, ChevronUp, Wand2, Check } from 'lucide-react'
+import { Shield, ShieldAlert, AlertTriangle, CheckCircle, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
+import { StreamRepairOutput } from './StreamRepairOutput'
 
 interface Conflict {
   characterName: string
@@ -29,14 +29,15 @@ interface CheckResult {
 interface CharacterConsistencyCheckProps {
   novelId: string
   chapterId: string | null
+  onRepairComplete?: () => void
 }
 
-export function CharacterConsistencyCheck({ novelId, chapterId }: CharacterConsistencyCheckProps) {
+export function CharacterConsistencyCheck({ novelId, chapterId, onRepairComplete }: CharacterConsistencyCheckProps) {
   const [checking, setChecking] = useState(false)
   const [result, setResult] = useState<CheckResult | null>(null)
   const [expandedConflict, setExpandedConflict] = useState<number | null>(null)
-  const [repairing, setRepairing] = useState(false)
-  const [repairedContent, setRepairedContent] = useState<string | null>(null)
+  const [repairOutput, setRepairOutput] = useState('')
+  const [repairStatus, setRepairStatus] = useState<'idle' | 'repairing' | 'done' | 'error'>('idle')
   const [repairError, setRepairError] = useState<string | null>(null)
 
   const { data: characters } = useQuery({
@@ -49,8 +50,9 @@ export function CharacterConsistencyCheck({ novelId, chapterId }: CharacterConsi
     if (!chapterId) return
     setChecking(true)
     setResult(null)
-    setRepairedContent(null)
+    setRepairOutput('')
     setRepairError(null)
+    setRepairStatus('idle')
 
     try {
       const data = await api.generate.checkCharacterConsistency({
@@ -69,8 +71,8 @@ export function CharacterConsistencyCheck({ novelId, chapterId }: CharacterConsi
 
   const handleRepair = async () => {
     if (!chapterId || !result || result.conflicts.length === 0) return
-    setRepairing(true)
-    setRepairedContent(null)
+    setRepairStatus('repairing')
+    setRepairOutput('')
     setRepairError(null)
 
     try {
@@ -85,15 +87,24 @@ export function CharacterConsistencyCheck({ novelId, chapterId }: CharacterConsi
         })),
       })
       if (data.ok && data.repairedContent) {
-        setRepairedContent(data.repairedContent)
+        setRepairOutput(data.repairedContent)
+        setRepairStatus('done')
       } else {
         setRepairError(data.error || '修复失败')
+        setRepairStatus('error')
       }
     } catch (error) {
       setRepairError((error as Error).message)
-    } finally {
-      setRepairing(false)
+      setRepairStatus('error')
     }
+  }
+
+  const handleWrite = async (content: string) => {
+    if (!chapterId) return
+    await api.chapters.update(chapterId, { content })
+    setRepairOutput('')
+    setRepairStatus('idle')
+    onRepairComplete?.()
   }
 
   const conflictCount = result?.conflicts.length || 0
@@ -136,7 +147,6 @@ export function CharacterConsistencyCheck({ novelId, chapterId }: CharacterConsi
 
         {result && !checking && (
           <div className="space-y-2">
-            {/* 结果概览 */}
             <div className="flex items-center gap-2">
               {conflictCount > 0 ? (
                 <Badge variant="destructive" className="gap-1 text-xs">
@@ -157,9 +167,8 @@ export function CharacterConsistencyCheck({ novelId, chapterId }: CharacterConsi
               )}
             </div>
 
-            {/* 冲突列表 */}
             {conflictCount > 0 && (
-              <ScrollArea className="max-h-64">
+              <ScrollArea className="max-h-48">
                 <div className="space-y-1.5">
                   {result.conflicts.map((c, i) => (
                     <div key={i} className="border rounded-md overflow-hidden">
@@ -199,7 +208,6 @@ export function CharacterConsistencyCheck({ novelId, chapterId }: CharacterConsi
               </ScrollArea>
             )}
 
-            {/* 警告列表 */}
             {warningCount > 0 && (
               <div className="space-y-1">
                 {result.warnings.map((w, i) => (
@@ -211,53 +219,24 @@ export function CharacterConsistencyCheck({ novelId, chapterId }: CharacterConsi
               </div>
             )}
 
-            {result.conflicts.length > 0 && (
+            {repairStatus === 'idle' && result.conflicts.length > 0 && (
               <div className="pt-2 border-t">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full gap-2"
-                  disabled={repairing}
+                <button
                   onClick={handleRepair}
+                  className="w-full px-4 py-2 text-sm border rounded-md hover:bg-muted/50 transition-colors flex items-center justify-center gap-2"
                 >
-                  {repairing ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" />修复中...</>
-                  ) : (
-                    <><Wand2 className="h-4 w-4" />根据报告修复章节</>
-                  )}
-                </Button>
+                  修复角色冲突
+                </button>
               </div>
             )}
 
-            {repairError && (
-              <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-600 dark:text-red-400">
-                修复失败：{repairError}
-              </div>
-            )}
-
-            {repairedContent && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 p-2 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg">
-                  <Check className="h-4 w-4 text-green-600 shrink-0" />
-                  <span className="text-xs text-green-700 dark:text-green-300 font-medium">修复完成</span>
-                </div>
-                <div className="border rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => setExpandedConflict(expandedConflict === -1 ? null : -1)}
-                    className="w-full flex items-center justify-between p-2 text-left hover:bg-muted/30 transition-colors"
-                  >
-                    <span className="text-xs font-medium">查看修复后正文</span>
-                    {expandedConflict === -1 ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </button>
-                  {expandedConflict === -1 && (
-                    <ScrollArea className="max-h-64 border-t">
-                      <div className="p-3 text-xs leading-relaxed whitespace-pre-wrap">
-                        {repairedContent}
-                      </div>
-                    </ScrollArea>
-                  )}
-                </div>
-              </div>
+            {(repairStatus === 'repairing' || repairStatus === 'done' || repairStatus === 'error') && (
+              <StreamRepairOutput
+                content={repairOutput}
+                status={repairStatus}
+                error={repairError}
+                onWrite={handleWrite}
+              />
             )}
           </div>
         )}

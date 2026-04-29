@@ -3,11 +3,13 @@
  * @description 章节健康检查主入口组件，整合所有检查功能
  */
 import { useState, useEffect, useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Loader2, Link, Shield, Target } from 'lucide-react'
 import { api } from '@/lib/api'
 import { CharacterConsistencyCheck } from './CharacterConsistencyCheck'
+import { ChapterCoherenceCheck } from './ChapterCoherenceCheck'
 import { CombinedCheck } from './CombinedCheck'
 import { VolumeProgressCheck } from './VolumeProgressCheck'
 import { CheckSummary } from './CheckSummary'
@@ -43,6 +45,7 @@ function formatTimeAgo(timestamp: number): string {
 }
 
 export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckProps) {
+  const queryClient = useQueryClient()
   const [latestCheckLog, setLatestCheckLog] = useState<CheckLog | null>(null)
   const [showCheckHistory, setShowCheckHistory] = useState(false)
   const [checkHistory, setCheckHistory] = useState<CheckLog[]>([])
@@ -120,6 +123,10 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
       console.error('加载检查历史失败:', error)
     }
   }, [chapterId])
+
+  const handleRepairComplete = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['chapters', novelId] })
+  }, [queryClient, novelId])
 
   const handleRewriteClick = async () => {
     setRewriteDialogOpen(true)
@@ -494,7 +501,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                 )}
               </Button>
             </div>
-
+            <ChapterCoherenceCheck novelId={novelId} chapterId={chapterId} onRepairComplete={handleRepairComplete} />
           </div>
         </TabsContent>
 
@@ -521,7 +528,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                 )}
               </Button>
             </div>
-            <CharacterConsistencyCheck novelId={novelId} chapterId={chapterId} />
+            <CharacterConsistencyCheck novelId={novelId} chapterId={chapterId} onRepairComplete={handleRepairComplete} />
           </div>
         </TabsContent>
 
@@ -548,7 +555,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                 )}
               </Button>
             </div>
-            <VolumeProgressCheck novelId={novelId} chapterId={chapterId} />
+            <VolumeProgressCheck novelId={novelId} chapterId={chapterId} onRepairComplete={handleRepairComplete} />
           </div>
         </TabsContent>
 

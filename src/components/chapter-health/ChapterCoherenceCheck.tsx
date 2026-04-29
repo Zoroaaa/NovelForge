@@ -16,10 +16,9 @@ import {
   ChevronUp,
   BookOpen,
   Zap,
-  Wand2,
-  Check,
 } from 'lucide-react'
 import { api } from '@/lib/api'
+import { StreamRepairOutput } from './StreamRepairOutput'
 
 interface CoherenceIssue {
   severity: 'error' | 'warning'
@@ -37,22 +36,24 @@ interface ChapterCoherenceCheckProps {
   novelId: string
   chapterId: string | null
   onCheckComplete?: (result: CoherenceCheckResult) => void
+  onRepairComplete?: () => void
 }
 
-export function ChapterCoherenceCheck({ novelId, chapterId, onCheckComplete }: ChapterCoherenceCheckProps) {
+export function ChapterCoherenceCheck({ novelId, chapterId, onCheckComplete, onRepairComplete }: ChapterCoherenceCheckProps) {
   const [checking, setChecking] = useState(false)
   const [result, setResult] = useState<CoherenceCheckResult | null>(null)
   const [expandedIssue, setExpandedIssue] = useState<number | null>(null)
-  const [repairing, setRepairing] = useState(false)
-  const [repairedContent, setRepairedContent] = useState<string | null>(null)
+  const [repairOutput, setRepairOutput] = useState('')
+  const [repairStatus, setRepairStatus] = useState<'idle' | 'repairing' | 'done' | 'error'>('idle')
   const [repairError, setRepairError] = useState<string | null>(null)
 
   const handleCheck = async () => {
     if (!chapterId) return
     setChecking(true)
     setResult(null)
-    setRepairedContent(null)
+    setRepairOutput('')
     setRepairError(null)
+    setRepairStatus('idle')
 
     try {
       const data = await api.generate.checkCoherence({ chapterId, novelId })
@@ -72,8 +73,8 @@ export function ChapterCoherenceCheck({ novelId, chapterId, onCheckComplete }: C
 
   const handleRepair = async () => {
     if (!chapterId || !result || result.issues.length === 0) return
-    setRepairing(true)
-    setRepairedContent(null)
+    setRepairStatus('repairing')
+    setRepairOutput('')
     setRepairError(null)
 
     try {
@@ -85,15 +86,24 @@ export function ChapterCoherenceCheck({ novelId, chapterId, onCheckComplete }: C
         coherenceScore: result.score,
       })
       if (data.ok && data.repairedContent) {
-        setRepairedContent(data.repairedContent)
+        setRepairOutput(data.repairedContent)
+        setRepairStatus('done')
       } else {
         setRepairError(data.error || '修复失败')
+        setRepairStatus('error')
       }
     } catch (error) {
       setRepairError((error as Error).message)
-    } finally {
-      setRepairing(false)
+      setRepairStatus('error')
     }
+  }
+
+  const handleWrite = async (content: string) => {
+    if (!chapterId) return
+    await api.chapters.update(chapterId, { content })
+    setRepairOutput('')
+    setRepairStatus('idle')
+    onRepairComplete?.()
   }
 
   const issueCount = result?.issues.length || 0
@@ -169,7 +179,6 @@ export function ChapterCoherenceCheck({ novelId, chapterId, onCheckComplete }: C
 
         {result && !checking && (
           <div className="space-y-3">
-            {/* 结果概览 */}
             <div className="flex items-center gap-2 flex-wrap">
               <div className="flex items-baseline gap-1">
                 <span className="text-xs text-muted-foreground">评分:</span>
@@ -198,9 +207,8 @@ export function ChapterCoherenceCheck({ novelId, chapterId, onCheckComplete }: C
               )}
             </div>
 
-            {/* 问题列表 */}
             {issueCount > 0 && (
-              <ScrollArea className="max-h-64">
+              <ScrollArea className="max-h-48">
                 <div className="space-y-1.5">
                   {result.issues.map((issue, i) => (
                     <div
@@ -252,53 +260,24 @@ export function ChapterCoherenceCheck({ novelId, chapterId, onCheckComplete }: C
               </ScrollArea>
             )}
 
-            {result.issues.length > 0 && (
+            {repairStatus === 'idle' && result.issues.length > 0 && (
               <div className="pt-2 border-t">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full gap-2"
-                  disabled={repairing}
+                <button
                   onClick={handleRepair}
+                  className="w-full px-4 py-2 text-sm border rounded-md hover:bg-muted/50 transition-colors flex items-center justify-center gap-2"
                 >
-                  {repairing ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" />修复中...</>
-                  ) : (
-                    <><Wand2 className="h-4 w-4" />根据报告修复章节</>
-                  )}
-                </Button>
+                  修复连贯性问题
+                </button>
               </div>
             )}
 
-            {repairError && (
-              <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-600 dark:text-red-400">
-                修复失败：{repairError}
-              </div>
-            )}
-
-            {repairedContent && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 p-2 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg">
-                  <Check className="h-4 w-4 text-green-600 shrink-0" />
-                  <span className="text-xs text-green-700 dark:text-green-300 font-medium">修复完成</span>
-                </div>
-                <div className="border rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => setExpandedIssue(expandedIssue === -1 ? null : -1)}
-                    className="w-full flex items-center justify-between p-2 text-left hover:bg-muted/30 transition-colors"
-                  >
-                    <span className="text-xs font-medium">查看修复后正文</span>
-                    {expandedIssue === -1 ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </button>
-                  {expandedIssue === -1 && (
-                    <ScrollArea className="max-h-64 border-t">
-                      <div className="p-3 text-xs leading-relaxed whitespace-pre-wrap">
-                        {repairedContent}
-                      </div>
-                    </ScrollArea>
-                  )}
-                </div>
-              </div>
+            {(repairStatus === 'repairing' || repairStatus === 'done' || repairStatus === 'error') && (
+              <StreamRepairOutput
+                content={repairOutput}
+                status={repairStatus}
+                error={repairError}
+                onWrite={handleWrite}
+              />
             )}
           </div>
         )}

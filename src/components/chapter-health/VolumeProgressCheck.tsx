@@ -6,38 +6,38 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import type { VolumeProgressResult } from '@/lib/types'
-import { Button } from '@/components/ui/button'
+import type { VolumeProgressResult } from './types'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Loader2, AlertTriangle, CheckCircle, Target,
-  ChevronDown, ChevronUp, FileText, AlignLeft, Wand2, Check
+  ChevronDown, ChevronUp, FileText, AlignLeft
 } from 'lucide-react'
+import { StreamRepairOutput } from './StreamRepairOutput'
 
 interface VolumeProgressCheckProps {
   novelId: string
   chapterId: string | null
+  onRepairComplete?: () => void
 }
 
-export function VolumeProgressCheck({ novelId, chapterId }: VolumeProgressCheckProps) {
+export function VolumeProgressCheck({ novelId, chapterId, onRepairComplete }: VolumeProgressCheckProps) {
   const queryClient = useQueryClient()
   const [result, setResult] = useState<VolumeProgressResult | null>(null)
   const [expandedWordCount, setExpandedWordCount] = useState(true)
   const [expandedRhythm, setExpandedRhythm] = useState(true)
-  const [showRepaired, setShowRepaired] = useState(false)
-  const [repairing, setRepairing] = useState(false)
-  const [repairedContent, setRepairedContent] = useState<string | null>(null)
+  const [repairOutput, setRepairOutput] = useState('')
+  const [repairStatus, setRepairStatus] = useState<'idle' | 'repairing' | 'done' | 'error'>('idle')
   const [repairError, setRepairError] = useState<string | null>(null)
 
   const checkMutation = useMutation({
     mutationFn: () => api.generate.checkVolumeProgress({ chapterId: chapterId!, novelId }),
     onSuccess: (data) => {
       setResult(data)
-      setRepairedContent(null)
+      setRepairOutput('')
       setRepairError(null)
-      setShowRepaired(false)
+      setRepairStatus('idle')
       queryClient.invalidateQueries({ queryKey: ['check-logs'] })
       toast.success('卷完成度检查完成')
     },
@@ -48,8 +48,8 @@ export function VolumeProgressCheck({ novelId, chapterId }: VolumeProgressCheckP
     if (!chapterId || !result) return
     const hasIssues = result.wordCountIssues.length > 0 || result.rhythmIssues.length > 0
     if (!hasIssues) return
-    setRepairing(true)
-    setRepairedContent(null)
+    setRepairStatus('repairing')
+    setRepairOutput('')
     setRepairError(null)
 
     try {
@@ -60,20 +60,29 @@ export function VolumeProgressCheck({ novelId, chapterId }: VolumeProgressCheckP
         })),
         rhythmIssues: result.rhythmIssues.map(r => ({
           chapterNumber: r.chapterNumber, chapterTitle: r.chapterTitle,
-          dimension: r.dimension, deviation: r.deviation, suggestion: r.suggestion,
+          dimension: r.dimension, deviation: r.deviation, suggestion: r.suggestion || '',
         })),
         volumeContext: `${result.diagnosis}。${result.suggestion}`,
       })
       if (data.ok && data.repairedContent) {
-        setRepairedContent(data.repairedContent)
+        setRepairOutput(data.repairedContent)
+        setRepairStatus('done')
       } else {
         setRepairError(data.error || '修复失败')
+        setRepairStatus('error')
       }
     } catch (error) {
       setRepairError((error as Error).message)
-    } finally {
-      setRepairing(false)
+      setRepairStatus('error')
     }
+  }
+
+  const handleWrite = async (content: string) => {
+    if (!chapterId) return
+    await api.chapters.update(chapterId, { content })
+    setRepairOutput('')
+    setRepairStatus('idle')
+    onRepairComplete?.()
   }
 
   const getScoreColor = (score: number) => {
@@ -81,6 +90,8 @@ export function VolumeProgressCheck({ novelId, chapterId }: VolumeProgressCheckP
     if (score >= 60) return 'text-amber-600'
     return 'text-red-600'
   }
+
+  const hasIssues = result && (result.wordCountIssues.length > 0 || result.rhythmIssues.length > 0)
 
   if (!chapterId) {
     return (
@@ -170,7 +181,6 @@ export function VolumeProgressCheck({ novelId, chapterId }: VolumeProgressCheckP
               </div>
             </div>
 
-            {/* 字数风险列表 */}
             <div className="border rounded-lg overflow-hidden">
               <button
                 onClick={() => setExpandedWordCount(!expandedWordCount)}
@@ -222,11 +232,10 @@ export function VolumeProgressCheck({ novelId, chapterId }: VolumeProgressCheckP
               )}
             </div>
 
-            {/* 节奏风险列表 */}
             <div className="border rounded-lg overflow-hidden">
               <button
                 onClick={() => setExpandedRhythm(!expandedRhythm)}
-                className="w-full flex items-center justify-center justify-between p-3 hover:bg-muted/30 transition-colors"
+                className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors"
               >
                 <div className="flex items-center gap-2">
                   <AlignLeft className="h-4 w-4 text-purple-600" />
@@ -277,7 +286,6 @@ export function VolumeProgressCheck({ novelId, chapterId }: VolumeProgressCheckP
               )}
             </div>
 
-            {/* 诊断和建议 */}
             {result.diagnosis && (
               <div className="p-3 bg-muted/30 rounded-lg text-xs">
                 <div className="text-muted-foreground mb-1">诊断：</div>
@@ -292,53 +300,24 @@ export function VolumeProgressCheck({ novelId, chapterId }: VolumeProgressCheckP
               </div>
             )}
 
-            {(result.wordCountIssues.length > 0 || result.rhythmIssues.length > 0) && (
+            {repairStatus === 'idle' && hasIssues && (
               <div className="pt-2 border-t">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full gap-2"
-                  disabled={repairing}
+                <button
                   onClick={handleRepair}
+                  className="w-full px-4 py-2 text-sm border rounded-md hover:bg-muted/50 transition-colors flex items-center justify-center gap-2"
                 >
-                  {repairing ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" />修复中...</>
-                  ) : (
-                    <><Wand2 className="h-4 w-4" />根据报告修复章节</>
-                  )}
-                </Button>
+                  修复卷进度问题
+                </button>
               </div>
             )}
 
-            {repairError && (
-              <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-600 dark:text-red-400">
-                修复失败：{repairError}
-              </div>
-            )}
-
-            {repairedContent && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 p-2 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg">
-                  <Check className="h-4 w-4 text-green-600 shrink-0" />
-                  <span className="text-xs text-green-700 dark:text-green-300 font-medium">修复完成</span>
-                </div>
-                <div className="border rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => setShowRepaired(!showRepaired)}
-                    className="w-full flex items-center justify-between p-2 text-left hover:bg-muted/30 transition-colors"
-                  >
-                    <span className="text-xs font-medium">查看修复后正文</span>
-                    {showRepaired ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </button>
-                  {showRepaired && (
-                    <ScrollArea className="max-h-64 border-t">
-                      <div className="p-3 text-xs leading-relaxed whitespace-pre-wrap">
-                        {repairedContent}
-                      </div>
-                    </ScrollArea>
-                  )}
-                </div>
-              </div>
+            {(repairStatus === 'repairing' || repairStatus === 'done' || repairStatus === 'error') && (
+              <StreamRepairOutput
+                content={repairOutput}
+                status={repairStatus}
+                error={repairError}
+                onWrite={handleWrite}
+              />
             )}
           </div>
         )}
