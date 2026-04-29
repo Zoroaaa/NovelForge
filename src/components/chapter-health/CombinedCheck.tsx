@@ -10,10 +10,11 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Shield, Link, Target, ShieldAlert, AlertTriangle, CheckCircle,
-  Loader2, ChevronDown, ChevronUp, Wand2, Check,
+  Loader2, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { api } from '@/lib/api'
-import type { VolumeProgressResult } from '@/lib/types'
+import type { VolumeProgressResult } from './types'
+import { StreamRepairOutput } from './StreamRepairOutput'
 
 interface Conflict {
   characterName: string
@@ -50,14 +51,16 @@ interface CombinedCheckProps {
   novelId: string
   chapterId: string | null
   onCheckComplete?: (result: CombinedCheckResult) => void
+  onRepairComplete?: () => void
   combinedReport?: any
 }
 
-export function CombinedCheck({ novelId, chapterId, onCheckComplete, combinedReport }: CombinedCheckProps) {
+export function CombinedCheck({ novelId, chapterId, onCheckComplete, onRepairComplete, combinedReport }: CombinedCheckProps) {
   const [checking, setChecking] = useState(false)
   const [expandedItem, setExpandedItem] = useState<string | null>(null)
-  const [repairing, setRepairing] = useState<string | null>(null)
-  const [repairedContent, setRepairedContent] = useState<string | null>(null)
+  const [repairType, setRepairType] = useState<'coherence' | 'character' | 'volume' | null>(null)
+  const [repairOutput, setRepairOutput] = useState('')
+  const [repairStatus, setRepairStatus] = useState<'idle' | 'repairing' | 'done' | 'error'>('idle')
   const [repairError, setRepairError] = useState<string | null>(null)
   const [internalResult, setInternalResult] = useState<CombinedCheckResult | null>(null)
 
@@ -108,8 +111,9 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete, combinedRep
     if (!chapterId) return
     setChecking(true)
     setInternalResult(null)
-    setRepairedContent(null)
+    setRepairOutput('')
     setRepairError(null)
+    setRepairStatus('idle')
 
     try {
       const data = await api.generate.combinedCheck({ chapterId, novelId })
@@ -153,8 +157,9 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete, combinedRep
 
   const handleRepair = async (type: 'coherence' | 'character' | 'volume') => {
     if (!chapterId || !result) return
-    setRepairing(type)
-    setRepairedContent(null)
+    setRepairType(type)
+    setRepairStatus('repairing')
+    setRepairOutput('')
     setRepairError(null)
 
     try {
@@ -181,22 +186,32 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete, combinedRep
         }))
         body.rhythmIssues = result.volumeProgressCheck.rhythmIssues.map(r => ({
           chapterNumber: r.chapterNumber, chapterTitle: r.chapterTitle,
-          dimension: r.dimension, deviation: r.deviation, suggestion: r.suggestion,
+          dimension: r.dimension, deviation: r.deviation, suggestion: r.suggestion || '',
         }))
         body.volumeContext = `${result.volumeProgressCheck.diagnosis}。${result.volumeProgressCheck.suggestion}`
       }
 
       const data = await api.generate.repairChapter(body)
       if (data.ok && data.repairedContent) {
-        setRepairedContent(data.repairedContent)
+        setRepairOutput(data.repairedContent)
+        setRepairStatus('done')
       } else {
         setRepairError(data.error || '修复失败')
+        setRepairStatus('error')
       }
     } catch (error) {
       setRepairError((error as Error).message)
-    } finally {
-      setRepairing(null)
+      setRepairStatus('error')
     }
+  }
+
+  const handleWrite = async (content: string) => {
+    if (!chapterId) return
+    await api.chapters.update(chapterId, { content })
+    setRepairOutput('')
+    setRepairStatus('idle')
+    setRepairType(null)
+    onRepairComplete?.()
   }
 
   const getScoreColor = (score: number) => {
@@ -204,6 +219,13 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete, combinedRep
     if (score >= 60) return 'text-amber-600'
     return 'text-red-600'
   }
+
+  const hasAnyIssues = result && (
+    result.characterCheck.conflicts.length > 0 ||
+    result.coherenceCheck.issues.length > 0 ||
+    result.volumeProgressCheck.wordCountIssues.length > 0 ||
+    result.volumeProgressCheck.rhythmIssues.length > 0
+  )
 
   if (!chapterId) {
     return (
@@ -239,7 +261,6 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete, combinedRep
 
         {result && !checking && (
           <div className="space-y-3">
-            {/* 综合评分 */}
             <div className="flex items-center gap-2 flex-wrap p-3 bg-muted/30 rounded-lg border">
               <div className="flex items-baseline gap-1">
                 <span className="text-xs text-muted-foreground">综合评分:</span>
@@ -258,7 +279,6 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete, combinedRep
               </div>
             </div>
 
-            {/* 角色冲突列表 */}
             {result.characterCheck.conflicts.length > 0 && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -269,10 +289,10 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete, combinedRep
                     variant="outline"
                     size="sm"
                     className="h-6 text-[10px] gap-1"
-                    disabled={repairing !== null}
+                    disabled={repairStatus !== 'idle'}
                     onClick={() => handleRepair('character')}
                   >
-                    {repairing === 'character' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
+                    {repairStatus === 'repairing' && repairType === 'character' ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
                     AI修复
                   </Button>
                 </div>
@@ -308,7 +328,6 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete, combinedRep
               </div>
             )}
 
-            {/* 角色警告列表 */}
             {result.characterCheck.warnings.filter(w => !w.includes('失败')).length > 0 && (
               <div className="space-y-1">
                 {result.characterCheck.warnings.filter(w => !w.includes('失败')).map((w, i) => (
@@ -319,7 +338,6 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete, combinedRep
               </div>
             )}
 
-            {/* 连贯性问题列表 */}
             {result.coherenceCheck.issues.length > 0 && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -330,10 +348,10 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete, combinedRep
                     variant="outline"
                     size="sm"
                     className="h-6 text-[10px] gap-1"
-                    disabled={repairing !== null}
+                    disabled={repairStatus !== 'idle'}
                     onClick={() => handleRepair('coherence')}
                   >
-                    {repairing === 'coherence' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
+                    {repairStatus === 'repairing' && repairType === 'coherence' ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
                     AI修复
                   </Button>
                 </div>
@@ -368,7 +386,6 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete, combinedRep
               </div>
             )}
 
-            {/* 卷进度摘要 */}
             {(result.volumeProgressCheck.wordCountIssues.length > 0 || result.volumeProgressCheck.rhythmIssues.length > 0) && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -379,10 +396,10 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete, combinedRep
                     variant="outline"
                     size="sm"
                     className="h-6 text-[10px] gap-1"
-                    disabled={repairing !== null}
+                    disabled={repairStatus !== 'idle'}
                     onClick={() => handleRepair('volume')}
                   >
-                    {repairing === 'volume' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
+                    {repairStatus === 'repairing' && repairType === 'volume' ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
                     AI修复
                   </Button>
                 </div>
@@ -400,44 +417,20 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete, combinedRep
               </div>
             )}
 
-            {/* 无问题提示 */}
-            {!result.hasIssues && (
+            {!hasAnyIssues && (
               <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded">
                 <CheckCircle className="h-4 w-4 text-green-600" />
                 <span className="text-xs text-green-700 dark:text-green-300">恭喜！角色一致性、章节连贯性和卷完成度均未发现问题。</span>
               </div>
             )}
 
-            {/* 修复结果展示 */}
-            {repairError && (
-              <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-600 dark:text-red-400">
-                修复失败：{repairError}
-              </div>
-            )}
-
-            {repairedContent && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 p-2 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg">
-                  <Check className="h-4 w-4 text-green-600 shrink-0" />
-                  <span className="text-xs text-green-700 dark:text-green-300 font-medium">修复完成</span>
-                </div>
-                <div className="border rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => setExpandedItem(expandedItem === 'repaired' ? null : 'repaired')}
-                    className="w-full flex items-center justify-between p-2 text-left hover:bg-muted/30 transition-colors"
-                  >
-                    <span className="text-xs font-medium">查看修复后正文</span>
-                    {expandedItem === 'repaired' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </button>
-                  {expandedItem === 'repaired' && (
-                    <ScrollArea className="max-h-64 border-t">
-                      <div className="p-3 text-xs leading-relaxed whitespace-pre-wrap text-foreground">
-                        {repairedContent}
-                      </div>
-                    </ScrollArea>
-                  )}
-                </div>
-              </div>
+            {(repairStatus === 'repairing' || repairStatus === 'done' || repairStatus === 'error') && (
+              <StreamRepairOutput
+                content={repairOutput}
+                status={repairStatus}
+                error={repairError}
+                onWrite={handleWrite}
+              />
             )}
           </div>
         )}

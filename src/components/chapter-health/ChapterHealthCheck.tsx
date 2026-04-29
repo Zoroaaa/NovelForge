@@ -410,7 +410,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
         })) || []
         body.rhythmIssues = report.rhythmIssues?.map((r: any) => ({
           chapterNumber: r.chapterNumber, chapterTitle: r.chapterTitle,
-          dimension: r.dimension, deviation: r.deviation, suggestion: r.suggestion,
+          dimension: r.dimension, deviation: r.deviation, suggestion: r.suggestion || '',
         })) || []
         body.volumeContext = `${report.diagnosis || ''}。${report.suggestion || ''}`
       }
@@ -603,6 +603,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
                 })
                 loadLatestCheckLog()
               }}
+              onRepairComplete={handleRepairComplete}
             />
           </div>
         </TabsContent>
