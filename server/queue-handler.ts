@@ -224,13 +224,6 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
           { issuesContext: prevChapterAdvice ? [prevChapterAdvice] : undefined }
         )
 
-        if (env.TASK_QUEUE) {
-          await env.TASK_QUEUE.send({
-            type: 'post_process_chapter',
-            payload: { chapterId: chapter.id, novelId, enableAutoSummary: true },
-          })
-        }
-
         try {
           const qScore = await checkQuality(env, { chapterId: chapter.id, novelId })
           const BATCH_QUALITY_GATE = 45
