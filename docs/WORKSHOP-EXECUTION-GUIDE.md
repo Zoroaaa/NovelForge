@@ -1,8 +1,8 @@
 # NovelForge 创作工坊 — 完整执行指南
 
-> 版本: 1.1.0 | 模块: `server/services/workshop/` (v1.11.0 模块化)
+> 版本: 1.2.0 | 模块: `server/services/workshop/` (v1.11.0 模块化)
 > 前端页面: [WorkshopPage.tsx](file:///d:/开发项目/NovelForge/src/pages/WorkshopPage.tsx)
-> 创建日期: 2026-04-25 | 更新日期: 2026-04-27
+> 创建日期: 2026-04-25 | 更新日期: 2026-04-29
 
 ---
 
@@ -10,35 +10,38 @@
 
 ### 1.1 什么是创作工坊
 
-创作工坊是 NovelForge 的**对话式 AI 创作引擎**，通过多轮自然语言对话，帮助作者从零开始构建完整的小说框架。与传统的大纲工具不同，创作工坊采用**渐进式引导**方式，通过 AI 主动提问和互动，逐步完善小说的核心设定、世界观、角色、卷纲和章节大纲。
+创作工坊是 NovelForge 的**对话式 AI 创作引擎**，通过多轮自然语言对话，帮助作者从零开始构建完整的小说框架。与传统的大纲工具不同，创作工坊采用**渐进式引导**方式，通过 AI 主动提问和互动，逐步完善小说的核心设定、世界观、角色和卷纲。
 
 ### 1.2 核心能力
 
 | 能力 | 说明 |
 |------|------|
-| **多阶段创作** | 支持概念构思 → 世界观构建 → 角色设计 → 卷纲规划 → 章节大纲五个阶段 |
+| **多阶段创作** | 支持概念构思 → 世界观构建 → 角色设计 → 卷纲规划四个阶段 |
 | **智能数据提取** | 从对话中自动提取结构化数据（JSON 格式） |
 | **实时预览** | 右侧面板实时显示已提取的创作数据 |
 | **数据导入** | 支持导入 JSON/TXT/MD 格式的已有数据 |
 | **一键提交** | 将对话成果一键写入数据库，创建完整小说项目 |
+| **重新提取** | 支持从已有消息历史中手动重新提取数据 |
 
 ### 1.3 创作阶段详解
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    创作工坊五阶段流程                            │
+│                    创作工坊四阶段流程                            │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  ① 概念构思  →  ② 世界观构建  →  ③ 角色设计  →  ④ 卷纲规划  →  ⑤ 章节大纲  │
-│  (concept)      (worldbuild)      (character_      (volume_     (chapter_    │
-│                                   design)         outline)      outline)     │
+│  ① 概念构思  →  ② 世界观构建  →  ③ 角色设计  →  ④ 卷纲规划    │
+│  (concept)      (worldbuild)      (character_      (volume_     │
+│                                   design)         outline)      │
 │                                                                 │
-│  起点：         携带：            携带：           携带：         携带：        │
-│  无上下文       concept数据        concept+         concept+      所有前期       │
-│                                worldbuild数据     worldbuild+    数据          │
-│                                               character数据                    │
+│  起点：         携带：            携带：           携带：       │
+│  无上下文       concept数据        concept+         concept+      │
+│                                worldbuild数据     worldbuild+    │
+│                                               character数据     │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+**说明**：章节大纲（chapter_outline）阶段已整合到卷纲规划阶段中，在规划卷纲时同步输出各卷的章节事件线，无需单独阶段。
 
 ---
 
@@ -56,7 +59,7 @@
 │  - 新建对话  │  - 流式 AI 回复             │  - 世界设定卡片  │
 │  - 重命名    │  - 消息输入框               │  - 角色卡片      │
 │  - 删除      │  - 发送按钮                 │  - 卷纲卡片      │
-│             │  - 阶段选择器               │  - 章节卡片      │
+│             │  - 阶段选择器               │  - 规则卡片      │
 │             │                            │                  │
 └─────────────┴────────────────────────────┴──────────────────┘
 ```
@@ -65,7 +68,7 @@
 
 未创建会话时显示引导页面，包含：
 - 创作工坊图标和简介
-- 五阶段流程图示
+- 四阶段流程图示
 - **开始新的创作对话**按钮
 
 点击按钮后自动创建新会话并进入对话界面。
@@ -76,6 +79,7 @@
 - **流式响应**：AI 回复支持 SSE 流式输出，显示加载动画
 - **输入框**：支持 Enter 发送，Shift+Enter 换行
 - **阶段选择器**：右上角下拉菜单，可随时切换创作阶段
+- **重新提取**：当 AI 回复格式有误时，可手动触发从消息历史中重新提取数据
 
 ### 2.4 右侧预览面板
 
@@ -83,11 +87,11 @@
 
 | 数据类型 | 显示内容 |
 |----------|----------|
-| 基本信息 | 标题、流派、简介、核心看点 |
+| 基本信息 | 标题、流派、简介、核心看点、目标字数/章节数 |
 | 世界设定 | 6 类设定（世界观/境界体系/势力组织/地理环境/宝物功法/其他） |
-| 角色设计 | 角色名、定位（主角/配角/反派）、描述 |
-| 卷纲规划 | 卷标题、概述、事件线、章节数 |
-| 章节大纲 | 章节标题、摘要、出场角色、伏笔操作 |
+| 角色设计 | 角色名、定位（主角/配角/反派）、描述、别名、境界、属性 |
+| 卷纲规划 | 卷标题、概述、事件线、伏笔规划、章节数字数目标 |
+| 创作规则 | 规则分类、标题、内容、优先级 |
 
 ---
 
@@ -100,6 +104,7 @@
 | `POST` | `/api/workshop/session` | 创建新会话 |
 | `GET` | `/api/workshop/session/:id` | 获取会话详情 |
 | `POST` | `/api/workshop/session/:id/message` | 发送消息（SSE 流式） |
+| `POST` | `/api/workshop/session/:id/re-extract` | 从消息历史重新提取数据 |
 | `POST` | `/api/workshop/session/:id/commit` | 提交会话到数据库 |
 | `GET` | `/api/workshop/sessions` | 列出所有活跃会话 |
 | `DELETE` | `/api/workshop/session/:id` | 删除会话 |
@@ -112,7 +117,7 @@
 POST /api/workshop/session
 {
   "novelId": "可选，关联已有小说ID",
-  "stage": "concept | worldbuild | character_design | volume_outline | chapter_outline"
+  "stage": "concept | worldbuild | character_design | volume_outline"
 }
 ```
 
@@ -140,7 +145,6 @@ POST /api/workshop/session
 | `worldbuild` | 小说概念（标题、总纲） |
 | `character_design` | 小说概念 + 世界观设定 |
 | `volume_outline` | 小说概念 + 世界观 + 角色 |
-| `chapter_outline` | 所有前期数据 + 卷 + 章节 |
 
 ### 3.3 发送消息（核心接口）
 
@@ -169,23 +173,46 @@ data: [DONE]
 ```json
 {
   "title": "《仙逆》",
-  "genre": "玄幻修仙",
-  "description": "一个平凡少年逆天改命的修仙故事",
-  "coreAppeal": ["废柴逆袭", "热血战斗", "感人情义"],
-  "targetWordCount": "500000",
-  "targetChapters": "300",
+  "genre": "东方玄幻-仙侠修真-宗门争霸",
+  "description": "废材少爷林岩被逐出家门，偶得上古传承，从最底层修炼者开始，以碾压式实力逐步征服天玄大陆，揭开自身身世之谜",
+  "coreAppeal": ["低调装逼打脸流", "废柴逆袭热血战斗", "感人情义"],
+  "targetWordCount": "500",
+  "targetChapters": "1500",
   "writingRules": [
-    {"category": "pacing", "title": "节奏要求", "content": "每章至少一个爽点..."}
+    {
+      "category": "taboo",
+      "title": "主角行为禁忌",
+      "content": "主角在未受到存亡威胁时不得主动杀戮无辜，违反会触发心魔，必须在后续章节体现影响",
+      "priority": 1
+    }
   ]
 }
 ```
 
 **错误响应**：
-```json
+```
 data: {"type": "error", "error": "未配置模型..."}
 ```
 
-### 3.4 提交会话
+### 3.4 重新提取数据
+
+**请求**
+```json
+POST /api/workshop/session/:id/re-extract
+```
+
+**响应**
+```json
+{
+  "ok": true,
+  "extractedData": {...},
+  "message": "重新提取完成，提取到字段: title, genre, description..."
+}
+```
+
+**说明**：当 AI 回复格式有误或需要重新解析时，触发此接口从消息历史中重新提取数据。
+
+### 3.5 提交会话
 
 **请求**
 ```json
@@ -203,7 +230,7 @@ POST /api/workshop/session/:id/commit
     "worldSettings": [...],
     "characters": [...],
     "volumes": [...],
-    "chapters": [...]
+    "writingRules": [...]
   },
   "message": "创作数据已成功提交到数据库！"
 }
@@ -211,12 +238,12 @@ POST /api/workshop/session/:id/commit
 
 **说明**：提交后会创建完整的小说项目，包括：
 - `novels` 表记录
-- `masterOutline` 表记录
+- `masterOutline` 表记录（由 AI 生成总纲内容）
 - `novelSettings` 表记录（如有世界设定）
 - `characters` 表记录（如有角色）
 - `volumes` 表记录（如有卷纲）
-- `chapters` 表记录（如有章节大纲）
 - `writingRules` 表记录（如有创作规则）
+- `foreshadowing` 表记录（从卷纲的伏笔规划中提取）
 - `entityIndex` 实体索引更新
 
 ---
@@ -229,17 +256,30 @@ POST /api/workshop/session/:id/commit
 
 **任务**：完善小说的基本概念
 
+**输出模式**：
+- **新建小说**：全量输出，输出完整的故事策划案
+- **已有小说**：增量输出模式，只输出本次修改的字段
+
 **输出约束**：只允许输出以下字段
 ```json
 {
   "title": "小说标题",
-  "genre": "流派",
-  "description": "一句话简介",
-  "coreAppeal": ["核心爽点1", "核心爽点2"],
-  "targetWordCount": "预计总字数",
-  "targetChapters": "预计章节数",
+  "genre": "一级类型-二级类型-三级标签，如：东方玄幻-仙侠修真-宗门争霸",
+  "description": "必须包含四要素的一句话简介（60-100字）：[主角身份] + [初始处境/困境] + [核心目标] + [独特钩子/差异化]",
+  "coreAppeal": [
+    "核心爽点（具体，如：低调装逼打脸流）",
+    "独特卖点（区别于同类的差异化）",
+    "情感钩子（让读者持续追更的情感动力）"
+  ],
+  "targetWordCount": "数字，如：500",
+  "targetChapters": "数字，如：1500",
   "writingRules": [
-    {"category": "类别", "title": "规则标题", "content": "规则内容"}
+    {
+      "category": "taboo|style|character|plot|pacing|world|custom",
+      "title": "规则标题",
+      "content": "具体规则内容（50-150字），必须包含边界条件和违规后果",
+      "priority": 1
+    }
   ]
 }
 ```
@@ -263,24 +303,85 @@ POST /api/workshop/session/:id/commit
 
 **任务**：完善世界观设定
 
+**输出模式**：
+- **新建小说**：全量输出，输出完整的 worldSettings
+- **已有小说**：增量输出模式，只输出本次新增或修改的设定
+
 **输出约束**：只允许输出以下字段
 ```json
 {
   "worldSettings": [
-    {"type": "worldview", "title": "世界观", "content": "..."},
-    {"type": "power_system", "title": "境界体系", "content": "..."},
-    {"type": "faction", "title": "势力组织", "content": "..."},
-    {"type": "geography", "title": "地理环境", "content": "..."},
-    {"type": "item_skill", "title": "宝物功法", "content": "..."},
-    {"type": "misc", "title": "其他设定", "content": "..."}
+    {
+      "type": "power_system|worldview|faction|geography|item_skill|misc",
+      "title": "设定名称",
+      "content": "按模板格式填写，内容完整",
+      "importance": "high|normal|low"
+    }
   ]
 }
 ```
 
-**说明**：
-- `type` 必须是六种类型之一
-- 输出是**完整版本**，会替换旧版本而非追加
-- 设定要求自洽，与 concept 阶段的数据保持一致
+**各类型 content 模板**：
+
+**power_system（境界体系）** — 整个体系只需一条记录：
+```
+【境界列表】从低到高，每个境界单独一行
+炼气期（一至九层）：灵气感知与汇聚阶段，无法凌空御剑
+筑基期（前中后期）：建立灵力根基，可御器飞行
+...
+
+【突破条件】通用突破条件（灵气积累+机缘/感悟），特殊境界的特殊条件
+
+【跨境界战力】同境界战力差异说明，是否存在跨级战斗可能
+
+【独特规则】本小说境界体系的特殊规则（如有）
+```
+
+**faction（势力组织）** — 每个势力单独一条记录：
+```
+【性质】宗门/王朝/家族/邪道组织/...
+【势力层级】在本小说世界的地位
+【控制区域】势力占据的地理范围
+【实力标准】顶尖高手的境界水平
+【与主角关系】主角初始关系及原因，后续走向
+【核心矛盾】该势力内部或与外部的主要冲突
+【重要人物】关键NPC：姓名·职位·境界（3-5人）
+【特色资源】该势力独有的资源、传承或技术
+```
+
+**geography（地理环境）** — 每个重要地区单独一条记录：
+```
+【位置】在世界地图中的位置描述
+【特点】地理特征和气候
+【资源/危险】特有资源或危险因素
+【控制势力】属于哪个势力或无主之地
+【主角关联】主角何时会到达，在此发生什么重要事件
+```
+
+**item_skill（功法/宝物）** — 每套功法或宝物单独一条记录：
+```
+【类型】功法/法宝/丹药/阵法/...
+【来源/获取途径】
+【效果与限制】具体效果，以及使用条件或副作用
+【等级定位】对应境界体系中的档次
+【主角是否拥有】是/否/将会获得（第X卷）
+```
+
+**worldview（世界观）** — 通常一条记录：
+```
+【世界背景】一段话的世界简介
+【核心法则】影响所有角色的世界规律
+【当前格局】主要势力分布和当前时代的特征
+【世界危机】驱动宏观剧情的深层危机（如有）
+【历史背景】影响当前剧情的重要历史事件（1-3个）
+```
+
+**importance 可选值**：
+| 值 | 说明 |
+|----|------|
+| `high` | 高频召回，如境界体系、主角势力 |
+| `normal` | 按需召回 |
+| `low` | 背景参考 |
 
 ### 4.3 角色设计阶段 (character_design)
 
@@ -288,20 +389,29 @@ POST /api/workshop/session/:id/commit
 
 **任务**：设计主角、配角、反派
 
+**输出模式**：
+- **新建小说**：全量输出，输出完整的角色阵容
+- **已有小说**：增量输出模式，只输出本次新增或修改的角色
+
 **输出约束**：只允许输出以下字段
 ```json
 {
   "characters": [
     {
-      "name": "角色名",
+      "name": "角色全名",
       "role": "protagonist | supporting | antagonist | minor",
-      "description": "详细描述（外貌、性格、背景等）",
-      "aliases": ["别名1", "别名2"],
+      "description": "200字以内的综合定位描述",
+      "aliases": ["常用称呼", "外号", "江湖称号"],
+      "powerLevel": "精确境界名（与power_system一致）",
       "attributes": {
-        "relationships": ["与其他角色的关系"],
-        "其他属性": "值"
-      },
-      "powerLevel": "战斗力等级（玄幻/修仙类）"
+        "personality": "性格特点，用3-6个具体关键词描述",
+        "speechPattern": "说话方式和语言习惯的具体描述（2-4句）",
+        "appearance": "外貌辨识特征（1-2句）",
+        "background": "对当前剧情有影响的关键背景（创伤/秘密/执念）",
+        "goal": "初始阶段明确目标",
+        "weakness": "具体的性格弱点或心理禁忌",
+        "relationships": ["与XXX：关系描述"]
+      }
     }
   ]
 }
@@ -315,58 +425,78 @@ POST /api/workshop/session/:id/commit
 | `antagonist` | 反派 |
 | `minor` | 次要角色 |
 
+**attributes 字段规范**：
+- `personality`：必须具体，如"外冷内热、睚眦必报、目的性极强"
+- `speechPattern`：直接影响对话质量，如"话少但精准，一句话里有两层含义；称呼对方总是用'阁下'而不是'你'"
+- `weakness`：必须有操作性，如"对家人的软弱：任何威胁到家人的事会让他失去理智"
+
 ### 4.4 卷纲规划阶段 (volume_outline)
 
 **AI 角色**：故事架构师
 
 **任务**：将故事分成 3-8 卷，制定每卷的详细规划
 
+**输出模式**：
+- **新建小说**：全量输出，输出完整的卷纲
+- **已有小说**：增量输出模式，只输出本次新增或修改的卷
+
+**字数与章节数约束**：
+- 每章字数固定为 3000-5000 字
+- targetWordCount / targetChapterCount 必须符合约 4000 字/章的比例
+- eventLine 条数必须等于 targetChapterCount（硬性要求）
+
+**【换算公式（硬性执行）】
+该卷 targetChapterCount = round(该卷 targetWordCount ÷ 4000)
+eventLine 条数 = targetChapterCount**
+
 **输出约束**：只允许输出以下字段
 ```json
 {
   "volumes": [
     {
-      "title": "第一卷标题",
-      "summary": "本卷主要内容概述（1-2句话）",
-      "blueprint": "详细的情节蓝图...",
-      "eventLine": ["关键事件1", "重要转折点"],
-      "notes": ["伏笔1", "备注信息"],
-      "targetWordCount": 50000,
-      "targetChapterCount": 15
-    }
-  ]
-}
-```
-
-### 4.5 章节大纲阶段 (chapter_outline)
-
-**AI 角色**：细化的故事编辑
-
-**任务**：将卷纲拆分为具体章节
-
-**输出约束**：只允许输出以下字段
-```json
-{
-  "chapters": [
-    {
-      "title": "第X章 标题",
-      "summary": "本章简要概述",
-      "outline": "本章大纲...",
-      "characters": ["出场角色"],
-      "foreshadowingActions": [
-        {"action": "setup | resolve", "target": "伏笔名称", "description": "如何操作"}
+      "title": "第一卷：卷标题（标题要体现本卷核心主题）",
+      "summary": "本卷一句话概述：主角从[状态A]到[状态B]，通过[核心事件]实现[目标或转变]（30-50字）",
+      "blueprint": "按【本卷主题】...【伏笔规划】标签格式完整填写",
+      "eventLine": [
+        "第1章：[场景标签] 事件描述（起因→结果）",
+        "第2章：[场景标签] 事件描述（起因→结果）"
       ],
-      "keyScenes": ["场景1", "场景2"]
+      "foreshadowingSetup": ["伏笔埋入计划"],
+      "foreshadowingResolve": ["伏笔回收计划"],
+      "notes": ["本卷创作注意事项"],
+      "targetWordCount": 200000,
+      "targetChapterCount": 50
     }
   ]
 }
 ```
 
-**foreshadowingActions.action 说明**：
-| 值 | 说明 |
-|----|------|
-| `setup` | 埋下伏笔 |
-| `resolve` | 回收伏笔 |
+**eventLine 格式要求**：
+- 格式：`"第N章：[场景标签] 事件描述（起因→结果）"`
+- 场景标签：用方括号标注主要场景，如 `[宗门大殿]` `[荒野]` `[秘境内部]`
+- 事件描述：必须包含起因和结果，约30-50字
+- **条数必须等于 targetChapterCount**
+
+**blueprint 格式（结构化）**：
+```
+【本卷主题】一句话说明本卷的核心议题和叙事重心
+
+【开卷状态】主角在本卷第一章开始时的：位置·境界·目标·处境
+
+【核心冲突】本卷的主要矛盾（明确双方、冲突根源、利益边界）
+
+【关键节点】
+- 节点1（约第X章）：[类型：转折/高潮/揭秘] 具体事件描述
+- 节点2（约第X章）：...
+
+【卷末状态】主角在本卷最后一章结束时的：位置·境界·目标·与下卷的衔接点
+
+【情感弧线】主角在本卷经历的核心情感/心态变化
+
+【伏笔规划】
+- 埋入：[伏笔名称] 第X章前后，通过[具体方式]埋入
+- 回收：[伏笔名称] 第X章，以[方式]揭露
+```
 
 ---
 
@@ -386,7 +516,6 @@ POST /api/workshop/session/:id/commit
 | `rule` | 创作规则 |
 | `volume` | 卷/部结构 |
 | `foreshadowing` | 伏笔线索 |
-| `chapter` | 章节内容 |
 
 ### 5.3 导入方式
 
@@ -413,14 +542,6 @@ POST /api/workshop/session/:id/commit
 | `create` | 仅新建（跳过已存在的） |
 | `update` | 仅更新（需要选择目标记录） |
 | `upsert` | 智能导入（存在则更新，不存在则新建）**默认** |
-
-### 5.6 批量导入
-
-支持一次导入多个文件/段落，流程：
-1. 上传多个文件 → 自动合并内容
-2. 点击解析 → AI 分别解析每个文件
-3. 预览所有解析结果
-4. 确认导入 → 批量写入数据库
 
 ---
 
@@ -482,7 +603,7 @@ POST /api/workshop/session/:id/commit
    └─ AI 自动加载概念阶段的数据作为上下文
 
 步骤 5：重复创作
-   └─ 依次完成：世界观 → 角色 → 卷纲 → 章节
+   └─ 依次完成：世界观 → 角色 → 卷纲
 
 步骤 6：提交创建
    └─ 点击"提交创建小说"
@@ -563,9 +684,10 @@ POST /api/workshop/session/:id/commit
 ```
 1. 角色定义：你是一个专业的小说策划顾问/世界构建大师/...
 2. 阶段任务：本阶段的任务说明
-3. 只读上下文：当前阶段可以参考的已有数据
-4. 输出约束：严格定义允许输出的字段
-5. 格式要求：JSON 代码块的格式规范
+3. 输出模式判断：新建小说（全量）vs 已有小说（增量）
+4. 只读上下文：当前阶段可以参考的已有数据
+5. 输出约束：严格定义允许输出的字段
+6. 格式要求：各字段的详细格式规范
 ```
 
 ### 9.2 只读上下文机制
@@ -573,10 +695,9 @@ POST /api/workshop/session/:id/commit
 | 阶段 | 可参考的数据 |
 |------|-------------|
 | `concept` | 无（起点） |
-| `worldbuild` | title, genre, description, coreAppeal, targetWordCount, targetChapters |
+| `worldbuild` | title, genre, description, coreAppeal, targetWordCount, targetChapters, writingRules |
 | `character_design` | concept + worldSettings |
 | `volume_outline` | concept + worldSettings + characters |
-| `chapter_outline` | concept + worldSettings + characters + volumes + chapters |
 
 **重要**：只读数据只能参考，不能在 JSON 输出中修改。
 
@@ -592,14 +713,14 @@ const reader = response.body?.getReader();
 while (true) {
   const { done, value } = await reader.read();
   if (done) break;
-  
+
   const text = decoder.decode(value);
   const lines = text.split('\n');
-  
+
   for (const line of lines) {
     if (!line.startsWith('data:')) continue;
     const data = JSON.parse(line.slice(5));
-    
+
     if (data.content) {
       // 追加 AI 回复内容
     }
@@ -619,11 +740,12 @@ while (true) {
 - **提取数据**：每次 AI 回复后保存到 `workshopSessions.extractedData`
 - **提交后**：从会话提取数据写入正式表（novels, characters 等）
 
-### 9.5 错误恢复
+### 9.5 错误恢复与容错
 
 - **生成中断**：即使 AI 回复中断，已生成的部分内容也会保存
+- **JSON 截断**：当 AI 输出因长度限制被截断时，`extract.ts` 提供了兜底提取逻辑
+- **卷纲截断检测**：如果检测到卷纲输出疑似被截断，会在回复末尾添加警告提示
 - **标题生成失败**：不影响主流程，仅记录警告日志
-- **会话不存在**：返回 404 错误
 
 ---
 
@@ -645,7 +767,6 @@ while (true) {
 | 结构化优先 | JSON 格式最容易解析 |
 | Markdown 次之 | 带有标题标记的文档 AI 也能较好识别 |
 | 纯文本谨慎 | 纯文本可能需要更多解析时间 |
-| 批量导入分批 | 大量数据建议分批导入 |
 
 ### 10.3 模型选择
 
@@ -654,7 +775,7 @@ while (true) {
 | 创意构思 | GPT-4o / Claude Sonnet 4 |
 | 细节填充 | GPT-4o / Claude Sonnet 4 |
 | 世界观构建 | Claude 3.5 Sonnet（创意能力强） |
-| 格式化导入 | 任意模型均可 |
+| 卷纲输出 | 推荐增大 max_tokens（32000 以上） |
 
 ---
 
@@ -667,7 +788,7 @@ while (true) {
 **A**: 已生成的部分会自动保存。可以继续发送消息，AI 会基于上下文继续回复。
 
 ### Q3: 可以修改已提取的数据吗？
-**A**: 可以。继续对话，告诉 AI 需要修改的内容，AI 会更新提取的数据。
+**A**: 可以。继续对话，告诉 AI 需要修改的内容，AI 会更新提取的数据（增量模式）。
 
 ### Q4: 提交后发现内容有误怎么办？
 **A**: 提交是一次性写入。如需修改，可以进入小说工作区手动编辑。
@@ -681,6 +802,9 @@ while (true) {
 ### Q7: 可以导入到已有小说吗？
 **A**: 可以。创建会话时传入 `novelId`，或在导入时选择目标小说。
 
+### Q8: 卷纲数据提取失败怎么办？
+**A**: 可以使用"重新提取"功能，从消息历史中重新解析数据。也可尝试在模型配置中增大 max_tokens。
+
 ---
 
 ## 十二、文件索引 (v1.11.0)
@@ -689,47 +813,46 @@ while (true) {
 
 | 文件 | 说明 |
 |------|------|
-| [index.ts](file:///d:/开发项目/NovelForge/server/services/workshop/index.ts) | 统一导出入口 (198行) |
-| [commit.ts](file:///d:/开发项目/NovelForge/server/services/workshop/commit.ts) | commit逻辑增强 (580行) |
-| [extract.ts](file:///d:/开发项目/NovelForge/server/services/workshop/extract.ts) | 数据提取服务 (100行) |
-| [helpers.ts](file:///d:/开发项目/NovelForge/server/services/workshop/helpers.ts) | 辅助函数 (116行) |
-| [prompt.ts](file:///d:/开发项目/NovelForge/server/services/workshop/prompt.ts) | 分阶段Prompt (660行) |
-| [session.ts](file:///d:/开发项目/NovelForge/server/services/workshop/session.ts) | 会话管理 (264行) |
-| [types.ts](file:///d:/开发项目/NovelForge/server/services/workshop/types.ts) | 类型定义 (65行) |
+| [index.ts](file:///d:/开发项目/NovelForge/server/services/workshop/index.ts) | 统一导出入口，处理消息的核心逻辑 |
+| [commit.ts](file:///d:/开发项目/NovelForge/server/services/workshop/commit.ts) | commit 逻辑增强，包含总纲生成和伏笔提取 |
+| [extract.ts](file:///d:/开发项目/NovelForge/server/services/workshop/extract.ts) | 数据提取服务，含 JSON 容错和兜底提取 |
+| [helpers.ts](file:///d:/开发项目/NovelForge/server/services/workshop/helpers.ts) | 辅助函数，总纲内容构建 |
+| [prompt.ts](file:///d:/开发项目/NovelForge/server/services/workshop/prompt.ts) | 分阶段 Prompt，含详细格式模板 |
+| [session.ts](file:///d:/开发项目/NovelForge/server/services/workshop/session.ts) | 会话管理，加载小说上下文 |
+| [types.ts](file:///d:/开发项目/NovelForge/server/services/workshop/types.ts) | 类型定义 |
 
 ### 前端组件 (src/components/workshop/)
 
 | 文件 | 说明 |
 |------|------|
-| [WorkshopPage.tsx](file:///d:/开发项目/NovelForge/src/pages/WorkshopPage.tsx) | 主页面 (v1.11.0大幅精简) |
+| [WorkshopPage.tsx](file:///d:/开发项目/NovelForge/src/pages/WorkshopPage.tsx) | 主页面 (v3.0 重构版) |
 | [WorkshopSidebar.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/WorkshopSidebar.tsx) | 侧边栏组件 |
-| [ChatInput.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/ChatInput.tsx) | 聊天输入 (v1.11.0新增) |
-| [ChatMessageList.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/ChatMessageList.tsx) | 消息列表 (v1.11.0新增) |
-| [CommitDialog.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/CommitDialog.tsx) | 提交确认 (v1.11.0新增) |
-| [PreviewPanel.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewPanel.tsx) | 预览面板 (v1.11.0新增) |
-| [PreviewBasicInfo.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewBasicInfo.tsx) | 基本信息预览 (v1.11.0新增) |
-| [PreviewChapters.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewChapters.tsx) | 章节预览 (v1.11.0新增) |
-| [PreviewCharacters.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewCharacters.tsx) | 角色预览 (v1.11.0新增) |
-| [PreviewVolumes.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewVolumes.tsx) | 卷预览 (v1.11.0新增) |
-| [PreviewWorldSettings.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewWorldSettings.tsx) | 世界设定预览 (v1.11.0新增) |
-| [PreviewWritingRules.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewWritingRules.tsx) | 规则预览 (v1.11.0新增) |
-| [WelcomeView.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/WelcomeView.tsx) | 欢迎视图 (v1.11.0新增) |
-| [WorkshopHeaderActions.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/WorkshopHeaderActions.tsx) | 头部操作 (v1.11.0新增) |
+| [ChatInput.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/ChatInput.tsx) | 聊天输入组件 |
+| [ChatMessageList.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/ChatMessageList.tsx) | 消息列表组件 |
+| [CommitDialog.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/CommitDialog.tsx) | 提交确认对话框 |
+| [PreviewPanel.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewPanel.tsx) | 预览面板容器 |
+| [PreviewBasicInfo.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewBasicInfo.tsx) | 基本信息预览 |
+| [PreviewChapters.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewChapters.tsx) | 章节预览 |
+| [PreviewCharacters.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewCharacters.tsx) | 角色预览 |
+| [PreviewVolumes.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewVolumes.tsx) | 卷预览 |
+| [PreviewWorldSettings.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewWorldSettings.tsx) | 世界设定预览 |
+| [PreviewWritingRules.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/PreviewWritingRules.tsx) | 规则预览 |
+| [WelcomeView.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/WelcomeView.tsx) | 欢迎视图 |
+| [WorkshopHeaderActions.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/WorkshopHeaderActions.tsx) | 头部操作按钮 |
 | [ImportDataDialog.tsx](file:///d:/开发项目/NovelForge/src/components/workshop/ImportDataDialog.tsx) | 导入对话框 |
-| [types.ts](file:///d:/开发项目/NovelForge/src/components/workshop/types.ts) | 前端类型定义 (v1.11.0新增) |
+| [types.ts](file:///d:/开发项目/NovelForge/src/components/workshop/types.ts) | 前端类型定义 |
 
-### API路由
+### API 路由
 
 | 文件 | 说明 |
 |------|------|
-| [routes/workshop.ts](file:///d:/开发项目/NovelForge/server/routes/workshop.ts) | 创意工坊API路由 |
+| [routes/workshop.ts](file:///d:/开发项目/NovelForge/server/routes/workshop.ts) | 创作工坊 API 路由 |
 | [services/formatImport.ts](file:///d:/开发项目/NovelForge/server/services/formatImport.ts) | 导入格式化服务 |
-| [routes/workshop-import.ts](file:///d:/开发项目/NovelForge/server/routes/workshop-import.ts) | 导入API路由 |
-| [routes/workshop-format-import.ts](file:///d:/开发项目/NovelForge/server/routes/workshop-format-import.ts) | 格式化导入API |
-| [services/agent/constants.ts](file:///d:/开发项目/NovelForge/server/services/agent/constants.ts) | Agent系统常量 |
+| [routes/workshop-import.ts](file:///d:/开发项目/NovelForge/server/routes/workshop-import.ts) | 导入 API 路由 |
+| [routes/workshop-format-import.ts](file:///d:/开发项目/NovelForge/server/routes/workshop-format-import.ts) | 格式化导入 API |
 
 ---
 
-> 文档版本：1.1.0
-> 最后更新：2026-04-27
+> 文档版本：1.2.0
+> 最后更新：2026-04-29
 > 维护者：NovelForge 开发团队

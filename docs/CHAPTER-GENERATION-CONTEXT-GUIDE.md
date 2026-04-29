@@ -1,8 +1,8 @@
 # NovelForge 章节生成上下文构建 — 完整执行指南
 
-> 版本: v4.3.0 | 模块: `server/services/contextBuilder.ts` + `server/routes/generate.ts`
+> 版本: v4.3.1 | 模块: `server/services/contextBuilder.ts` + `server/routes/generate.ts`
 > 前端页面: [NovelWorkspacePage.tsx](file:///d:/开发项目/NovelForge/src/pages/NovelWorkspacePage.tsx)（小说工作台）
-> 创建日期: 2026-04-25 | 最后更新: 2026-04-27
+> 创建日期: 2026-04-25 | 最后更新: 2026-04-29
 
 ---
 
@@ -93,9 +93,17 @@ buildChapterContext(env, novelId, chapterId)
 │   ├── [DB] 最近 20 章 summaries（摘要链）
 │   └── [DB] 创作节奏把控（novels.wordCount + volumes.wordCount）⭐v4.1新增
 │
-├── Step 2: 组装查询向量
-│   └─ embedText(AI, eventLine + prevContent + chapterTitle) → queryVector
-│      （注：prevContent 为上一章完整正文内容，非摘要）
+├── Step 2: 组装查询向量（聚焦当前章节语义，≤800字）
+│   └─ embedText(AI, queryText) → queryVector
+│      queryText 由以下部分组成：
+│      1. currentChapter.title（章节标题）
+│      2. extractCurrentChapterEvent() 提取的上章/本章/下章事件
+│      3. prevContent?.slice(0, 300)（上一章正文前300字）
+│      4. lastSummary?.slice(-300)（备用：最近摘要末300字）
+│
+│      extractCurrentChapterEvent() 支持两种 eventLine 格式：
+│      - 换行分隔：每行以"第X章"开头（逐行匹配）
+│      - 连续文本：以"第N章："开头的段落（整段截取，以下一章开头为终止边界）
 │
 ├── Step 3: Dynamic 层（3 次 RAG 并发 + 多次 DB 补查）
 │   │
@@ -354,6 +362,102 @@ export interface BudgetTier {
 
 ---
 
+## 三、queryText 构建详解 ⭐ v4.3 新增
+
+**文件位置**: [contextBuilder.ts:209-218](file:///d:/开发项目/NovelForge/server/services/contextBuilder.ts#L209-L218)
+
+### 3.1 什么是 queryText
+
+`queryText` 是用于生成 RAG 查询向量的文本，聚焦当前章节的语义信息，提升检索精度。
+
+### 3.2 构建流程
+
+```typescript
+const currentChapterEvent = extractCurrentChapterEvent(volumeInfo.eventLine, chapterIndexInVolume)
+const queryTextParts = [currentChapter.title, currentChapterEvent, prevContent?.slice(0, 300)]
+
+if (!currentChapterEvent && recentSummaries.length > 0) {
+  const lastSummary = recentSummaries[recentSummaries.length - 1]
+  queryTextParts.push(lastSummary.slice(-300))
+}
+
+const queryText = queryTextParts.filter(Boolean).join('\n').slice(0, 800)
+```
+
+### 3.3 组成结构
+
+| 组成部分 | 来源 | 作用 | 字数限制 |
+|---------|------|------|---------|
+| `currentChapter.title` | 章节标题 | 明确当前章节主题 | - |
+| `currentChapterEvent` | 从 eventLine 提取的三段结构 | 明确本章/上章/下章事件 | - |
+| `prevContent.slice(0, 300)` | 上一章正文前300字 | 衔接上文风格和情节 | ≤300字 |
+| `lastSummary.slice(-300)` | 备用：最近摘要末300字 | 如果 eventLine 为空则用摘要补充 | ≤300字 |
+
+最终 `queryText` 上限 **800 字**（`slice(0, 800)`）。
+
+### 3.4 extractCurrentChapterEvent 提取逻辑
+
+**文件位置**: [contextBuilder.ts:972-1030](file:///d:/开发项目/NovelForge/server/services/contextBuilder.ts#L972-L1030)
+
+该函数支持两种 eventLine 格式：
+
+#### 格式一：换行分隔（每行以"第X章"开头）
+
+```typescript
+// 示例 eventLine：
+// 第42章：林岩离山
+// 林岩告别师门...
+// 第43章：血煞谷探秘
+// 主角前往血煞谷...
+// 第44章：斩杀血魔
+// 主角与血煞老魔激战
+
+// 处理逻辑：
+const lines = eventLine.split('\n').filter(l => l.trim())
+const findChapterLine = (chapterNum) => lines.find(l => l.match(new RegExp(`第${chapterNum}章|^${chapterNum}[.、：:]`)))
+
+// 输出：
+// 【上章事件】第42章：林岩离山
+// 【本章任务】第43章：血煞谷探秘  ← 核心，必须完成
+// 【下章预告】第44章：斩杀血魔  ← 仅供结尾钩子参考，本章不得提前完成
+```
+
+#### 格式二：连续文本（以"第N章："开头的段落）
+
+```typescript
+// 示例 eventLine（无换行）：
+// 第42章：[后山] 苏玄早有准备...第43章：[血煞谷] 王虎仗着筑基期修为...第44章：[血煞谷] 苏玄斩杀王虎...
+
+// 处理逻辑：
+// 1. 以"第43章："开头确定本章起点
+// 2. 以"第44章："开头确定本章终点
+// 3. 上章内容 = 上章开头到本章开头之间的文本
+
+// 输出：
+// 【上章事件】第42章：[后山] 苏玄早有准备...  ← 上章到本章之间的全部内容
+// 【本章任务】第43章：[血煞谷] 王虎仗着筑基期修为...  ← 核心，必须完成
+// 【下章预告】第44章：[血煞谷] 苏玄斩杀王虎...  ← 仅供结尾钩子参考，本章不得提前完成
+```
+
+### 3.5 queryText 用途
+
+`queryText` 用于生成**向量查询**：
+
+```typescript
+if (queryText && env.VECTORIZE) {
+  const queryVector = await embedText(env.AI, queryText)  // 转成向量
+  // 用这个向量去检索相关的 character、foreshadowing、setting
+}
+```
+
+### 3.6 设计理由
+
+- **聚焦检索**：用整卷 eventLine + 整章正文检索会导致噪声太大，聚焦当前章节语义能提升召回质量
+- **800字上限**：确保向量检索的语义足够集中
+- **上章/下章参考**：让 AI 知道情节连贯性，上章发生了什么、下章要做什么
+
+---
+
 ## 四、各槽位详细执行逻辑
 
 ### 4.1 Slot-0: 总纲 (`fetchMasterOutlineContent`)
@@ -529,7 +633,7 @@ export interface BudgetTier {
 
 ### 4.9 Slot-6: 世界设定 (`buildSettingsSlotV2`) ⭐ 配合新 summary 字段
 
-**文件位置**: [contextBuilder.ts:442-549](file:///d:/开发项目/NovelForge/server/services/contextBuilder.ts#L442-L549)
+**文件位置**: [contextBuilder.ts:517-625](file:///d:/开发项目/NovelForge/server/services/contextBuilder.ts#L517-L625)
 
 **v4 变更**: RAG 返回的是 `novelSettings.summary`（而非全文切块），且 importance=high 的设定会追加 DB 全文。
 
@@ -539,28 +643,36 @@ export interface BudgetTier {
   │
   ├─ Phase 1: 按 settingType 分槽处理每个 RAG 结果
   │     │
-  │     ├─ typeMapping: world_rule→worldRules, power_system→powerSystem,
-  │     │               geography→geography, faction→factions,
-  │     │               artifact→artifacts, 其他→misc
+  │     ├─ typeMapping (setting type → slotKey):
+  │     │   worldview/rule/world_rule → worldRules
+  │     │   power_system/cultivation → powerSystem
+  │     │   geography/location → geography
+  │     │   faction/organization → factions
+  │     │   item_skill/artifact/item → artifacts
+  │     │   其他 → misc
   │     │
   │     ├─ 各槽独立参数:
   │     │   worldRules:  budget=2500  threshold=0.42
   │     │   powerSystem: budget=2500  threshold=0.42
-  │     │   geography:   hasLocation? budget=1500 threshold=0.45
-  │     │   factions:    hasFaction? budget=1200 threshold=0.45
-  │     │   artifacts:   hasArtifact? budget=800 threshold=0.45
-  │     │   misc:        budget=800 threshold=0.48
+  │     │   geography:   budget=1200 threshold=0.45
+  │     │   factions:    budget=1000 threshold=0.45
+  │     │   artifacts:   budget=700 threshold=0.45
+  │     │   misc:        budget=600 threshold=0.48
   │     │
-  │     └─ 对每个结果 r:
-  │         ├─ 判断所属 slotKey
-  │         ├─ score < threshold → 跳过
-  │         ├─ 使用 r.metadata.content（即 summary 字段值）
-  │         └─ 超出 slotBudget → 跳过
+  │     ├─ 对每个结果 r:
+  │     │   ├─ 判断所属 slotKey
+  │     │   ├─ score < threshold → 跳过
+  │     │   ├─ 使用 r.metadata.content（即 summary 字段值）
+  │     │   └─ 超出 slotBudget → 跳过
+  │     │
+  │     └─ 记录 sourceIdSlotMap: { sourceId → { slotKey, index } }
+  │        （用于 Phase 2 精确插入完整设定）
   │
-  ├─ Phase 2: 高重要性设定追加全文
+  ├─ Phase 2: 高重要性设定追加全文（插入到对应 summary 之后）
   │     ├─ 收集 importance='high' AND score>=0.38 的 sourceId 列表
   │     ├─ DB 批量查询: SELECT id, name, type, content FROM novelSettings WHERE id IN (...)
-  │     └─ 追加到对应槽: `【name·完整设定】\n{content全文}`
+  │     ├─ 用 sourceIdSlotMap[fr.id] 精确定位插入位置
+  │     └─ 插入到对应 summary 的后面: `【name·完整设定】\n{content全文}`
   │        （允许超出原 budget 的 1.5 倍作为缓冲）
   │
   └─ 返回 SlottedSettings (6 个子槽的字符串数组)
@@ -1070,6 +1182,6 @@ POST /api/generate/preview-context
 
 ---
 
-> 文档版本：v4.3.0
-> 最后更新：2026-04-27
+> 文档版本：v4.3.1
+> 最后更新：2026-04-29
 > 维护者：NovelForge 开发团队

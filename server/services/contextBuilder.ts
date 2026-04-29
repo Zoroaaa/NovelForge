@@ -559,8 +559,9 @@ async function buildSettingsSlotV2(
     factions: [], artifacts: [], misc: [],
   }
 
-  // 收集 high importance 设定 ID，后续追加全文
+  // 收集 high importance 设定 ID 及对应的 slotKey 和插入位置
   const highImportanceIds: string[] = []
+  const sourceIdSlotMap: Record<string, { slotKey: keyof SlottedSettings; index: number }> = {}
 
   for (const r of results) {
     const rawType = (r.metadata.settingType || r.metadata.type || 'misc') as string
@@ -580,15 +581,17 @@ async function buildSettingsSlotV2(
 
     slotUsed[slotKey] += tokens
     slotCount[slotKey]++
+    const insertIndex = output[slotKey].length
     output[slotKey].push(content)
 
     // 记录 high importance 设定用于后续 DB 全文补充
-    if (r.metadata.importance === 'high' && r.score >= 0.38) {
+    if (r.metadata.importance === 'high' && r.score >= 0.38 && r.metadata.sourceId) {
       highImportanceIds.push(r.metadata.sourceId)
+      sourceIdSlotMap[r.metadata.sourceId] = { slotKey, index: insertIndex }
     }
   }
 
-  // 对 high importance 设定，追加 DB 全文到对应槽
+  // 对 high importance 设定，追加 DB 全文到对应槽（插入到对应 summary 之后）
   if (highImportanceIds.length > 0) {
     try {
       const fullRows = await db.select({
@@ -608,7 +611,12 @@ async function buildSettingsSlotV2(
         const tokens = estimateTokens(fullText)
         if (slotUsed[slotKey] + tokens <= slotBudgets[slotKey] * 1.5) {
           slotUsed[slotKey] += tokens
-          output[slotKey].push(fullText)
+          const mapping = sourceIdSlotMap[fr.id]
+          if (mapping && mapping.slotKey === slotKey) {
+            output[slotKey].splice(mapping.index + 1, 0, fullText)
+          } else {
+            output[slotKey].push(fullText)
+          }
         }
       }
     } catch (e) {
@@ -958,8 +966,8 @@ function inferChapterType(eventLine: string, chapterTitle: string): string {
 /**
  * 从整卷eventLine中提取当前章节及上下章事件描述
  * 支持两种格式：
- * 1. 按行编号：每行以"第X章"或数字序号开头
- * 2. 整段文本：按当前章在卷内的相对位置截取片段
+ * 1. 换行分隔：每行以"第X章"开头（逐行匹配）
+ * 2. 连续文本：以"第N章："开头的段落（整段截取）
  */
 function extractCurrentChapterEvent(
   eventLine: string,
@@ -969,33 +977,57 @@ function extractCurrentChapterEvent(
 
   const lines = eventLine.split('\n').filter(l => l.trim())
 
-  const findChapterLine = (chapterNum: number): string | null => {
-    const line = lines.find(l =>
-      l.match(new RegExp(`第${chapterNum}章|^${chapterNum}[.、：:]`))
-    )
-    return line ? line.trim().slice(0, 200) : null
-  }
-
-  const currentEvent = findChapterLine(currentSortOrder)
-  if (currentEvent) {
-    const parts: string[] = []
-
-    const prevEvent = findChapterLine(currentSortOrder - 1)
-    if (prevEvent) {
-      parts.push(`【上章事件】${prevEvent}`)
+  if (lines.length > 1) {
+    const findChapterLine = (chapterNum: number): string | null => {
+      const line = lines.find(l =>
+        l.match(new RegExp(`第${chapterNum}章|^${chapterNum}[.、：:]`))
+      )
+      return line ? line.trim().slice(0, 200) : null
     }
 
-    parts.push(`【本章任务】${currentEvent}  ← 核心，必须完成`)
+    const currentEvent = findChapterLine(currentSortOrder)
+    if (currentEvent) {
+      const parts: string[] = []
 
-    const nextEvent = findChapterLine(currentSortOrder + 1)
-    if (nextEvent) {
-      parts.push(`【下章预告】${nextEvent}  ← 仅供结尾钩子参考，本章不得提前完成`)
+      const prevEvent = findChapterLine(currentSortOrder - 1)
+      if (prevEvent) parts.push(`【上章事件】${prevEvent}`)
+
+      parts.push(`【本章任务】${currentEvent}  ← 核心，必须完成`)
+
+      const nextEvent = findChapterLine(currentSortOrder + 1)
+      if (nextEvent) parts.push(`【下章预告】${nextEvent}  ← 仅供结尾钩子参考，本章不得提前完成`)
+
+      return parts.join('\n')
     }
-
-    return parts.join('\n')
   }
 
-  return eventLine.slice(0, 500)
+  const currentPattern = new RegExp(`第${currentSortOrder}章[：:\\s]`)
+  const nextPattern = new RegExp(`第${currentSortOrder + 1}章[：:\\s]`)
+  const prevPattern = new RegExp(`第${currentSortOrder - 1}章[：:\\s]`)
+
+  const currentStart = eventLine.search(currentPattern)
+  if (currentStart === -1) return eventLine.slice(0, 500)
+
+  const parts: string[] = []
+
+  const prevMatch = eventLine.match(prevPattern)
+  if (prevMatch) {
+    const prevStart = prevMatch.index!
+    const prevContent = eventLine.slice(prevStart, currentStart).trim()
+    if (prevContent) parts.push(`【上章事件】${prevContent.slice(0, 200)}`)
+  }
+
+  const nextMatch = eventLine.match(nextPattern)
+  const currentEnd = nextMatch ? nextMatch.index! : eventLine.length
+  const currentContent = eventLine.slice(currentStart, currentEnd).trim()
+  parts.push(`【本章任务】${currentContent}  ← 核心，必须完成`)
+
+  if (nextMatch) {
+    const remaining = eventLine.slice(nextMatch.index!).trim()
+    parts.push(`【下章预告】${remaining.slice(0, 200)}  ← 仅供结尾钩子参考，本章不得提前完成`)
+  }
+
+  return parts.join('\n')
 }
 
 export function estimateTokens(text: string): number {
