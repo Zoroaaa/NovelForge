@@ -105,6 +105,7 @@ router.post('/chapter', async (c) => {
       writer.write(encoder.encode(data))
     },
     (event: ToolCallEvent) => {
+      console.log(`[SSE] 工具调用: ${event.name}`)
       const data = `data: ${JSON.stringify({ type: 'tool_call', name: event.name, args: event.args, result: (event.result || '').slice(0, 500) })}\n\n`
       writer.write(encoder.encode(data))
     },
@@ -112,6 +113,8 @@ router.post('/chapter', async (c) => {
       resolvedModelId = modelId
       const durationMs = Date.now() - startTime
       
+      console.log(`[SSE] 章节生成完成: chapter=${chapterId}, model=${modelId}, tokens=${usage.completion_tokens}, duration=${durationMs}ms`)
+
       await logGeneration(c.env, {
         novelId,
         chapterId,
@@ -170,6 +173,8 @@ router.post('/chapter', async (c) => {
       clearTimeout(timeoutId)
       const durationMs = Date.now() - startTime
       
+      console.error(`[SSE] 章节生成失败: chapter=${chapterId}, duration=${durationMs}ms`, error)
+
       await logGeneration(c.env, {
         novelId,
         chapterId,

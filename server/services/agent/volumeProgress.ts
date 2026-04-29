@@ -205,7 +205,7 @@ export async function checkVolumeProgress(
   if (chaptersWithSummary.length >= 1 && (hasBlueprint || hasEventLine)) {
     const recentChapters = chaptersWithSummary.slice(-5)
     const summariesText = recentChapters
-      .map(ch => `【第${ch.sortOrder}章 "${ch.title}" 摘要】\n${ch.summary}`)
+      .map(ch => `【第${ch.sortOrder + 1}章 "${ch.title}" 摘要】\n${ch.summary}`)
       .join('\n\n')
 
     const eventLineContext = hasEventLine

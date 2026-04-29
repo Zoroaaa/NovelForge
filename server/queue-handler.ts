@@ -17,6 +17,7 @@ import { drizzle } from 'drizzle-orm/d1'
 import { novelSettings, characters, foreshadowing, chapters, queueTaskLogs, vectorIndex } from './db/schema'
 import { eq, and, sql } from 'drizzle-orm'
 import { enqueueBatch } from './lib/queue'
+import { resolveConfig } from './services/llm'
 
 export async function handleQueueBatch(
   batch: MessageBatch<QueueMessage>,
@@ -185,7 +186,7 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
         ;[chapter] = await db.insert(chapters).values({
           novelId,
           volumeId,
-          title: `第${currentOrder}章`,
+          title: `第${currentOrder + 1}章`,
           sortOrder: currentOrder,
           status: 'draft',
           wordCount: 0,
@@ -212,14 +213,50 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
       }
 
       try {
+        let chapterModelId = 'unknown'
+        
+        try {
+          const llmConfig = await resolveConfig(db, 'chapter_gen', novelId)
+          chapterModelId = llmConfig.modelId || 'unknown'
+        } catch {}
+
         await generateChapter(
           env,
           chapter.id,
           novelId,
-          () => {},
-          () => {},
-          async () => {},
-          async (error) => { throw error },
+          (text) => {},
+          (event) => {
+            console.log(`[Queue] 批量生成工具调用: ${event.name}`)
+          },
+          async (usage, modelId) => {
+            console.log(`[Queue] 批量生成章节完成: chapter=${chapter.id}, model=${modelId}, tokens=${usage.completion_tokens}`)
+
+            await logGeneration(env, {
+              novelId,
+              chapterId: chapter.id,
+              stage: 'chapter_gen',
+              modelId: modelId || chapterModelId,
+              promptTokens: usage.prompt_tokens,
+              completionTokens: usage.completion_tokens,
+              durationMs: 0,
+              status: 'success',
+            })
+          },
+          async (error) => {
+            console.error(`[Queue] 批量生成章节失败: chapter=${chapter.id}`, error)
+
+            await logGeneration(env, {
+              novelId,
+              chapterId: chapter.id,
+              stage: 'chapter_gen',
+              modelId: chapterModelId,
+              durationMs: 0,
+              status: 'error',
+              errorMsg: error.message,
+            })
+
+            throw error
+          },
           { enableRAG: true, enableAutoSummary: true },
           { issuesContext: prevChapterAdvice ? [prevChapterAdvice] : undefined }
         )

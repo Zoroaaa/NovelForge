@@ -762,7 +762,7 @@ async function fetchRecentSummaries(
       ))
       .orderBy(desc(chapters.sortOrder)).limit(chainLength).all()
 
-    return rows.reverse().map((r: any) => `[第${r.sortOrder}章 ${r.title}] ${r.summary}`)
+    return rows.reverse().map((r: any) => `[第${r.sortOrder + 1}章 ${r.title}] ${r.summary}`)
   } catch (error) {
     console.error('[contextBuilder] fetchRecentSummaries failed:', error)
     return []
