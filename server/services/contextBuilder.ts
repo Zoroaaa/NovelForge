@@ -65,7 +65,6 @@ export interface ContextBundle {
     volumeEventLine: string
     volumeNotes: string
     prevChapterContent: string
-    prevEvent: string
     currentEvent: string
     nextThreeChapters: string
     protagonistStateCards: string[]
@@ -353,7 +352,6 @@ export async function buildChapterContext(
       volumeEventLine: volumeInfo.eventLine,
       volumeNotes: volumeInfo.notes,
       prevChapterContent: prevContent,
-      prevEvent,
       currentEvent,
       nextThreeChapters,
       protagonistStateCards,
