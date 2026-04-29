@@ -86,9 +86,13 @@ export async function generateChapter(
         updatedAt: sql`(unixepoch())`,
       }
 
-      if (options.isBackgroundGeneration && extractedTitle) {
-        updateData.title = extractedTitle
-        LOG_STYLES.SUCCESS(`[Background] 标题已更新: ${extractedTitle}`)
+      if (extractedTitle && chapter.title) {
+        const chapterNumMatch = chapter.title.match(/^(第[一二三四五六七八九十百千万\d]+章)/)
+        if (chapterNumMatch) {
+          updateData.title = `${chapterNumMatch[1]} ${extractedTitle}`
+        } else {
+          updateData.title = extractedTitle
+        }
       }
 
       await db.update(chapters)
