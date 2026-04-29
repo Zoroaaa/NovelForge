@@ -216,7 +216,7 @@ export const foreshadowingProgress = sqliteTable('foreshadowing_progress', {
   progressType: text('progress_type').notNull(),
   summary: text('summary'),
   mentionedKeywords: text('mentioned_keywords'),
-  ...timestamps,
+  createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
 }, (table) => [
   index('idx_progress_foreshadowing').on(table.foreshadowingId),
   index('idx_progress_chapter').on(table.chapterId),
