@@ -14,9 +14,8 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { ChapterEditor } from '@/components/chapter/ChapterEditor'
 import { GeneratePanel } from '@/components/generate/GeneratePanel'
 import { ChapterHealthCheck } from '@/components/chapter-health'
-import { ExportDialog } from '@/components/export/ExportDialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { PenLine, Sparkles, FileDown, AlertTriangle, Settings2, ShieldCheck, FileText } from 'lucide-react'
+import { PenLine, Sparkles, AlertTriangle, Settings2, ShieldCheck, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ChapterSummaryTab } from '@/components/chapter/ChapterSummaryTab'
 
@@ -138,7 +137,7 @@ export default function WorkspacePage() {
                 </div>
 
                 <Tabs defaultValue="generate" className="flex-1 flex flex-col">
-                  <TabsList className="grid w-full grid-cols-4 rounded-none border-b bg-transparent h-10">
+                  <TabsList className="grid w-full grid-cols-3 rounded-none border-b bg-transparent h-10">
                     <TabsTrigger value="generate" className="gap-1.5 text-xs rounded-none data-[state=active]:bg-background">
                       <PenLine className="h-3.5 w-3.5" />
                       AI 生成
@@ -150,10 +149,6 @@ export default function WorkspacePage() {
                     <TabsTrigger value="check" className="gap-1.5 text-xs rounded-none data-[state=active]:bg-background">
                       <ShieldCheck className="h-3.5 w-3.5" />
                       章节检查
-                    </TabsTrigger>
-                    <TabsTrigger value="export" className="gap-1.5 text-xs rounded-none data-[state=active]:bg-background">
-                      <FileDown className="h-3.5 w-3.5" />
-                      导出
                     </TabsTrigger>
                   </TabsList>
 
@@ -183,21 +178,12 @@ export default function WorkspacePage() {
                   <TabsContent value="check" className="flex-1 overflow-y-auto mt-0 p-4">
                     <ChapterHealthCheck novelId={id!} chapterId={activeChapter.id} />
                   </TabsContent>
-
-                  <TabsContent value="export" className="flex-1 overflow-y-auto mt-0 p-3">
-                    <div className="space-y-4">
-                      <p className="text-sm text-muted-foreground">
-                        导出当前小说为各种格式
-                      </p>
-                      <ExportDialog novelId={id!} novelTitle={novel.title} />
-                    </div>
-                  </TabsContent>
                 </Tabs>
               </div>
             ) : (
               <div className="h-full flex flex-col items-center justify-center p-4 text-center text-muted-foreground">
-                <FileDown className="h-12 w-12 mb-3 opacity-20" />
-                <p className="text-sm">选择章节后<br />可导出小说</p>
+                <Sparkles className="h-12 w-12 mb-3 opacity-20" />
+                <p className="text-sm">选择一个章节<br />开始编辑</p>
               </div>
             )
           }

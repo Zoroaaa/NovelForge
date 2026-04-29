@@ -7,6 +7,7 @@
 import { Link } from 'react-router-dom'
 import { ArrowLeft, BookOpen, Settings2, Home, Save, Network, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ExportDialog } from '@/components/export/ExportDialog'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -168,6 +169,8 @@ export function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
             </Tabs>
           </DialogContent>
         </Dialog>
+
+        <ExportDialog novelId={novel.id} novelTitle={novel.title} />
 
         <Button variant="outline" size="sm" className="gap-2" asChild>
           <Link to={`/novels/${novel.id}/graph`}>
