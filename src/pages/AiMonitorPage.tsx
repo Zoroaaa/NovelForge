@@ -505,6 +505,17 @@ export default function AiMonitorPage() {
                           </div>
                         </div>
 
+                        {contextResult.finalPrompt && (
+                          <details className="bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800 rounded-lg">
+                            <summary className="p-3 cursor-pointer text-sm font-medium hover:text-purple-600 transition-colors">
+                              最终完整 Prompt（{contextResult.finalPrompt.length}字符）
+                            </summary>
+                            <pre className="p-3 text-xs overflow-auto max-h-[400px] bg-white dark:bg-gray-900 rounded-b-lg border-t whitespace-pre-wrap">
+                              {contextResult.finalPrompt}
+                            </pre>
+                          </details>
+                        )}
+
                         <details className="bg-gray-50 dark:bg-gray-800 rounded-lg">
                           <summary className="p-3 cursor-pointer text-sm font-medium hover:text-blue-600 transition-colors">
                             查看完整上下文数据（JSON）

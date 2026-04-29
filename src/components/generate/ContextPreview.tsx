@@ -1,8 +1,8 @@
 /**
  * @file ContextPreview.tsx
- * @description 上下文预览组件 v3 - 展示AI生成时使用的分槽RAG上下文信息和Token统计
- * @version 3.0.0
- * @modified 2026-04-22 - 适配v3分槽架构
+ * @description 上下文预览组件 v4 - 展示AI生成时使用的分槽RAG上下文信息和Token统计
+ * @version 4.0.0
+ * @modified 2026-04-29 - 适配v4分槽架构（masterOutlineContent/allActiveRules/rhythmStats）
  */
 import { useState } from 'react'
 import {
@@ -61,13 +61,14 @@ export interface SlottedSettings {
 
 export interface ContextBundle {
   core: {
-    masterOutlineSummary: string
+    masterOutlineContent: string
     volumeBlueprint: string
     volumeEventLine: string
     volumeNotes: string
     prevChapterContent: string
     protagonistStateCards: string[]
-    highPriorityRules: string[]
+    allActiveRules: string[]
+    rhythmStats: RhythmStats | null
   }
   dynamic: {
     summaryChain: string[]
@@ -77,6 +78,16 @@ export interface ContextBundle {
     chapterTypeRules: string[]
   }
   debug: ContextDebugInfo
+}
+
+export interface RhythmStats {
+  novelWordCount: number
+  novelTargetWordCount: number | null
+  volumeWordCount: number
+  volumeTargetWordCount: number | null
+  volumeChapterCount: number
+  volumeTargetChapterCount: number | null
+  currentChapterInVolume: number
 }
 
 export interface ToolCallEvent {
@@ -96,6 +107,8 @@ interface ContextPreviewProps {
   contextBundle: ContextBundle | null
   isGenerating?: boolean
   toolCalls?: ToolCallEvent[]
+  systemPrompt?: string
+  finalPrompt?: string
 }
 
 const SETTING_SLOT_CONFIG = {
@@ -107,9 +120,11 @@ const SETTING_SLOT_CONFIG = {
   misc: { icon: FileText, label: '其他设定', color: 'bg-gray-100 text-gray-800' },
 }
 
-export function ContextPreview({ contextBundle, isGenerating, toolCalls }: ContextPreviewProps) {
+export function ContextPreview({ contextBundle, isGenerating, toolCalls, systemPrompt, finalPrompt }: ContextPreviewProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [toolsExpanded, setToolsExpanded] = useState<number | null>(null)
+  const [systemPromptExpanded, setSystemPromptExpanded] = useState(false)
+  const [finalPromptExpanded, setFinalPromptExpanded] = useState(false)
 
   if (!contextBundle && !isGenerating) return null
 
@@ -120,7 +135,7 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
           <Brain className="h-4 w-4 animate-pulse text-primary" />
           <span>正在构建智能上下文...</span>
           <Badge variant="secondary" className="text-xs">
-            v3 分槽
+            v4 分槽
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground pl-6">
@@ -154,7 +169,7 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
               <Brain className="h-4 w-4 text-primary" />
               <span className="text-sm font-medium">AI 上下文预览</span>
               <Badge variant="secondary" className="text-xs">
-                v3 分槽
+                v4 分槽
               </Badge>
             </div>
 
@@ -242,15 +257,49 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
               </div>
             )}
 
-            {/* v3: Core层 - 固定注入 */}
-            {(core.masterOutlineSummary || core.volumeBlueprint || core.volumeEventLine || core.volumeNotes || core.prevChapterContent) && (
+            {/* System Prompt 预览 */}
+            {systemPrompt && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                  <Brain className="h-3 w-3" />
+                  System Prompt
+                </h4>
+                <div className="rounded border overflow-hidden">
+                  <button
+                    onClick={() => setSystemPromptExpanded(!systemPromptExpanded)}
+                    className="w-full flex items-center justify-between p-2 text-left hover:bg-muted/50 transition-colors"
+                  >
+                    <span className="text-xs text-muted-foreground">
+                      {systemPromptExpanded ? '点击收起' : '点击展开预览'}
+                    </span>
+                    {systemPromptExpanded ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </button>
+                  {systemPromptExpanded && (
+                    <div className="px-3 pb-2">
+                      <ScrollArea className="max-h-48 rounded bg-background/50 p-2">
+                        <pre className="text-xs whitespace-pre-wrap font-mono leading-relaxed">
+                          {systemPrompt}
+                        </pre>
+                      </ScrollArea>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* v4: Core层 - 固定注入 */}
+            {(core.masterOutlineContent || core.volumeBlueprint || core.volumeEventLine || core.volumeNotes || core.prevChapterContent) && (
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                   <FileText className="h-3 w-3" />
                   核心上下文（固定注入）
                   {debug.slotBreakdown && (
                     <Badge variant="outline" className="text-[10px]">
-                      {(debug.slotBreakdown.masterOutlineSummary || 0) +
+                      {(debug.slotBreakdown.masterOutlineContent || 0) +
                        (debug.slotBreakdown.volumeBlueprint || 0) +
                        (debug.slotBreakdown.volumeEventLine || 0) +
                        (debug.slotBreakdown.volumeNotes || 0) +
@@ -260,10 +309,10 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
                 </h4>
 
                 <div className="space-y-1.5 pl-4">
-                  {core.masterOutlineSummary && (
+                  {core.masterOutlineContent && (
                     <ContextItem
-                      label="总纲摘要"
-                      content={core.masterOutlineSummary}
+                      label="总纲全文"
+                      content={core.masterOutlineContent}
                       type="master_outline"
                     />
                   )}
@@ -325,21 +374,54 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
               </div>
             )}
 
-            {/* 核心创作规则 */}
-            {core.highPriorityRules.length > 0 && (
+            {/* 节奏统计 */}
+            {core.rhythmStats && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                  <BookOpen className="h-3 w-3" />
+                  创作节奏
+                </h4>
+                <div className="rounded border p-3 space-y-1.5 bg-gradient-to-r from-slate-50 to-gray-50 dark:from-slate-950 dark:to-gray-950">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">小说进度</span>
+                    <span className="font-medium">
+                      {core.rhythmStats.novelWordCount.toLocaleString()} / {core.rhythmStats.novelTargetWordCount?.toLocaleString() || '?'} 字
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">本卷进度</span>
+                    <span className="font-medium">
+                      第 {core.rhythmStats.currentChapterInVolume} / {core.rhythmStats.volumeTargetChapterCount || core.rhythmStats.volumeChapterCount} 章
+                      ({core.rhythmStats.volumeWordCount.toLocaleString()} / {core.rhythmStats.volumeTargetWordCount?.toLocaleString() || '?'} 字)
+                    </span>
+                  </div>
+                  {core.rhythmStats.volumeTargetWordCount && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">字数进度</span>
+                      <span className="font-medium">
+                        {Math.round((core.rhythmStats.volumeWordCount / core.rhythmStats.volumeTargetWordCount) * 100)}%
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 全部创作规则 */}
+            {core.allActiveRules.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                   <AlertCircle className="h-3 w-3" />
-                  核心创作准则（必须遵守）
-                  {debug.slotBreakdown?.topRules && (
+                  全部创作准则
+                  {debug.slotBreakdown?.activeRules && (
                     <Badge variant="outline" className="text-[10px]">
-                      {debug.slotBreakdown.topRules}t
+                      {debug.slotBreakdown.activeRules}t
                     </Badge>
                   )}
                 </h4>
                 <ScrollArea className="max-h-24 rounded-md border bg-background/50 p-2">
                   <div className="space-y-1">
-                    {core.highPriorityRules.map((rule, index) => (
+                    {core.allActiveRules.map((rule, index) => (
                       <div key={index} className="text-xs p-1.5 bg-amber-50 dark:bg-amber-950 rounded">
                         <pre className="whitespace-pre-wrap font-mono leading-relaxed line-clamp-2">
                           {rule.slice(0, 150)}{rule.length > 150 ? '...' : ''}
@@ -377,7 +459,7 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
               </div>
             )}
 
-            {/* v3: Dynamic层 - 出场角色卡（RAG） */}
+            {/* v4: Dynamic层 - 出场角色卡（RAG） */}
             {dynamic.characterCards.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
@@ -478,7 +560,7 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
               </div>
             )}
 
-            {/* v3: Dynamic层 - 章节类型规则 */}
+            {/* v4: Dynamic层 - 章节类型规则 */}
             {dynamic.chapterTypeRules.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
@@ -501,6 +583,40 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls }: Conte
                     ))}
                   </div>
                 </ScrollArea>
+              </div>
+            )}
+
+            {/* 最终完整 Prompt 预览 */}
+            {finalPrompt && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                  <FileText className="h-3 w-3" />
+                  最终完整 Prompt
+                </h4>
+                <div className="rounded border overflow-hidden">
+                  <button
+                    onClick={() => setFinalPromptExpanded(!finalPromptExpanded)}
+                    className="w-full flex items-center justify-between p-2 text-left hover:bg-muted/50 transition-colors"
+                  >
+                    <span className="text-xs text-muted-foreground">
+                      {finalPromptExpanded ? '点击收起' : `点击展开（${finalPrompt.length}字符）`}
+                    </span>
+                    {finalPromptExpanded ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </button>
+                  {finalPromptExpanded && (
+                    <div className="px-3 pb-2">
+                      <ScrollArea className="max-h-96 rounded bg-background/50 p-2">
+                        <pre className="text-xs whitespace-pre-wrap font-mono leading-relaxed">
+                          {finalPrompt}
+                        </pre>
+                      </ScrollArea>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

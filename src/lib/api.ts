@@ -172,7 +172,7 @@ export const api = {
                                    req<Novel>(`/api/novels/${id}`, { method: 'PATCH', body: j(body) }),
     /** AI生成专属System Prompt */
     generateSystemPrompt: (id: string) =>
-                                   req<{ ok: boolean; systemPrompt: string }>(`/api/novels/${id}/generate-system-prompt`, { method: 'POST' }),
+                                   req<{ ok: boolean; systemPrompt: string }>(`/api/novels/${id}/generate-system-prompt`, { method: 'POST', timeout: 120000 }),
     /** 删除小说 */
     delete: (id: string)          => req(`/api/novels/${id}`, { method: 'DELETE' }),
     /** 恢复已删除的小说 */

@@ -407,7 +407,7 @@ router.post('/preview-context', zValidator('json', z.object({
 
   console.log(`[Preview-Context] Request received for novel=${novelId}, chapter=${chapterId}`)
 
-  const TIMEOUT_MS = 30000
+  const TIMEOUT_MS = 120000
 
   c.header('X-RateLimit-Reminder', 'This is a diagnostic endpoint. Avoid frequent calls in production.')
 

@@ -2,7 +2,7 @@
  * @file GeneratePanel.tsx
  * @description AI 生成面板组件，提供章节生成、续写、重写功能
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -22,6 +22,7 @@ import {
   ContextPreview,
   type ContextBundle,
 } from './ContextPreview'
+import { api } from '@/lib/api'
 
 interface GeneratePanelProps {
   novelId: string
@@ -52,6 +53,17 @@ export function GeneratePanel({
   const [selectedText] = useState<string>('')
   const [targetWords, setTargetWords] = useState(TARGET_WORDS_DEFAULT)
   const [rewriteInstruction, setRewriteInstruction] = useState('')
+  const [systemPrompt, setSystemPrompt] = useState<string>('')
+
+  useEffect(() => {
+    if (novelId) {
+      api.novels.get(novelId).then(novel => {
+        if (novel?.systemPrompt) {
+          setSystemPrompt(novel.systemPrompt)
+        }
+      }).catch(() => {})
+    }
+  }, [novelId])
 
   const hasContent = existingContent.trim().length > 0
 
@@ -293,6 +305,7 @@ export function GeneratePanel({
         contextBundle={contextInfo}
         isGenerating={status === 'generating'}
         toolCalls={toolCalls}
+        systemPrompt={systemPrompt}
       />
 
       <div className="flex gap-2">
