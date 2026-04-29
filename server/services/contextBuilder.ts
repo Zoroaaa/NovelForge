@@ -530,11 +530,11 @@ async function buildSettingsSlotV2(
   }
 
   const typeMapping: Record<string, keyof SlottedSettings> = {
-    world_rule: 'worldRules', rule: 'worldRules',
+    worldview: 'worldRules', world_rule: 'worldRules', rule: 'worldRules',
     power_system: 'powerSystem', cultivation: 'powerSystem',
     geography: 'geography', location: 'geography',
     faction: 'factions', organization: 'factions',
-    artifact: 'artifacts', item: 'artifacts',
+    item_skill: 'artifacts', artifact: 'artifacts', item: 'artifacts',
   }
 
   const SCORE_THRESHOLDS: Record<keyof SlottedSettings, number> = {
