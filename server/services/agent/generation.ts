@@ -83,6 +83,7 @@ export async function generateChapter(
       const updateData: Record<string, unknown> = {
         content: fullContent,
         wordCount: fullContent.length,
+        status: 'generated',
         updatedAt: sql`(unixepoch())`,
       }
 
@@ -96,10 +97,27 @@ export async function generateChapter(
       LOG_STYLES.SUCCESS(`B1 fix: 章节内容已写入数据库 (${fullContent.length} 字符)`)
     }
 
-    if (env.TASK_QUEUE) {
-      await enqueue(env, {
-        type: 'post_process_chapter',
-        payload: {
+    // 修复: 批量生成(skipPostProcess=true)时跳过 post_process_chapter 入队，
+    // 避免与 batch_generate_chapter→quality_check 链重复触发 checkQuality
+    if (!options.skipPostProcess) {
+      if (env.TASK_QUEUE) {
+        await enqueue(env, {
+          type: 'post_process_chapter',
+          payload: {
+            chapterId,
+            novelId,
+            enableAutoSummary: agentConfig.enableAutoSummary,
+            usage: {
+              prompt_tokens: usageResult.promptTokens,
+              completion_tokens: usageResult.completionTokens,
+            },
+          },
+        })
+        LOG_STYLES.SUCCESS('后处理任务已入队（异步模式）')
+      } else {
+        LOG_STYLES.TASK_QUEUE_UNAVAILABLE()
+
+        await runPostProcess(env, {
           chapterId,
           novelId,
           enableAutoSummary: agentConfig.enableAutoSummary,
@@ -107,23 +125,12 @@ export async function generateChapter(
             prompt_tokens: usageResult.promptTokens,
             completion_tokens: usageResult.completionTokens,
           },
-        },
-      })
-      LOG_STYLES.SUCCESS('后处理任务已入队（异步模式）')
+        })
+
+        LOG_STYLES.SUCCESS('✅ [Sync] 章节后处理全部完成')
+      }
     } else {
-      LOG_STYLES.TASK_QUEUE_UNAVAILABLE()
-
-      await runPostProcess(env, {
-        chapterId,
-        novelId,
-        enableAutoSummary: agentConfig.enableAutoSummary,
-        usage: {
-          prompt_tokens: usageResult.promptTokens,
-          completion_tokens: usageResult.completionTokens,
-        },
-      })
-
-      LOG_STYLES.SUCCESS('✅ [Sync] 章节后处理全部完成')
+      LOG_STYLES.SUCCESS('批量生成模式：跳过 post_process 入队，由 batch 流程统一处理后续')
     }
 
     onDone(

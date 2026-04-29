@@ -155,6 +155,7 @@ export const chapters = sqliteTable('chapters', {
   vectorId: text('vector_id'),
   indexedAt: integer('indexed_at'),
   snapshotKeys: text('snapshot_keys'),
+  postProcessedAt: integer('post_processed_at'),
   ...timestamps,
   deletedAt: integer('deleted_at'),
 }, (table) => [

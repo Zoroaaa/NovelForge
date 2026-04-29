@@ -11,6 +11,8 @@ export interface AgentConfig {
 }
 
 export interface GenerationOptions {
+  /** 批量生成时设为 true，跳过 post_process_chapter 入队（由 batch 流程自行控制后续）*/
+  skipPostProcess?: boolean
   mode?: 'generate' | 'continue' | 'rewrite'
   existingContent?: string
   targetWords?: number

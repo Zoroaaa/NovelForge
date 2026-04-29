@@ -123,10 +123,15 @@ export async function getActiveBatchTask(env: Env, novelId: string): Promise<Bat
 
 export async function incrementCompleted(env: Env, taskId: string, success: boolean): Promise<void> {
   const db = drizzle(env.DB)
-  const field = success ? 'completedCount' : 'failedCount'
+  // 修复: 原来用 sql`${field} + 1`，field 是JS字符串，插值后SQL变成 'completedCount' + 1 = 1，每次重置而非累加
+  // 必须用 Drizzle 列引用作为 sql 模板参数
+  const countUpdate = success
+    ? { completedCount: sql`${batchGenerationTasks.completedCount} + 1` }
+    : { failedCount: sql`${batchGenerationTasks.failedCount} + 1` }
+
   await db.update(batchGenerationTasks)
     .set({
-      [field]: sql`${field} + 1`,
+      ...countUpdate,
       currentChapterOrder: sql`${batchGenerationTasks.currentChapterOrder} + 1`,
       updatedAt: sql`(unixepoch())`,
     })

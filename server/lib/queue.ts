@@ -71,6 +71,9 @@ export type QueueMessage =
       payload: {
         chapterId: string
         novelId: string
+        /** 批量生成时传入，用于质量门控（分数过低则标记task failed） */
+        taskId?: string
+        volumeId?: string
       }
     }
   | {

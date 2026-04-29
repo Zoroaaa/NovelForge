@@ -126,6 +126,21 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
     case 'post_process_chapter': {
       const { chapterId, novelId, enableAutoSummary, usage } = msg.payload
 
+      // 幂等锁：用 post_processed_at 原子抢占执行权
+      // 防止 Cloudflare Queue visibility timeout（~5分钟）导致同一章节后处理重复执行
+      // post_process 单次耗时 8~9 分钟，超过 visibility timeout 后消息会被重新投递
+      {
+        const db = drizzle(env.DB)
+        const locked = await db.update(chapters)
+          .set({ postProcessedAt: sql`(unixepoch())` })
+          .where(and(eq(chapters.id, chapterId), sql`${chapters.postProcessedAt} IS NULL`))
+          .returning({ id: chapters.id })
+        if (locked.length === 0) {
+          console.log(`[Queue] post_process_chapter 已被其他 Worker 处理，跳过: chapter=${chapterId}`)
+          break
+        }
+      }
+
       await runPostProcess(env, {
         chapterId,
         novelId,
@@ -195,6 +210,18 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
         }).returning()
       }
 
+      // 防重复生成：章节已有内容则直接推进，避免重复覆盖已生成内容
+      if (chapter.status === 'generated' || chapter.status === 'revised') {
+        console.log(`[Queue] 章节已生成(${chapter.status})，跳过重复生成: chapterId=${chapter.id}, order=${currentOrder}`)
+        if (env.TASK_QUEUE) {
+          await env.TASK_QUEUE.send({
+            type: 'batch_chapter_done',
+            payload: { taskId, novelId, volumeId, chapterId: chapter.id, success: true },
+          })
+        }
+        break
+      }
+
       let prevChapterAdvice: string | null = null
       if (currentOrder > task.startChapterOrder) {
         const prevChapters = await db.select({ id: chapters.id })
@@ -258,32 +285,15 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
             throw error
           },
           { enableRAG: true, enableAutoSummary: true },
-          { issuesContext: prevChapterAdvice ? [prevChapterAdvice] : undefined }
+          { issuesContext: prevChapterAdvice ? [prevChapterAdvice] : undefined, skipPostProcess: true }
         )
 
-        try {
-          const qScore = await checkQuality(env, { chapterId: chapter.id, novelId })
-          const BATCH_QUALITY_GATE = 45
-          if (qScore.totalScore < BATCH_QUALITY_GATE) {
-            console.warn(`[Queue] 章节质量过低（${qScore.totalScore}分），暂停批量生成`)
-            await markTaskFailed(env, taskId, `章节质量过低（${qScore.totalScore}分），请人工介入`)
-
-            if (env.TASK_QUEUE) {
-              await env.TASK_QUEUE.send({
-                type: 'batch_chapter_done',
-                payload: { taskId, novelId, volumeId, chapterId: chapter.id, success: false },
-              })
-            }
-            break
-          }
-        } catch (qError) {
-          console.warn('[Queue] 质量检查失败，继续生成:', qError)
-        }
-
+        // 修复: 不再在此直接调用 checkQuality，避免与 post_process_chapter→quality_check 链重复执行
+        // 改由 quality_check handler 统一处理门控逻辑，通过 taskId 关联触发
         if (env.TASK_QUEUE) {
           await env.TASK_QUEUE.send({
-            type: 'batch_chapter_done',
-            payload: { taskId, novelId, volumeId, chapterId: chapter.id, success: true },
+            type: 'quality_check',
+            payload: { chapterId: chapter.id, novelId, taskId, volumeId },
           })
         }
       } catch (genError) {
@@ -322,13 +332,42 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
     }
 
     case 'quality_check': {
-      const { chapterId, novelId } = msg.payload
+      const { chapterId, novelId, taskId: batchTaskId, volumeId: batchVolumeId } = msg.payload
 
       try {
-        await checkQuality(env, { chapterId, novelId })
-        console.log(`✅ [Queue] 质量评分完成 for chapter ${chapterId}`)
+        const qScore = await checkQuality(env, { chapterId, novelId })
+        console.log(`✅ [Queue] 质量评分完成 for chapter ${chapterId}, score=${qScore.totalScore}`)
+
+        // 批量生成时：执行质量门控，分数过低则标记失败；否则推进到下一章
+        if (batchTaskId && batchVolumeId) {
+          const BATCH_QUALITY_GATE = 45
+          if (qScore.totalScore < BATCH_QUALITY_GATE) {
+            console.warn(`[Queue] 批量生成质量过低（${qScore.totalScore}分），暂停任务`)
+            await markTaskFailed(env, batchTaskId, `章节质量过低（${qScore.totalScore}分），请人工介入`)
+            if (env.TASK_QUEUE) {
+              await env.TASK_QUEUE.send({
+                type: 'batch_chapter_done',
+                payload: { taskId: batchTaskId, novelId, volumeId: batchVolumeId, chapterId, success: false },
+              })
+            }
+          } else {
+            if (env.TASK_QUEUE) {
+              await env.TASK_QUEUE.send({
+                type: 'batch_chapter_done',
+                payload: { taskId: batchTaskId, novelId, volumeId: batchVolumeId, chapterId, success: true },
+              })
+            }
+          }
+        }
       } catch (qualityError) {
         console.warn('[Queue] 质量评分失败（非致命）:', qualityError)
+        // 批量生成时质量检查失败，仍推进（不卡死流程）
+        if (batchTaskId && batchVolumeId && env.TASK_QUEUE) {
+          await env.TASK_QUEUE.send({
+            type: 'batch_chapter_done',
+            payload: { taskId: batchTaskId, novelId, volumeId: batchVolumeId, chapterId, success: true },
+          })
+        }
       }
 
       break
