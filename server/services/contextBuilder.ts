@@ -717,7 +717,7 @@ async function fetchRhythmStats(
       volumeTargetWordCount: volumeData?.targetWordCount || null,
       volumeChapterCount: volumeData?.chapterCount || 0,
       volumeTargetChapterCount: volumeData?.targetChapterCount || null,
-      currentChapterInVolume: Number(currentChapterInVolumeResult?.count ?? 0),
+      currentChapterInVolume: Math.max(0, Number(currentChapterInVolumeResult?.count ?? 0) - 1),
     }
   } catch (error) {
     console.error('[contextBuilder] fetchRhythmStats failed:', error)
