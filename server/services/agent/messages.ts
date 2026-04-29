@@ -93,6 +93,17 @@ ${TOOL_GUIDE}`,
 }
 
 // ============================================================
+// 字数要求计算
+// ============================================================
+function getWordCountRequirement(rhythmStats: ContextBundle['core']['rhythmStats']): { min: number; max: number } {
+  if (rhythmStats?.volumeTargetWordCount && rhythmStats?.volumeTargetChapterCount && rhythmStats.volumeTargetChapterCount > 0) {
+    const avg = Math.round(rhythmStats.volumeTargetWordCount / rhythmStats.volumeTargetChapterCount)
+    return { min: Math.max(1000, avg - 600), max: avg + 600 }
+  }
+  return { min: CHAPTER_GEN_DEFAULTS.WORD_COUNT_MIN, max: CHAPTER_GEN_DEFAULTS.WORD_COUNT_MAX }
+}
+
+// ============================================================
 // 消息构建主函数
 // ============================================================
 export function buildMessages(
@@ -149,6 +160,7 @@ ${continuationConstraints}
     const issueSection = issuesContext?.length
       ? `\n【本次改写需要重点解决的问题】\n${issuesContext.map((issue, i) => `${i + 1}. ${issue}`).join('\n')}`
       : ''
+    const wordReq = getWordCountRequirement(contextBundle?.core.rhythmStats ?? null)
 
     const rewriteConstraints = contextBundle
       ? `\n【改写约束——来自创作资料包】\n${assemblePromptContext(contextBundle, { slotFilter: ['protagonist', 'characters', 'rules', 'worldSettings'] })}`
@@ -171,7 +183,7 @@ ${AGENT_LABELS.CONTENT_TO_REWRITE}
 ${existingContent}
 
 改写要求：
-- 字数：${CHAPTER_GEN_DEFAULTS.REWRITE_WORD_COUNT_MIN}–${CHAPTER_GEN_DEFAULTS.REWRITE_WORD_COUNT_MAX} 字
+- 字数：${wordReq.min}–${wordReq.max} 字
 - 优先解决上方"需要重点解决的问题"
 - 直接输出完整改写正文，不要输出任何说明或对比`,
       },
@@ -192,10 +204,11 @@ ${existingContent}
 
   // ── 标准生成模式（带完整资料包）────────────────────────────
   const contextText = assemblePromptContext(contextBundle)
+  const wordReq = getWordCountRequirement(contextBundle?.core.rhythmStats ?? null)
 
   const userContent = `${AGENT_LABELS.CREATION_TASK}
 章节标题：《${chapterTitle}》
-目标字数：${CHAPTER_GEN_DEFAULTS.WORD_COUNT_MIN}–${CHAPTER_GEN_DEFAULTS.WORD_COUNT_MAX} 字
+目标字数：${wordReq.min}–${wordReq.max} 字
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ${AGENT_LABELS.DATA_PACKAGE}
@@ -214,7 +227,7 @@ ${AGENT_LABELS.FORCE_REQUIREMENTS}
 确认完毕后，直接开始创作正文，不要输出确认清单本身。
 
 ${AGENT_LABELS.WRITING_REQUIREMENTS}
-- 字数：${CHAPTER_GEN_DEFAULTS.WORD_COUNT_MIN}–${CHAPTER_GEN_DEFAULTS.WORD_COUNT_MAX} 字（必须达到下限）
+- 字数：${wordReq.min}–${wordReq.max} 字（必须达到下限）
 - 视角：第三人称有限视角
 - 本章核心任务：完成卷蓝图中对应本章的情节推进，不得提前完成下章任务
 - 结尾要求：留有钩子或悬念，为读者持续追更提供动力`
