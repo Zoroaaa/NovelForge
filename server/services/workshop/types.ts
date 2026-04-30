@@ -46,13 +46,6 @@ export interface WorkshopExtractedData {
     content: string
     priority?: number
   }>
-  _pc?: {
-    genrePrompt?: boolean
-    aiOutline?: boolean
-    settingSummaries?: string[]
-    volumeSummaries?: string[]
-    masterSummary?: boolean
-  }
 }
 
 export type { Env }
