@@ -8,6 +8,10 @@ compatibility_flags = ["nodejs_compat"]
 enabled = true
 invocation_logs = true
 
+[vars]
+CLOUDFLARE_ACCOUNT_ID = "你的account_id"
+# CLOUDFLARE_API_TOKEN 不能放这里，会暴露
+
 [assets]
 directory = "dist"
 binding = "ASSETS"
