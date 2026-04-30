@@ -1,7 +1,7 @@
 # NovelForge 章节生成 — 完整使用指南
 
-> 版本: v1.0.0 | 模块: 前端 `GeneratePanel.tsx` + 后端 `routes/generate.ts` + `routes/batch.ts`
-> 相关文档: [章节上下文构建指南](./CHAPTER-GENERATION-CONTEXT-GUIDE.md)
+> 版本: v1.1.0 | 模块: 前端 `GeneratePanel.tsx` + 后端 `routes/generate.ts` + `routes/batch.ts`
+> 相关文档: [章节上下文构建指南](./CHAPTER-GENERATION-CONTEXT-GUIDE.md) | [导入数据指南](./IMPORT-DATA-GUIDE.md)
 > 创建日期: 2026-04-30 | 最后更新: 2026-04-30
 
 ---
@@ -967,6 +967,7 @@ history.tasks.forEach((task, index) => {
 
 | 版本 | 日期 | 主要更新 |
 |------|------|---------|
+| **v1.1.0** | 2026-04-30 | ⭐v2.4.0 更新：完善草稿模式说明、添加修复模式详细流程 |
 | **v1.0.0** | 2026-04-30 | 初始版本，涵盖单章+批量生成全流程 |
 
 ---

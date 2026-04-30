@@ -1,6 +1,6 @@
 # NovelForge 章节生成上下文构建 — 完整执行指南
 
-> 版本: v4.5.0 | 模块: `server/services/contextBuilder.ts` + `server/routes/generate.ts` + `server/services/agent/generation.ts`
+> 版本: v2.4.0 | 模块: `server/services/contextBuilder.ts` + `server/routes/generate.ts` + `server/services/agent/generation.ts`
 > 前端页面: [NovelWorkspacePage.tsx](file:///d:/user/NovelForge/src/pages/NovelWorkspacePage.tsx)（小说工作台）
 > 创建日期: 2026-04-25 | 最后更新: 2026-04-30
 
@@ -1379,7 +1379,7 @@ POST /api/generate/preview-context
 
 ---
 
-> 文档版本：v4.5.0
+> 文档版本：v2.4.0
 > 最后更新：2026-04-30
 > 维护者：NovelForge 开发团队
-> ⭐v4.5 主要更新：自动修复写库、持久弹窗提示、草稿模式、SSE 时序优化、批量历史查询
+> v2.4.0 更新：上下文构建优化、eventLine JSON 格式支持、向量化和队列处理改进

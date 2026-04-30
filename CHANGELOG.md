@@ -7,6 +7,119 @@
 
 ---
 
+## [2.4.0] - 2026-04-30
+
+### 🎉 重大更新：Phase 15 · 导入数据功能全面升级 + PWA 离线支持
+
+#### 🆕 新增功能
+
+##### 导入数据功能全面升级 📥
+- **完整的导入数据使用指南** (`docs/IMPORT-DATA-GUIDE.md`)
+  - 7 大模块详细说明（总纲/设定/角色/规则/卷/伏笔/章节）
+  - AI 格式化功能详解
+  - 三种导入模式（create/update/upsert）
+  - 智能匹配机制（volumeTitle/chapterTitle 自动转 ID）
+  - 角色 attributes 存储结构说明
+  - 卷伏笔计划字段说明
+  - 完整字段定义和示例
+
+##### PWA 离线支持 📱
+- **Service Worker** (`src/lib/serviceWorker.ts`)
+  - 静态资源缓存
+  - 离线访问支持
+
+- **离线页面** (`public/offline.html`)
+  - 网络不可用时显示友好提示
+
+- **PWA 安装提示组件** (`src/components/ui/pwa-install-prompt.tsx`)
+  - 可安装应用提示
+  - 安装状态显示 (`src/components/ui/pwa-status.tsx`)
+
+- **PWA Hook** (`src/hooks/usePWA.ts`)
+  - PWA 安装状态管理
+
+- **PWA 安装工具** (`src/lib/pwaInstall.ts`)
+  - BeforeInstallPrompt 事件处理
+
+##### AI 格式化导入增强 🤖
+- **增强的格式化服务** (`server/services/formatImport.ts`)
+  - 支持更多非结构化文本格式
+  - 改进的 JSON 解析能力
+
+- **导入路由优化** (`server/routes/workshop-import.ts`)
+  - 改进的数据验证
+  - 更好的错误处理
+
+#### 🔧 架构优化
+
+##### 创意工坊服务优化 🎨
+- **commit.ts 重构** (`server/services/workshop/commit.ts`)
+  - 两阶段队列处理优化
+  - 数据写入逻辑改进
+
+- **新增 generateGenreSystemPrompt.ts** (`server/services/workshop/generateGenreSystemPrompt.ts`)
+  - AI 生成小说 genre 专属 systemPrompt
+
+- **helpers.ts 优化** (`server/services/workshop/helpers.ts`)
+  - 总纲模板构建增强
+
+##### 上下文构建器优化 🚀
+- **contextBuilder.ts 优化**
+  - eventLine JSON 数组格式支持
+  - VECTORIZE 不可用时 DB 兜底增强
+
+##### 队列处理优化 ⚡
+- **queue.ts 优化** (`server/lib/queue.ts`)
+  - 队列消息处理改进
+
+- **queue-handler.ts 增强**
+  - 更好的任务调度
+  - 错误处理优化
+
+##### AiMonitor 页面优化 🖥️
+- **AiMonitorPage 增强** (`src/pages/AiMonitorPage.tsx`)
+  - 向量统计展示改进
+  - 服务状态监控增强
+
+#### 📝 文档更新
+
+- 📝 **IMPORT-DATA-GUIDE.md** - 新增完整导入数据功能使用指南 (1011行)
+  - 7 大模块详细说明
+  - AI 格式化功能
+  - 智能匹配机制
+  - 完整字段定义和示例
+
+- 📝 **WORKSHOP-EXECUTION-GUIDE.md** - 更新至 v2.4.0
+  - 新增第五章"数据导入功能"详细说明
+  - 引用新的导入数据指南
+
+- 📝 **CHAPTER-GENERATION-CONTEXT-GUIDE.md** - 更新至 v2.4.0
+  - eventLine JSON 格式支持说明
+  - VECTORIZE 兜底增强说明
+
+- 📝 **MODEL-USAGE-GUIDE.md** - 更新至 v2.4.0
+  - 导入数据格式化模型配置说明
+
+- 📝 **README.md** - 更新至 v2.4.0
+  - 版本号更新
+  - 新增导入数据指南引用
+  - 新增 PWA 离线支持功能说明
+
+#### 🚀 部署优化
+
+- **Cloudflare Pages 配置优化** (`.github/workflows/deploy.yml`)
+  - 部署流程优化
+
+#### ✅ 改进
+
+- 🔧 导入数据功能全面升级，支持更多格式和模块
+- 🔧 PWA 离线支持，提升用户体验
+- 🔧 创意工坊 commit 流程优化
+- 🔧 上下文构建质量进一步提升
+- 🔧 队列任务处理更稳定
+
+---
+
 ## [2.3.0] - 2026-04-30
 
 ### 🎉 重大更新：Phase 14 · AI监控中心全面升级 + 架构深度优化
@@ -1636,6 +1749,27 @@
 ---
 
 ## 升级指南
+
+### 升级到 2.4.0
+
+```bash
+# 拉取最新代码
+git pull origin main
+
+# 更新依赖
+pnpm update
+
+# 重新部署
+pnpm build
+wrangler pages deploy dist
+```
+
+**重要变更说明**：
+- 新增导入数据功能完整指南 docs/IMPORT-DATA-GUIDE.md
+- 新增 PWA 离线支持（Service Worker、离线页面、安装提示）
+- 创意工坊 commit 流程优化
+- 上下文构建器 eventLine JSON 数组格式支持
+- VECTORIZE 不可用时 DB 兜底增强
 
 ### 升级到 2.3.0
 

@@ -9,7 +9,7 @@ enabled = true
 invocation_logs = true
 
 [vars]
-CLOUDFLARE_ACCOUNT_ID = "你的account_id"
+CLOUDFLARE_ACCOUNT_ID = "2f24288827c6b14fac807324df3a4ac2"
 # CLOUDFLARE_API_TOKEN 不能放这里，会暴露
 
 [assets]

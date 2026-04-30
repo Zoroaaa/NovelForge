@@ -3,8 +3,8 @@
 <div align="center">
 
 ![NovelForge Logo](https://img.shields.io/badge/NovelForge-AI%20Writing%20Studio-blue?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-2.3.0-success?style=for-the-badge)
-![Phase](https://img.shields.io/badge/Phase-14%20Complete-success?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-2.4.0-success?style=for-the-badge)
+![Phase](https://img.shields.io/badge/Phase-15%20Complete-success?style=for-the-badge)
 ![Cloudflare](https://img.shields.io/badge/Cloudflare-Pages%2BWorkers-orange?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
@@ -242,6 +242,7 @@ Total: 128,000 tokens
 | **⚡ 队列任务** | 异步索引重建 · 后台任务处理 · 任务日志追踪 |
 | **🪄 数据导入** | AI智能格式识别 · JSON/TXT/MD支持 · 7种模块 · 3种导入模式 · 批量处理 |
 | **📥 工坊导入** | 结构化数据导入 · 批量创建 · 数据验证 |
+| **📱 PWA 离线支持** | ⭐v2.4.0 新增：Service Worker · 离线页面 · 安装提示组件 |
 | **🪝 伏笔进度** | 伏笔收尾进度追踪 · 多章节分布 · 状态可视化 · 沉寂检测 |
 | **📊 批量生成** | 批量章节生成 · 任务暂停/恢复/取消 · 进度追踪 · 后台异步处理 |
 | **📊 成本分析** | 消耗统计总览 · 趋势图表追踪 · 分类分项明细 · 优化建议生成 |
@@ -307,8 +308,10 @@ wrangler pages dev --local -- pnpm dev
 | [API 参考](./docs/API.md) | 完整的 REST API 文档 |
 | [MCP 配置](./docs/MCP-SETUP.md) | Claude Desktop 集成配置指南 |
 | [章节生成上下文指南](./docs/CHAPTER-GENERATION-CONTEXT-GUIDE.md) | 上下文构建完整执行逻辑 |
+| [章节生成使用指南](./docs/CHAPTER-GENERATION-USAGE-GUIDE.md) | 章节生成操作指南 |
 | [模型使用指南](./docs/MODEL-USAGE-GUIDE.md) | 模型配置与使用详解 |
 | [创作工坊指南](./docs/WORKSHOP-EXECUTION-GUIDE.md) | 创作工坊完整执行逻辑 |
+| [导入数据指南](./docs/IMPORT-DATA-GUIDE.md) | ⭐v2.4.0 新增：数据批量导入详解 |
 | [CHANGELOG](./CHANGELOG.md) | 版本更新记录 |
 
 ---
@@ -685,6 +688,6 @@ novelforge/
 
 <div align="center">
 
-**Made with ❤️ by the NovelForge Team · Version 2.3.0**
+**Made with ❤️ by the NovelForge Team · Version 2.4.0**
 
 </div>

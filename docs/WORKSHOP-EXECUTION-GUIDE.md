@@ -1,6 +1,6 @@
 # NovelForge 创作工坊 — 完整执行指南
 
-> 版本: v4.4.0 | 模块: `server/services/workshop/` 全目录 + `src/pages/WorkshopPage.tsx`
+> 版本: v2.4.0 | 模块: `server/services/workshop/` 全目录 + `src/pages/WorkshopPage.tsx`
 > 前端页面: [WorkshopPage.tsx](file:///d:/user/NovelForge/src/pages/WorkshopPage.tsx)
 > 创建日期: 2026-04-28 | 最后更新: 2026-04-30
 
@@ -532,22 +532,33 @@ eventLine 条数 = targetChapterCount**
 
 ---
 
-## 五、数据导入功能
+## 五、数据导入功能 ⭐v2.4.0 重大更新
 
-### 5.1 入口
+> 📖 **完整使用文档**: 请参阅 [导入数据功能使用指南](./IMPORT-DATA-GUIDE.md)
 
-点击右上角 **导入数据** 按钮，打开导入对话框。
+### 5.1 功能概述
+
+**导入数据**是创意工坊的核心子功能之一，允许用户将外部数据（JSON、Markdown、纯文本）批量导入到小说项目中，支持 **7 大模块**的数据导入。
+
+#### 核心价值
+
+1. **快速初始化项目**: 从其他工具/平台迁移数据
+2. **批量操作效率**: 一次性导入多个角色、章节、设定等
+3. **AI 智能解析**: 支持非结构化文本自动转换为结构化数据
+4. **智能关联匹配**: 通过名称自动匹配 ID（卷标题→卷ID、章节标题→章节ID）
+5. **灵活的导入模式**: 支持 create/update/upsert 三种模式
 
 ### 5.2 支持的模块
 
-| 模块 | 说明 |
-|------|------|
-| `master_outline` | 总纲/大纲 |
-| `setting` | 世界观、势力、地理等设定 |
-| `character` | 角色信息 |
-| `rule` | 创作规则 |
-| `volume` | 卷/部结构 |
-| `foreshadowing` | 伏笔线索 |
+| 模块 | 说明 | 唯一标识符 |
+|------|------|-----------|
+| `master_outline` | 总纲/大纲 | version（递增） |
+| `setting` | 世界观、势力、地理等设定 | name |
+| `character` | 角色信息 | name |
+| `rule` | 创作规则 | title |
+| `volume` | 卷/部结构 | title |
+| `foreshadowing` | 伏笔线索 | title |
+| `chapter` | 章节内容 | 无（总是新建） |
 
 ### 5.3 导入方式
 
@@ -560,20 +571,71 @@ eventLine 条数 = targetChapterCount**
 - 支持 `.json`、`.txt`、`.md`、`.markdown` 格式
 - 支持多文件同时上传
 
-### 5.4 AI 格式化
+### 5.4 AI 格式化 ⭐
 
-导入内容后，点击 **解析数据** 按钮，AI 会：
+导入内容后，点击 **AI 格式化** 按钮，AI 会：
 1. 自动识别内容格式（JSON / Markdown / 纯文本）
 2. 提取关键信息并转换为标准 JSON 结构
 3. 返回解析预览供确认
 
+**支持的输入格式**:
+- ✅ 纯文本段落
+- ✅ Markdown 文档
+- ✅ 不完整的 JSON
+- ✅ 自然语言描述
+
 ### 5.5 导入模式
 
-| 模式 | 说明 |
-|------|------|
-| `create` | 仅新建（跳过已存在的） |
-| `update` | 仅更新（需要选择目标记录） |
-| `upsert` | 智能导入（存在则更新，不存在则新建）**默认** |
+| 模式 | 说明 | 适用场景 |
+|------|------|---------|
+| `create` | 仅新建（跳过已存在的） | 初始化全新数据 |
+| `update` | 仅更新（需要提供 id） | 批量修改已有数据 |
+| `upsert` | 智能导入（存在则更新，不存在则新建）**默认** | 日常使用的大部分场景 |
+
+### 5.6 智能匹配机制 ⭐
+
+系统支持通过标题自动匹配 ID：
+
+| 匹配类型 | 说明 |
+|---------|------|
+| `volumeTitle` → `volumeId` | 根据卷标题匹配卷 ID |
+| `chapterTitle` → `chapterId` | 根据章节标题匹配章节 ID |
+| `resolvedChapterTitle` → `resolvedChapterId` | 根据回收章节标题匹配 ID |
+
+### 5.7 伏笔智能关联 ⭐
+
+伏笔模块支持**三层智能关联匹配**：
+- 卷标题 → 卷ID
+- 章节标题 → 章节ID（触发章节）
+- 回收章节标题 → 回收章节ID
+
+### 5.8 角色 attributes 存储 ⭐
+
+> ⚠️ **重要说明**: 角色的详细信息存储在 `attributes` JSON 对象中！
+
+```typescript
+{
+  "name": "林萧",
+  "role": "protagonist",
+  "attributes": {
+    "appearance": "身高175cm，剑眉星目...",
+    "personality": "性格坚毅沉稳...",
+    "backgroundStory": "出身东荒大陆边缘...",
+    "relationships": ["苏婉儿(青梅竹马)", "赵长老(师父)"]
+  }
+}
+```
+
+### 5.9 卷伏笔计划字段 ⭐
+
+卷支持伏笔计划字段，可用于自动创建伏笔记录：
+
+```typescript
+{
+  "foreshadowingSetup": ["【高】神秘玉佩（主角童年获得的玉佩...）"],
+  "foreshadowingResolve": ["【高】玉佩之谜（第二十章：玉佩真相大白...）"]
+}
+```
 
 ---
 
@@ -899,6 +961,7 @@ while (true) {
 
 ---
 
-> 文档版本：1.3.0
-> 最后更新：2026-04-29
+> 文档版本：2.4.0
+> 最后更新：2026-04-30
 > 维护者：NovelForge 开发团队
+> v2.4.0 更新：新增导入数据功能（PWA离线支持、AI格式化、智能匹配）、完善创作工坊功能

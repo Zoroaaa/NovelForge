@@ -2,7 +2,7 @@
 
 > 完整的技术架构、数据流设计和模块依赖关系图。
 >
-> **版本**: 2.3.0 | **最后更新**: 2026-04-30
+> **版本**: 2.4.0 | **最后更新**: 2026-04-30
 
 ---
 
@@ -1264,6 +1264,6 @@ CLOUDFLARE_API_TOKEN=xxx      # Cloudflare API Token
 
 <div align="center">
 
-**Architecture Version: 2.3.0 · 最后更新: 2026-04-30**
+**Architecture Version: 2.4.0 · 最后更新: 2026-04-30**
 
 </div>

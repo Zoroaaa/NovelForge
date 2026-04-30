@@ -1,5 +1,7 @@
 # NovelForge · 部署指南
 
+> **版本**: 2.4.0 | **最后更新**: 2026-04-30
+
 > 本文档详细介绍如何将 NovelForge 部署到 Cloudflare Pages 生产环境。
 
 ---
