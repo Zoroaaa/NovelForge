@@ -686,25 +686,25 @@ async function buildSettingsSlotV2(
     if (r.score < threshold) continue
     if (slotCount[slotKey] >= SLOT_MAX_ITEMS[slotKey]) continue
 
-    // 使用 summary 而非 content
-    const content = r.metadata.content || ''
+    const settingName = r.metadata.title || ''
+    const isHighImportance = r.metadata.importance === 'high' && r.score >= 0.38 && r.metadata.sourceId
 
-    const tokens = estimateTokens(content)
+    if (isHighImportance) {
+      highImportanceIds.push(r.metadata.sourceId)
+      sourceIdSlotMap[r.metadata.sourceId] = { slotKey, index: output[slotKey].length }
+      continue
+    }
+
+    const content = r.metadata.content || ''
+    const labeledContent = settingName ? `【${settingName}】\n${content}` : content
+    const tokens = estimateTokens(labeledContent) + 1
     if (slotUsed[slotKey] + tokens > sbudget) continue
 
     slotUsed[slotKey] += tokens
     slotCount[slotKey]++
-    const insertIndex = output[slotKey].length
-    output[slotKey].push(content)
-
-    // 记录 high importance 设定用于后续 DB 全文补充
-    if (r.metadata.importance === 'high' && r.score >= 0.38 && r.metadata.sourceId) {
-      highImportanceIds.push(r.metadata.sourceId)
-      sourceIdSlotMap[r.metadata.sourceId] = { slotKey, index: insertIndex }
-    }
+    output[slotKey].push(labeledContent + '\n')
   }
 
-  // 对 high importance 设定，追加 DB 全文到对应槽（插入到对应 summary 之后）
   if (highImportanceIds.length > 0) {
     try {
       const fullRows = await db.select({
@@ -721,14 +721,15 @@ async function buildSettingsSlotV2(
       for (const fr of fullRows) {
         const slotKey = typeMapping[fr.type] ?? 'misc'
         const fullText = `【${fr.name}·完整设定】\n${fr.content}`
-        const tokens = estimateTokens(fullText)
+        const tokens = estimateTokens(fullText) + 1
         if (slotUsed[slotKey] + tokens <= slotBudgets[slotKey] * 1.5) {
           slotUsed[slotKey] += tokens
+          slotCount[slotKey]++
           const mapping = sourceIdSlotMap[fr.id]
           if (mapping && mapping.slotKey === slotKey) {
-            output[slotKey].splice(mapping.index + 1, 0, fullText)
+            output[slotKey].splice(mapping.index, 0, fullText + '\n')
           } else {
-            output[slotKey].push(fullText)
+            output[slotKey].push(fullText + '\n')
           }
         }
       }
