@@ -78,28 +78,29 @@ export async function generateChapter(
     )
 
     const fullContent = usageResult.collectedContent
-    if (fullContent && fullContent.trim().length > 0) {
-      const extractedTitle = extractTitleFromContent(fullContent)
-      const updateData: Record<string, unknown> = {
-        content: fullContent,
-        wordCount: fullContent.length,
-        status: 'generated',
-        updatedAt: sql`(unixepoch())`,
-      }
-
-      if (extractedTitle) {
-        updateData.title = extractedTitle
-      }
-
-      await db.update(chapters)
-        .set(updateData)
-        .where(eq(chapters.id, chapterId))
-      LOG_STYLES.SUCCESS(`B1 fix: 章节内容已写入数据库 (${fullContent.length} 字符)`)
+  if (fullContent && fullContent.trim().length > 0) {
+    const extractedTitle = extractTitleFromContent(fullContent)
+    const updateData: Record<string, unknown> = {
+      content: fullContent,
+      wordCount: fullContent.length,
+      status: options.draftMode ? 'draft' : 'generated',
+      updatedAt: sql`(unixepoch())`,
     }
 
-    // 修复: 批量生成(skipPostProcess=true)时跳过 post_process_chapter 入队，
-    // 避免与 batch_generate_chapter→quality_check 链重复触发 checkQuality
-    if (!options.skipPostProcess) {
+    if (extractedTitle) {
+      updateData.title = extractedTitle
+    }
+
+    await db.update(chapters)
+      .set(updateData)
+      .where(eq(chapters.id, chapterId))
+    LOG_STYLES.SUCCESS(`B1 fix: 章节内容已写入数据库 (${fullContent.length} 字符, mode=${options.draftMode ? 'draft' : 'normal'})`)
+  }
+
+  // 草稿模式或批量生成时跳过后处理
+  if (options.draftMode) {
+    LOG_STYLES.SUCCESS('草稿模式：跳过 post_process，章节状态为 draft')
+  } else if (!options.skipPostProcess) {
       if (env.TASK_QUEUE) {
         await enqueue(env, {
           type: 'post_process_chapter',

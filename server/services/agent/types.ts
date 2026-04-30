@@ -13,6 +13,8 @@ export interface AgentConfig {
 export interface GenerationOptions {
   /** 批量生成时设为 true，跳过 post_process_chapter 入队（由 batch 流程自行控制后续）*/
   skipPostProcess?: boolean
+  /** 草稿模式：true 时只生成内容不触发后处理，章节状态标记为 draft */
+  draftMode?: boolean
   mode?: 'generate' | 'continue' | 'rewrite'
   existingContent?: string
   targetWords?: number

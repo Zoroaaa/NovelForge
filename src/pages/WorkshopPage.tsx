@@ -218,8 +218,18 @@ export default function WorkshopPage() {
     },
     onSuccess: (data) => {
       if (data.ok) {
-        toast.success('🎉 创作数据已提交到后台处理！')
         setShowCommitDialog(false)
+        if (data.novelId && !data.timedOut) {
+          toast.success('🎉 提交成功！正在跳转到小说详情...')
+          setTimeout(() => navigate(`/novel/${data.novelId}`), 800)
+        } else {
+          toast.success(data.timedOut
+            ? '⏳ 提交量大，后台处理中（约1-2分钟），请在小说列表查看'
+            : '🎉 创作数据已提交！')
+          if (data.vectorizing) {
+            setTimeout(() => toast.info('📡 正在建立语义索引（约 30 秒），完成后即可开始生成章节'), 1500)
+          }
+        }
       }
     },
   })

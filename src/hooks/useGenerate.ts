@@ -84,9 +84,14 @@ export function useGenerate() {
             const errorCount = issues?.filter((i: { severity: string }) => i.severity === 'error').length || 0
             const warningCount = issues?.filter((i: { severity: string }) => i.severity === 'warning').length || 0
 
-            if (errorCount > 0) {
+            if (score < 70 && errorCount > 0) {
+              toast.error(`⚠️ 连贯性评分偏低（${score}/100），正在自动修复中...`, {
+                description: `发现 ${errorCount} 个严重问题，系统正在生成修复版本，请稍候`,
+                duration: Infinity,
+              })
+            } else if (errorCount > 0) {
               toast.error(`连贯性检测发现 ${errorCount} 个问题（评分: ${score}/100）`, {
-                description: score < 70 ? '正在自动修复...' : issues.slice(0, 3).map((i: { message: string }) => `• ${i.message}`).join('\n'),
+                description: issues.slice(0, 3).map((i: { message: string }) => `• ${i.message}`).join('\n'),
                 duration: 8000,
               })
             } else if (warningCount > 0) {
@@ -102,9 +107,13 @@ export function useGenerate() {
             const { repairedContent: fixed, originalScore, issues: fixIssues } = chunk as { repairedContent: string; originalScore: number; issues: Array<{ severity: 'error' | 'warning'; message: string }> }
             setRepairedContent(fixed)
             setRepairInfo({ originalScore, issues: (fixIssues || []).map(i => ({ severity: i.severity, message: i.message })) })
-            toast.success(`已自动修复（原评分 ${originalScore}/100）`, {
-              description: '修复版本已就绪，可在编辑器中选择接受或忽略',
-              duration: 8000,
+
+            // 关闭之前的"正在修复中"提示
+            toast.dismiss()
+
+            toast.success(`✅ 自动修复完成（原评分 ${originalScore}/100）`, {
+              description: '修复版本已写入数据库，内容已更新',
+              duration: Infinity,
             })
             return
           }

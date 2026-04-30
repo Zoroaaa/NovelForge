@@ -82,6 +82,7 @@ export interface ContextBundle {
     totalTokenEstimate: number
     slotBreakdown: Record<string, number>
     ragQueriesCount: number
+    ragFallbackUsed: boolean
     buildTimeMs: number
     budgetTier: BudgetTier
     chapterTypeHint: string
@@ -188,7 +189,7 @@ export async function buildChapterContext(
     fetchProtagonistCards(db, novelId),
     fetchProtagonistPowerLevel(db, novelId),
     fetchAllActiveRules(db, novelId),
-    fetchRecentSummaries(db, currentChapter.novelId, currentChapter.sortOrder, summaryChainLength),
+    fetchRecentSummaries(db, currentChapter.novelId, currentChapter.sortOrder, summaryChainLength, currentChapter.volumeId ?? undefined),
     fetchRhythmStats(db, novelId, currentChapter.volumeId, currentChapter.sortOrder),
     currentChapter.volumeId
       ? db
@@ -206,15 +207,22 @@ export async function buildChapterContext(
     : 1
 
   const protagonistStateCards = mergeProtagonistAndPower(protagonistData, powerLevelInfo)
-  const chapterTypeHint = inferChapterType(volumeInfo.eventLine, currentChapter.title)
 
-  // ── Step 2: 组装查询向量（聚焦当前章节语义，≤800字） ──
+  // ── Step 2: 先提取本章事件（用于类型推断和向量构建） ──
   const { prevEvent, currentEvent, nextThreeChapters } = extractCurrentChapterEvent(volumeInfo.eventLine, chapterIndexInVolume)
+  let typeHintSource: string = currentEvent || volumeInfo.eventLine
+  const chapterTypeHint = inferChapterType(typeHintSource, currentChapter.title)
+
+  // ── Step 2b: 组装查询向量（聚焦当前章节语义，≤800字） ──
   const queryTextParts = [currentChapter.title, prevEvent, currentEvent, nextThreeChapters]
 
   if (!currentEvent && recentSummaries.length > 0) {
     const lastSummary = recentSummaries[recentSummaries.length - 1]
     queryTextParts.push(lastSummary.slice(-300))
+  }
+
+  if (prevContent) {
+    queryTextParts.push(prevContent.slice(-400))
   }
 
   const queryText = queryTextParts.filter(Boolean).join('\n').slice(0, 800)
@@ -264,7 +272,7 @@ export async function buildChapterContext(
     // D3: 伏笔 — 高重要性 DB 兜底 + 普通 RAG
     const openForeshadowingIds = await fetchOpenForeshadowingIds(db, novelId, currentChapter.sortOrder)
     relevantForeshadowing = await buildForeshadowingHybrid(
-      db, foreshadowingResults, openForeshadowingIds, novelId, budget.foreshadowing
+      db, foreshadowingResults, openForeshadowingIds, novelId, budget.foreshadowing, currentChapter.sortOrder
     )
 
     // D2: 设定 — RAG 返回 summary，按 type 分槽；high importance 追加 DB 全文
@@ -273,6 +281,40 @@ export async function buildChapterContext(
     )
 
     // D4: 本章类型规则（排除Slot-4已注入的全部活跃规则）
+    const activeRuleIds = allActiveRules.length > 0 ? await fetchAllActiveRuleIds(db, novelId) : []
+    chapterTypeRules = await fetchChapterTypeRules(db, novelId, chapterTypeHint, activeRuleIds)
+  } else {
+    console.warn('[contextBuilder] VECTORIZE unavailable, using DB fallback for dynamic slots')
+
+    characterCards = await db.select({
+      id: characters.id,
+      name: characters.name,
+      role: characters.role,
+      aliases: characters.aliases,
+      description: characters.description,
+      attributes: characters.attributes,
+      powerLevel: characters.powerLevel,
+    })
+    .from(characters)
+    .where(and(
+      eq(characters.novelId, novelId),
+      inArray(characters.role, ['supporting', 'antagonist']),
+      sql`${characters.deletedAt} IS NULL`
+    ))
+    .orderBy(desc(characters.updatedAt))
+    .limit(8)
+    .all()
+    .then(rows => rows.map(r => formatCharacterCard(r)))
+
+    const openForeshadowingIds = await fetchOpenForeshadowingIds(db, novelId, currentChapter.sortOrder)
+    relevantForeshadowing = await buildForeshadowingHybrid(
+      db, [], openForeshadowingIds, novelId, budget.foreshadowing, currentChapter.sortOrder
+    )
+
+    slottedSettings = await buildSettingsSlotV2(
+      db, [], chapterTypeHint, budget.settings
+    )
+
     const activeRuleIds = allActiveRules.length > 0 ? await fetchAllActiveRuleIds(db, novelId) : []
     chapterTypeRules = await fetchChapterTypeRules(db, novelId, chapterTypeHint, activeRuleIds)
   }
@@ -369,6 +411,7 @@ export async function buildChapterContext(
       totalTokenEstimate,
       slotBreakdown,
       ragQueriesCount: queryText && env.VECTORIZE ? actualRagQueriesCount : 0,
+      ragFallbackUsed: !(queryText && env.VECTORIZE),
       buildTimeMs: Date.now() - startTime,
       budgetTier: budget,
       chapterTypeHint,
@@ -392,15 +435,25 @@ async function buildCharacterSlotFromDB(
   budgetTokens: number,
   protagonistIds: string[] = [],
 ): Promise<string[]> {
-  const SCORE_THRESHOLD = 0.45
+  const SCORE_THRESHOLD_PRIMARY = 0.45
+  const SCORE_THRESHOLD_FALLBACK = 0.35
   const MAX_CHARACTERS = 6
 
-  const candidates = ragResults
-    .filter(r => r.score >= SCORE_THRESHOLD)
+  let candidates = ragResults
+    .filter(r => r.score >= SCORE_THRESHOLD_PRIMARY)
     .filter(r => !protagonistIds.includes(r.metadata.sourceId))
     .sort((a, b) => b.score - a.score)
     .slice(0, MAX_CHARACTERS)
     .map(r => r.metadata.sourceId)
+
+  if (candidates.length < 2 && ragResults.length >= 2) {
+    candidates = ragResults
+      .filter(r => r.score >= SCORE_THRESHOLD_FALLBACK)
+      .filter(r => !protagonistIds.includes(r.metadata.sourceId))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, MAX_CHARACTERS)
+      .map(r => r.metadata.sourceId)
+  }
 
   if (candidates.length === 0) return []
 
@@ -462,7 +515,8 @@ async function buildForeshadowingHybrid(
   ragResults: Array<{ score: number; metadata: any }>,
   openIds: Set<string>,
   novelId: string,
-  budgetTokens: number
+  budgetTokens: number,
+  currentSortOrder?: number
 ): Promise<string[]> {
   // 路径A: 高重要性未收尾伏笔（按创建时间倒序，近期埋入的优先）
   const highPriority = await db.select({
@@ -490,15 +544,70 @@ async function buildForeshadowingHybrid(
     return isOpen && !isHigh && r.score > 0.42
   }).slice(0, MAX_NORMAL_FORESHADOWING)
 
+  // 路径C（新增）: 回收计划 — 时序感知注入
+  // 当提供了 currentSortOrder 时，查询"即将到达回收章节"的 resolve_planned 伏笔
+  const RESOLVE_WINDOW = 10
+  let resolvePlannedItems: Array<{ title: string; description: string; targetChapter: number }> = []
+
+  if (currentSortOrder != null) {
+    try {
+      const plannedRows = await db.select({
+        title: foreshadowing.title,
+        description: foreshadowing.description,
+        chapterId: foreshadowing.chapterId,
+      })
+      .from(foreshadowing)
+      .where(and(
+        eq(foreshadowing.novelId, novelId),
+        eq(foreshadowing.status, 'resolve_planned'),
+        sql`${foreshadowing.deletedAt} IS NULL`
+      ))
+      .all()
+
+      if (plannedRows.length > 0) {
+        const plannedChapterIds = [...new Set(plannedRows.map(r => r.chapterId).filter((id): id is string => id != null))]
+        let chapterSortMap: Map<string, number> = new Map()
+
+        if (plannedChapterIds.length > 0) {
+          const sortRows = await db.select({ id: chapters.id, sortOrder: chapters.sortOrder })
+            .from(chapters)
+            .where(inArray(chapters.id, plannedChapterIds))
+            .all()
+          chapterSortMap = new Map(sortRows.map(r => [r.id, r.sortOrder]))
+        }
+
+        for (const row of plannedRows) {
+          const targetSort = row.chapterId ? chapterSortMap.get(row.chapterId) : undefined
+          if (targetSort !== undefined && targetSort >= currentSortOrder - 1 && targetSort <= currentSortOrder + RESOLVE_WINDOW) {
+            resolvePlannedItems.push({
+              title: row.title,
+              description: row.description || '',
+              targetChapter: targetSort,
+            })
+          }
+        }
+
+        resolvePlannedItems.sort((a, b) => a.targetChapter - b.targetChapter)
+      }
+    } catch (e) {
+      console.warn('[contextBuilder] 路径C 查询 resolve_planned 失败:', e)
+    }
+  }
+
   const allItems = [
     ...highPriority.map(h => ({
-      text: `【${h.title}】(高重要性)\n${h.description}`,
+      text: `【${h.title}】(高重要性·待回收)\n${h.description}`,
       priority: 0,
     })),
     ...normalItems.map(n => ({
       text: n.metadata.content || '',
       priority: 1,
       score: n.score,
+    })),
+    ...resolvePlannedItems.map(r => ({
+      text: `【${r.title}】(回收计划·第${r.targetChapter}章)\n${r.description}\n⚠️ 此伏笔计划在第 ${r.targetChapter} 章回收，本章可提前铺垫但不得终结`,
+      priority: 1.5,
+      isResolvePlanned: true,
     })),
   ]
 
@@ -747,22 +856,57 @@ async function fetchPrevChapterContent(
 }
 
 async function fetchRecentSummaries(
-  db: AppDb, novelId: string, currentSortOrder: number, chainLength: number
+  db: AppDb, novelId: string, currentSortOrder: number, chainLength: number, volumeId?: string
 ): Promise<string[]> {
   if (chainLength <= 0) return []
   try {
-    const rows = await db
-      .select({ title: chapters.title, summary: chapters.summary, sortOrder: chapters.sortOrder })
-      .from(chapters)
-      .where(and(
-        eq(chapters.novelId, novelId),
-        sql`${chapters.sortOrder} < ${currentSortOrder}`,
-        sql`${chapters.summary} IS NOT NULL AND ${chapters.summary} != ''`,
-        sql`${chapters.deletedAt} IS NULL`
-      ))
-      .orderBy(desc(chapters.sortOrder)).limit(chainLength).all()
+    let rows: Array<{ title: string; summary: string | null; sortOrder: number }>
 
-    return rows.reverse().map((r: any) => `[第${r.sortOrder + 1}章 ${r.title}] ${r.summary}`)
+    if (volumeId) {
+      const sameVolRows = await db
+        .select({ title: chapters.title, summary: chapters.summary, sortOrder: chapters.sortOrder })
+        .from(chapters)
+        .where(and(
+          eq(chapters.novelId, novelId),
+          eq(chapters.volumeId, volumeId),
+          sql`${chapters.sortOrder} < ${currentSortOrder}`,
+          sql`${chapters.summary} IS NOT NULL AND ${chapters.summary} != ''`,
+          sql`${chapters.deletedAt} IS NULL`
+        ))
+        .orderBy(desc(chapters.sortOrder)).limit(chainLength).all()
+
+      if (sameVolRows.length >= chainLength) {
+        rows = [...sameVolRows].reverse()
+      } else {
+        const remaining = chainLength - sameVolRows.length
+        const prevVolRows = await db
+          .select({ title: chapters.title, summary: chapters.summary, sortOrder: chapters.sortOrder })
+          .from(chapters)
+          .where(and(
+            eq(chapters.novelId, novelId),
+            sql`${chapters.volumeId} != ${volumeId}`,
+            sql`${chapters.sortOrder} < ${currentSortOrder}`,
+            sql`${chapters.summary} IS NOT NULL AND ${chapters.summary} != ''`,
+            sql`${chapters.deletedAt} IS NULL`
+          ))
+          .orderBy(desc(chapters.sortOrder)).limit(remaining).all()
+        rows = [...prevVolRows.reverse(), ...sameVolRows.reverse()]
+      }
+    } else {
+      rows = await db
+        .select({ title: chapters.title, summary: chapters.summary, sortOrder: chapters.sortOrder })
+        .from(chapters)
+        .where(and(
+          eq(chapters.novelId, novelId),
+          sql`${chapters.sortOrder} < ${currentSortOrder}`,
+          sql`${chapters.summary} IS NOT NULL AND ${chapters.summary} != ''`,
+          sql`${chapters.deletedAt} IS NULL`
+        ))
+        .orderBy(desc(chapters.sortOrder)).limit(chainLength).all()
+      rows = rows.reverse()
+    }
+
+    return rows.map((r: any) => `[第${r.sortOrder + 1}章 ${r.title}] ${r.summary}`)
   } catch (error) {
     console.error('[contextBuilder] fetchRecentSummaries failed:', error)
     return []
@@ -976,9 +1120,49 @@ function inferChapterType(eventLine: string, chapterTitle: string): string {
  */
 function extractCurrentChapterEvent(
   eventLine: string,
-  currentSortOrder: number,
+  chapterIndexInVolume: number,
 ): { prevEvent: string; currentEvent: string; nextThreeChapters: string } {
   if (!eventLine) return { prevEvent: '', currentEvent: '', nextThreeChapters: '' }
+
+  const trimmed = eventLine.trim()
+  if (trimmed.startsWith('[') || trimmed.startsWith('"')) {
+    try {
+      const parsed = JSON.parse(trimmed)
+      const arr: string[] = Array.isArray(parsed)
+        ? parsed.map(item => typeof item === 'string' ? item : String(item))
+        : (typeof parsed === 'string' ? [parsed] : [])
+
+      if (arr.length > 0) {
+        const idx = chapterIndexInVolume - 1
+
+        const currentEvent = idx >= 0 && idx < arr.length
+          ? `${arr[idx].trim().slice(0, 200)}  ← 核心，必须完成`
+          : ''
+
+        const prevEvent = idx > 0 && arr[idx - 1]
+          ? `【上章事件】${arr[idx - 1].trim().slice(0, 200)}`
+          : ''
+
+        const nextParts: string[] = []
+        for (let i = 1; i <= 3; i++) {
+          if (idx + i < arr.length) {
+            nextParts.push(arr[idx + i].trim())
+          }
+        }
+        const nextThreeChapters = nextParts.length > 0
+          ? nextParts.join('\n') + '  ← 仅供结尾钩子参考，本章不得提前完成'
+          : ''
+
+        const finalCurrentEvent = currentEvent || (arr.length > 0
+          ? `${arr[arr.length - 1].trim().slice(0, 200)}  ⚠️ 已超出 eventLine 范围，以上一卷末尾事件作参考`
+          : ''
+        )
+
+        return { prevEvent, currentEvent: finalCurrentEvent, nextThreeChapters }
+      }
+    } catch {
+    }
+  }
 
   const lines = eventLine.split('\n').filter(l => l.trim())
 
@@ -990,12 +1174,12 @@ function extractCurrentChapterEvent(
       return line ? line.trim().slice(0, 200) : null
     }
 
-    const currentEvent = findChapterLine(currentSortOrder)
+    const currentEvent = findChapterLine(chapterIndexInVolume)
     if (currentEvent) {
-      const prev = findChapterLine(currentSortOrder - 1)
+      const prev = findChapterLine(chapterIndexInVolume - 1)
       const nextEvents: string[] = []
       for (let i = 1; i <= 3; i++) {
-        const next = findChapterLine(currentSortOrder + i)
+        const next = findChapterLine(chapterIndexInVolume + i)
         if (next) nextEvents.push(next)
       }
       return {
@@ -1006,10 +1190,10 @@ function extractCurrentChapterEvent(
     }
   }
 
-  const currentPattern = new RegExp(`第${currentSortOrder}章[：:\\s]`)
-  const nextPattern = new RegExp(`第${currentSortOrder + 1}章[：:\\s]`)
-  const prevPattern = new RegExp(`第${currentSortOrder - 1}章[：:\\s]`)
-  const afterNextPattern = new RegExp(`第${currentSortOrder + 4}章[：:\\s]`)
+  const currentPattern = new RegExp(`第${chapterIndexInVolume}章[：:\\s]`)
+  const nextPattern = new RegExp(`第${chapterIndexInVolume + 1}章[：:\\s]`)
+  const prevPattern = new RegExp(`第${chapterIndexInVolume - 1}章[：:\\s]`)
+  const afterNextPattern = new RegExp(`第${chapterIndexInVolume + 4}章[：:\\s]`)
 
   const currentStart = eventLine.search(currentPattern)
   if (currentStart === -1) return { prevEvent: '', currentEvent: eventLine.slice(0, 500), nextThreeChapters: '' }
@@ -1025,7 +1209,7 @@ function extractCurrentChapterEvent(
     if (prevContent) prevEvent = `【上章事件】${prevContent.slice(0, 200)}`
   }
 
-  const currentEvent = `${currentContent}  ← 核心，必须完成`
+  const currentEventFinal = `${currentContent}  ← 核心，必须完成`
 
   const nextMatch = eventLine.match(nextPattern)
   let nextThreeChapters = ''
@@ -1036,7 +1220,7 @@ function extractCurrentChapterEvent(
     nextThreeChapters = nextContent.slice(0, 200) + '  ← 仅供结尾钩子参考，本章不得提前完成'
   }
 
-  return { prevEvent, currentEvent, nextThreeChapters }
+  return { prevEvent, currentEvent: currentEventFinal, nextThreeChapters }
 }
 
 export function estimateTokens(text: string): number {
@@ -1068,7 +1252,16 @@ export function assemblePromptContext(bundle: ContextBundle, options?: AssembleO
   if (shouldInclude('volume') && (bundle.core.volumeBlueprint || bundle.core.volumeEventLine || bundle.core.volumeNotes)) {
     const parts = []
     if (bundle.core.volumeBlueprint) parts.push(`【卷蓝图】\n${bundle.core.volumeBlueprint}`)
-    if (bundle.core.volumeEventLine) parts.push(`【事件线】\n${bundle.core.volumeEventLine}`)
+    if (bundle.core.volumeEventLine) {
+      let displayEventLine = bundle.core.volumeEventLine
+      try {
+        const parsed = JSON.parse(displayEventLine)
+        if (Array.isArray(parsed)) {
+          displayEventLine = parsed.join('\n')
+        }
+      } catch {}
+      parts.push(`【事件线】\n${displayEventLine}`)
+    }
     if (bundle.core.volumeNotes) parts.push(`【卷备注】\n${bundle.core.volumeNotes}`)
     sections.push(`## 当前卷规划\n${parts.join('\n\n')}`)
   }

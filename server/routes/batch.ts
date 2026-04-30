@@ -4,6 +4,9 @@ import { zValidator } from '@hono/zod-validator'
 import type { Env } from '../lib/types'
 import * as batchService from '../services/agent/batchGenerate'
 import { checkAndCompleteVolume } from '../services/agent/volumeCompletion'
+import { drizzle } from 'drizzle-orm/d1'
+import { batchGenerationTasks } from '../db/schema'
+import { eq, and, desc } from 'drizzle-orm'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -81,6 +84,35 @@ router.get('/novels/:id/active', async (c) => {
   }
 
   return c.json(task)
+})
+
+router.get('/novels/:id/history', zValidator('query', z.object({
+  limit: z.coerce.number().optional().default(10),
+  status: z.enum(['done', 'failed', 'cancelled']).optional(),
+})), async (c) => {
+  const novelId = c.req.param('id')
+  const { limit, status } = c.req.valid('query')
+  const db = drizzle(c.env.DB)
+
+  let query = db.select()
+    .from(batchGenerationTasks)
+    .where(eq(batchGenerationTasks.novelId, novelId))
+    .orderBy(desc(batchGenerationTasks.updatedAt))
+    .limit(limit)
+
+  if (status) {
+    query = db.select()
+      .from(batchGenerationTasks)
+      .where(and(
+        eq(batchGenerationTasks.novelId, novelId),
+        eq(batchGenerationTasks.status, status)
+      ))
+      .orderBy(desc(batchGenerationTasks.updatedAt))
+      .limit(limit)
+  }
+
+  const tasks = await query.all()
+  return c.json({ tasks })
 })
 
 export const batch = router

@@ -397,6 +397,14 @@ ${chapter.content}
 
     if (!repairedContent.trim()) return { ok: false, error: ERROR_MESSAGES.REPAIR_PRODUCED_EMPTY }
 
+    await db.update(chapters)
+      .set({
+        content: repairedContent,
+        wordCount: repairedContent.length,
+        updatedAt: sql`(unixepoch())`,
+      })
+      .where(eq(chapters.id, chapterId))
+
     return { ok: true, repairedContent }
   } catch (error) {
     console.error('[repairChapterByIssues] failed:', error)

@@ -23,6 +23,7 @@ import {
   generateVolumeSummary,
   checkVolumeProgress,
 } from '../services/agent'
+import { SSE_STREAM_TIMEOUT } from '../services/agent/constants'
 import { saveCheckLog, getLatestCheckLog, getCheckLogHistory } from '../services/agent/checkLogService'
 import { buildChapterContext } from '../services/contextBuilder'
 import { buildMessages } from '../services/agent/messages'
@@ -87,8 +88,8 @@ router.post('/chapter', async (c) => {
   const abortController = new AbortController()
   const timeoutId = setTimeout(() => {
     abortController.abort()
-    console.warn('[generate] SSE stream timeout (300s), aborting')
-  }, 300000)
+    console.warn(`[generate] SSE stream timeout (${SSE_STREAM_TIMEOUT/1000}s), aborting`)
+  }, SSE_STREAM_TIMEOUT)
 
   c.req.raw.signal.addEventListener('abort', () => {
     writer.close().catch(err => console.warn('[generate] Failed to close writer on client disconnect:', err))
@@ -157,14 +158,14 @@ router.post('/chapter', async (c) => {
         })
         .catch(err => console.warn('Failed to send coherence check:', err))
 
-      const doneData = `data: ${JSON.stringify({ type: 'done', usage })}\n\ndata: [DONE]\n\n`
-      writer.write(encoder.encode(doneData))
-
-      // 等待连贯性检查+修复完成后再关闭流（最多等 60 秒）
+      // 等待连贯性检查+修复完成后再发送 [DONE] 并关闭流（最多等 60 秒）
       Promise.race([
         coherenceCheckPromise,
         new Promise(resolve => setTimeout(resolve, 60000)),
-      ]).finally(() => {
+      ]).then(() => {
+        const doneData = `data: ${JSON.stringify({ type: 'done', usage })}\n\ndata: [DONE]\n\n`
+        writer.write(encoder.encode(doneData))
+      }).finally(() => {
         clearTimeout(timeoutId)
         writer.close()
       })

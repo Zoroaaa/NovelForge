@@ -28,6 +28,20 @@ export function safeParseJSON(raw: string): unknown {
   return JSON.parse(result)
 }
 
+export function mergeArrayField<T extends Record<string, any>>(
+  existing: T[] | undefined,
+  incoming: T[] | undefined,
+  uniqueKey: keyof T
+): T[] | undefined {
+  if (!incoming) return existing
+  if (!existing) return incoming
+  const map = new Map(existing.map(item => [String(item[uniqueKey]), item]))
+  for (const item of incoming) {
+    map.set(String(item[uniqueKey]), { ...map.get(String(item[uniqueKey])), ...item })
+  }
+  return [...map.values()]
+}
+
 /** 从 pos 开始提取一个 JSON 字符串值（pos 指向开头引号） */
 function extractStringValue(str: string, pos: number): { value: string; end: number } | null {
   if (str[pos] !== '"') return null
@@ -181,19 +195,31 @@ export function extractStructuredData(
       break
 
     case 'worldbuild':
-      if (parsed.worldSettings) newData.worldSettings = parsed.worldSettings as Array<{ type: string; title: string; content: string; importance?: string }>
+      if (parsed.worldSettings) newData.worldSettings = mergeArrayField(
+        currentData.worldSettings,
+        parsed.worldSettings as Array<{ type: string; title: string; content: string; importance?: string }>,
+        'title'
+      )
       break
 
     case 'character_design':
-      if (parsed.characters) newData.characters = parsed.characters as Array<{ name: string; role: string; description: string; aliases?: string[]; powerLevel?: string; attributes?: Record<string, unknown>; relationships?: string[] }>
+      if (parsed.characters) newData.characters = mergeArrayField(
+        currentData.characters,
+        parsed.characters as Array<{ name: string; role: string; description: string; aliases?: string[]; powerLevel?: string; attributes?: Record<string, unknown>; relationships?: string[] }>,
+        'name'
+      )
       break
 
     case 'volume_outline':
       if (parsed.volumes) {
-        const validatedVolumes = (parsed.volumes as Array<any>).map((vol: any) => {
-          const PER_CHAPTER_MIN = 3000
-          const PER_CHAPTER_MAX = 5000
-
+        const mergedVolumes = mergeArrayField(
+          currentData.volumes,
+          parsed.volumes as Array<any>,
+          'title'
+        ) ?? []
+        const PER_CHAPTER_MIN = 3000
+        const PER_CHAPTER_MAX = 5000
+        const validatedVolumes = mergedVolumes.map((vol: any) => {
           if (vol.targetWordCount && vol.targetChapterCount) {
             const expectedChapters = Math.round(vol.targetWordCount / ((PER_CHAPTER_MIN + PER_CHAPTER_MAX) / 2))
             if (Math.abs(vol.targetChapterCount - expectedChapters) > expectedChapters * 0.3) {

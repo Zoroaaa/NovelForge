@@ -10,7 +10,7 @@ import { resolveConfig } from '../llm'
 import type { WorkshopExtractedData } from './types'
 import { createWorkshopSession, getWorkshopSession, updateSession, loadNovelContextData, WorkshopMessage } from './session'
 import { buildSystemPrompt } from './prompt'
-import { extractStructuredData } from './extract'
+import { extractStructuredData, mergeArrayField, safeParseJSON } from './extract'
 import { commitWorkshopSession, commitWorkshopSessionCore } from './commit'
 
 const { workshopSessions } = schema
@@ -114,9 +114,33 @@ export async function processWorkshopMessage(
       onDone: async () => {
         if (activeStage === 'volume_outline' && fullResponse.length > 0) {
           const hasClosingBlock = fullResponse.trimEnd().endsWith('```')
-          if (!hasClosingBlock) {
+
+          let parseCheckPassed = false
+          let chapterMismatch = false
+          const jsonMatch = fullResponse.match(/```(?:json)?\s*([\s\S]*?)```/g)
+          if (jsonMatch) {
+            const lastJson = jsonMatch[jsonMatch.length - 1].replace(/```\w?/g, '').trim()
+            try {
+              const parsed = safeParseJSON(lastJson) as { volumes?: Array<{ eventLine?: unknown; targetChapterCount?: number }> } | null
+              if (parsed?.volumes && Array.isArray(parsed.volumes)) {
+                parseCheckPassed = true
+                for (const vol of parsed.volumes) {
+                  if (vol.eventLine && vol.targetChapterCount &&
+                      Array.isArray(vol.eventLine) &&
+                      vol.eventLine.length !== vol.targetChapterCount) {
+                    chapterMismatch = true
+                    break
+                  }
+                }
+              }
+            } catch {}
+          }
+
+          if (!hasClosingBlock && !parseCheckPassed) {
             console.warn('[workshop] ⚠️ 卷纲输出疑似被截断（未找到 JSON 代码块结束标记），回复长度:', fullResponse.length)
             onChunk('\n\n⚠️ **输出可能被截断**：卷纲内容较长，AI 回复可能因模型输出长度限制（max_tokens）而被截断，导致右侧预览无法显示。建议：1) 在模型配置中增大 max_tokens（推荐 32000 以上）；2) 要求 AI 分卷输出；3) 确认后重新生成。')
+          } else if (parseCheckPassed && chapterMismatch) {
+            onChunk('\n\n⚠️ **章节数不一致**：卷纲的 eventLine 条数与 targetChapterCount 不匹配，AI 可能未输出完整。请检查各卷的章节数是否正确。')
           }
         }
 
@@ -220,12 +244,20 @@ export async function reExtractSessionData(
   console.log('[workshop/re-extract] 开始重新提取, sessionId:', sessionId, '| stage:', stage, '| assistant消息数:', assistantMessages.length)
 
   const mergedData: WorkshopExtractedData = { ...currentData }
+  const ARRAY_UPSERT_KEYS = ['worldSettings', 'characters', 'volumes'] as const
+  const ARRAY_UNIQUE_KEYS: Record<string, string> = {
+    worldSettings: 'title', characters: 'name', volumes: 'title',
+  }
 
   for (const msg of assistantMessages) {
     try {
       const extracted = extractStructuredData(msg.content, stage, currentData)
       for (const [key, value] of Object.entries(extracted)) {
-        if (value !== undefined && value !== null) {
+        if (value === undefined || value === null) continue
+        if (ARRAY_UPSERT_KEYS.includes(key as any) && Array.isArray(value) && Array.isArray(mergedData[key as keyof WorkshopExtractedData])) {
+          const uniqueKey = ARRAY_UNIQUE_KEYS[key as keyof typeof ARRAY_UNIQUE_KEYS]
+          ;(mergedData as any)[key] = mergeArrayField((mergedData as any)[key] as any[] | undefined, value, uniqueKey)
+        } else {
           (mergedData as Record<string, unknown>)[key] = value
         }
       }

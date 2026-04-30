@@ -3,7 +3,7 @@
  * @description 创作工坊 - 提交逻辑
  */
 import { drizzle } from 'drizzle-orm/d1'
-import { eq, and, isNull, sql, inArray } from 'drizzle-orm'
+import { eq, and, isNull, sql, inArray, asc } from 'drizzle-orm'
 import type { Env } from '../../lib/types'
 import * as schema from '../../db/schema'
 import { enqueue } from '../../lib/queue'
@@ -18,6 +18,7 @@ const {
   novelSettings,
   writingRules,
   characters,
+  chapters,
   volumes,
   foreshadowing,
   entityIndex,
@@ -26,15 +27,30 @@ const {
 export async function commitWorkshopSession(
   env: Env,
   sessionId: string
-): Promise<{ ok: boolean; novelId?: string; createdItems: any }> {
-  await enqueue(env, { type: 'commit_workshop', payload: { sessionId } })
-  return { ok: true, novelId: undefined, createdItems: {} }
+): Promise<{ ok: boolean; novelId?: string; createdItems: any; timedOut?: boolean; vectorizing?: boolean }> {
+  const TIMEOUT_MS = 30000
+
+  try {
+    const result = await Promise.race([
+      commitWorkshopSessionCore(env, sessionId),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('TIMEOUT')), TIMEOUT_MS)
+      )
+    ])
+    return result
+  } catch (e) {
+    if ((e as Error).message === 'TIMEOUT') {
+      await enqueue(env, { type: 'commit_workshop', payload: { sessionId } })
+      return { ok: true, novelId: undefined, createdItems: {}, timedOut: true }
+    }
+    throw e
+  }
 }
 
 export async function commitWorkshopSessionCore(
   env: Env,
   sessionId: string
-): Promise<{ ok: boolean; novelId?: string; createdItems: any }> {
+): Promise<{ ok: boolean; novelId?: string; createdItems: any; vectorizing?: boolean }> {
   const db = drizzle(env.DB)
 
   const session = await db
@@ -108,7 +124,7 @@ export async function commitWorkshopSessionCore(
     createdItems.outline = outline
   }
 
-  if (data.worldSettings && data.worldSettings.length > 0 && (isNewNovel || stage === 'worldbuild')) {
+  if (data.worldSettings && data.worldSettings.length > 0) {
     const existingSettings = await db
       .select()
       .from(novelSettings)
@@ -220,7 +236,7 @@ export async function commitWorkshopSessionCore(
     createdItems.writingRules = createdRules
   }
 
-  if (data.characters && data.characters.length > 0 && (isNewNovel || stage === 'character_design')) {
+  if (data.characters && data.characters.length > 0) {
     const existingCharacters = await db
       .select()
       .from(characters)
@@ -300,7 +316,7 @@ export async function commitWorkshopSessionCore(
     createdItems.characters = createdCharacters
   }
 
-  if (data.volumes && data.volumes.length > 0 && (isNewNovel || stage === 'volume_outline')) {
+  if (data.volumes && data.volumes.length > 0) {
     const existingVolumes = await db
       .select()
       .from(volumes)
@@ -381,6 +397,21 @@ export async function commitWorkshopSessionCore(
         console.warn('[workshop] 卷摘要生成失败:', err)
       }
 
+      const volumeChapters = volume.id
+        ? await db.select({ id: chapters.id, sortOrder: chapters.sortOrder, title: chapters.title })
+            .from(chapters)
+            .where(and(eq(chapters.volumeId, volume.id), sql`${chapters.deletedAt} IS NULL`))
+            .orderBy(asc(chapters.sortOrder))
+            .all()
+        : []
+
+      const resolveChapterId = (hintText: string): string | null => {
+        const match = hintText.match(/第(\d+)章/)
+        if (!match || !volumeChapters.length) return null
+        const targetIndex = parseInt(match[1]) - 1
+        return volumeChapters[targetIndex]?.id || null
+      }
+
       if (vol.foreshadowingSetup?.length) {
         for (const item of vol.foreshadowingSetup) {
           const parenMatch = item.match(/^(.+?)（(.+)）$/)
@@ -399,6 +430,7 @@ export async function commitWorkshopSessionCore(
             description: `【埋入计划】${desc}\n【所属卷】${vol.title}`,
             status: 'open',
             importance,
+            chapterId: resolveChapterId(item),
           }).run()
         }
       }
@@ -409,18 +441,28 @@ export async function commitWorkshopSessionCore(
           const title = parenMatch ? parenMatch[1].trim() : item.split('（')[0].trim()
           const desc = parenMatch ? parenMatch[2].trim() : item
 
+          const chapterNumMatch = desc.match(/第(\d+)章/)
+          const targetChapterNum = chapterNumMatch ? parseInt(chapterNumMatch[1]) : null
+
           const importanceMatch = title.match(/^【([高中低])】/)
           const cleanTitle = importanceMatch ? title.slice(importanceMatch[0].length) : title
           const importanceMap: Record<string, string> = { '高': 'high', '中': 'normal', '低': 'low' }
           const importance = importanceMatch ? (importanceMap[importanceMatch[1]] || 'normal') : 'normal'
+
+          let targetChapterId: string | null = null
+          if (targetChapterNum && volumeChapters.length > 0) {
+            const idx = targetChapterNum - 1
+            targetChapterId = volumeChapters[idx]?.id || null
+          }
 
           await db.insert(foreshadowing).values({
             novelId,
             volumeId: volume.id,
             title: cleanTitle,
             description: `【回收计划】${desc}\n【所属卷】${vol.title}`,
-            status: 'open',
+            status: 'resolve_planned',
             importance,
+            chapterId: targetChapterId,
           }).run()
         }
       }
@@ -434,7 +476,7 @@ export async function commitWorkshopSessionCore(
     .set({ status: 'committed', novelId })
     .where(eq(workshopSessions.id, sessionId))
 
-  return { ok: true, novelId, createdItems }
+  return { ok: true, novelId, createdItems, vectorizing: true }
 }
 
 export async function rebuildEntityIndex(

@@ -54,6 +54,7 @@ export function GeneratePanel({
   const [targetWords, setTargetWords] = useState(TARGET_WORDS_DEFAULT)
   const [rewriteInstruction, setRewriteInstruction] = useState('')
   const [systemPrompt, setSystemPrompt] = useState<string>('')
+  const [draftMode, setDraftMode] = useState(false)
 
   useEffect(() => {
     if (novelId) {
@@ -83,7 +84,7 @@ export function GeneratePanel({
   }
 
   const handleGenerate = () => {
-    const options: any = { mode }
+    const options: any = { mode, draftMode }
 
     if (mode === 'continue' && hasContent) {
       options.existingContent = existingContent
@@ -222,6 +223,23 @@ export function GeneratePanel({
           <RefreshCw className="h-3 w-3 inline mr-1" />
           重写
         </button>
+      </div>
+
+      <div className="flex items-center gap-2 px-1">
+        <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={draftMode}
+            onChange={(e) => setDraftMode(e.target.checked)}
+            className="rounded border-gray-300"
+          />
+          <span className="text-muted-foreground">草稿模式</span>
+        </label>
+        {draftMode && (
+          <span className="text-[10px] text-amber-600 dark:text-amber-400">
+            跳过摘要/伏笔提取等后处理
+          </span>
+        )}
       </div>
 
       {!hasContent && mode !== 'generate' && (

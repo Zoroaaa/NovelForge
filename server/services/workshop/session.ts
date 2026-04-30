@@ -218,8 +218,16 @@ export async function loadNovelContextData(
         let foreshadowingResolve: string[] = []
         try {
           if (v.eventLine) {
-            const parsed = JSON.parse(v.eventLine)
-            eventLine = Array.isArray(parsed) ? parsed : (typeof parsed === 'string' ? [parsed] : [])
+            const raw = v.eventLine.trim()
+            if (!raw) { eventLine = []; }
+            else {
+              try {
+                const parsed = JSON.parse(raw)
+                eventLine = Array.isArray(parsed) ? parsed : (typeof parsed === 'string' ? [parsed] : [])
+              } catch {
+                eventLine = raw.split('\n').filter((l: string) => l.trim())
+              }
+            }
           }
           if (v.notes) {
             const parsed = JSON.parse(v.notes)

@@ -131,7 +131,7 @@ ${TOOL_GUIDE}`
     const wordsUpper = Math.min(wordsTarget + 1000, CHAPTER_GEN_DEFAULTS.CONTINUATION_WORD_COUNT_UPPER)
 
     const continuationConstraints = contextBundle
-      ? `\n\n【续写约束——来自创作资料包】\n${assemblePromptContext(contextBundle, { slotFilter: ['protagonist', 'characters', 'rules'] })}`
+      ? `\n\n【续写约束——来自创作资料包】\n${assemblePromptContext(contextBundle, { slotFilter: ['protagonist', 'characters', 'rules', 'currentEvent', 'nextThreeChapters', 'foreshadowing', 'summaryChain'] })}`
       : ''
 
     return [
@@ -163,7 +163,7 @@ ${continuationConstraints}
     const wordReq = getWordCountRequirement(contextBundle?.core.rhythmStats ?? null)
 
     const rewriteConstraints = contextBundle
-      ? `\n【改写约束——来自创作资料包】\n${assemblePromptContext(contextBundle, { slotFilter: ['protagonist', 'characters', 'rules', 'worldSettings'] })}`
+      ? `\n【改写约束——来自创作资料包】\n${assemblePromptContext(contextBundle, { slotFilter: ['protagonist', 'characters', 'rules', 'worldSettings', 'currentEvent', 'foreshadowing', 'summaryChain'] })}`
       : ''
 
     return [
