@@ -138,12 +138,11 @@ router.delete('/:id', async (c) => {
 
   try {
     await c.env.DB.prepare(`DELETE FROM foreshadowing_progress WHERE foreshadowing_id = ?`).bind(id).run()
-    await c.env.DB.prepare(`DELETE FROM vector_index WHERE source_type = 'foreshadowing' AND source_id = ?`).bind(id).run()
-    await c.env.DB.prepare(`DELETE FROM entity_index WHERE entity_type = 'foreshadowing' AND entity_id = ?`).bind(id).run()
 
-    if (c.env.VECTORIZE) {
-      deindexContent(c.env, 'foreshadowing', id).then(() => {}).catch(e => console.warn('Foreshadowing deindex failed:', e))
-    }
+    // 先清 Vectorize + D1 vector_index，再软删除
+    await deindexContent(c.env, 'foreshadowing', id)
+
+    await c.env.DB.prepare(`DELETE FROM entity_index WHERE entity_type = 'foreshadowing' AND entity_id = ?`).bind(id).run()
 
     await db
       .update(foreshadowing)

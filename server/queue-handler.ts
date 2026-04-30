@@ -80,6 +80,71 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
       break
     }
 
+    case 'workshop_gen_system_prompt': {
+      const { sessionId, novelId } = msg.payload
+      console.log(`[Queue] workshop_gen_system_prompt for novel ${novelId}`)
+      const db = drizzle(env.DB)
+      const { workshopSessions } = await import('./db/schema')
+      const { eq } = await import('drizzle-orm')
+      const session = await db.select().from(workshopSessions).where(eq(workshopSessions.id, sessionId)).get()
+      if (!session) { console.warn('[Queue] session not found:', sessionId); break }
+      const data = JSON.parse(session.extractedData || '{}')
+      if (!data.genre) break
+      const { generateGenreSystemPrompt } = await import('./services/workshop/generateGenreSystemPrompt')
+      const { novels } = await import('./db/schema')
+      const genrePrompt = await generateGenreSystemPrompt(env, novelId, data)
+      await db.update(novels).set({ systemPrompt: genrePrompt }).where(eq(novels.id, novelId)).run()
+      console.log(`[Queue] workshop_gen_system_prompt 完成 for novel ${novelId}`)
+      break
+    }
+
+    case 'workshop_gen_outline': {
+      const { sessionId, novelId } = msg.payload
+      console.log(`[Queue] workshop_gen_outline for novel ${novelId}`)
+      const db = drizzle(env.DB)
+      const { workshopSessions, masterOutline } = await import('./db/schema')
+      const { eq } = await import('drizzle-orm')
+      const session = await db.select().from(workshopSessions).where(eq(workshopSessions.id, sessionId)).get()
+      if (!session) { console.warn('[Queue] session not found:', sessionId); break }
+      const data = JSON.parse(session.extractedData || '{}')
+      if (!data.title) break
+      const { buildOutlineContentWithAI } = await import('./services/workshop/helpers')
+      const aiOutlineContent = await buildOutlineContentWithAI(env, data)
+      await db.update(masterOutline)
+        .set({ content: aiOutlineContent, wordCount: aiOutlineContent.length })
+        .where(eq(masterOutline.novelId, novelId))
+        .run()
+      console.log(`[Queue] workshop_gen_outline 完成 for novel ${novelId}`)
+      break
+    }
+
+    case 'workshop_gen_setting_summary': {
+      const { novelId, settingId, settingTitle } = msg.payload
+      console.log(`[Queue] workshop_gen_setting_summary: ${settingTitle}`)
+      const { generateSettingSummary } = await import('./services/agent/summarizer')
+      await generateSettingSummary(env, settingId)
+      console.log(`[Queue] workshop_gen_setting_summary 完成: ${settingTitle}`)
+      break
+    }
+
+    case 'workshop_gen_volume_summary': {
+      const { novelId, volumeId, volumeTitle } = msg.payload
+      console.log(`[Queue] workshop_gen_volume_summary: ${volumeTitle}`)
+      const { generateVolumeSummary } = await import('./services/agent/summarizer')
+      await generateVolumeSummary(env, volumeId, novelId)
+      console.log(`[Queue] workshop_gen_volume_summary 完成: ${volumeTitle}`)
+      break
+    }
+
+    case 'workshop_gen_master_summary': {
+      const { novelId } = msg.payload
+      console.log(`[Queue] workshop_gen_master_summary for novel ${novelId}`)
+      const { generateMasterOutlineSummary } = await import('./services/agent/summarizer')
+      await generateMasterOutlineSummary(env, novelId)
+      console.log(`[Queue] workshop_gen_master_summary 完成 for novel ${novelId}`)
+      break
+    }
+
     case 'generate_chapter': {
       const { chapterId, novelId, mode, existingContent, targetWords, issuesContext, enableRAG, enableAutoSummary } = msg.payload
 
@@ -623,6 +688,16 @@ function getNovelId(msg: QueueMessage): string {
     case 'commit_workshop':
       return ''
     case 'workshop_post_commit':
+      return msg.payload.novelId
+    case 'workshop_gen_system_prompt':
+      return msg.payload.novelId
+    case 'workshop_gen_outline':
+      return msg.payload.novelId
+    case 'workshop_gen_setting_summary':
+      return msg.payload.novelId
+    case 'workshop_gen_volume_summary':
+      return msg.payload.novelId
+    case 'workshop_gen_master_summary':
       return msg.payload.novelId
     case 'generate_chapter':
       return msg.payload.novelId

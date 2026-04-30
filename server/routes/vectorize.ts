@@ -521,62 +521,6 @@ router.post(
 
 export { router as vectorize }
 
-router.delete('/orphan-indexes', async (c) => {
-  if (!c.env.VECTORIZE) {
-    return c.json({ error: 'Vectorize binding not configured' }, 503)
-  }
-
-  const db = drizzle(c.env.DB)
-
-  const validSourceIds = new Set<string>()
-
-  const deletedSettings = await db
-    .select({ id: novelSettings.id })
-    .from(novelSettings)
-    .where(sql`${novelSettings.deletedAt} IS NOT NULL`)
-    .all()
-  deletedSettings.forEach(r => validSourceIds.add(r.id))
-
-  const deletedCharacters = await db
-    .select({ id: charactersTable.id })
-    .from(charactersTable)
-    .where(sql`${charactersTable.deletedAt} IS NOT NULL`)
-    .all()
-  deletedCharacters.forEach(r => validSourceIds.add(r.id))
-
-  const deletedForeshadowing = await db
-    .select({ id: foreshadowing.id })
-    .from(foreshadowing)
-    .where(sql`${foreshadowing.deletedAt} IS NOT NULL`)
-    .all()
-  deletedForeshadowing.forEach(r => validSourceIds.add(r.id))
-
-  const allVectors = await db
-    .select({ id: vectorIndex.id, sourceType: vectorIndex.sourceType, sourceId: vectorIndex.sourceId })
-    .from(vectorIndex)
-    .all()
-
-  const orphansToDelete = allVectors.filter(v => {
-    if (v.sourceType === 'setting' || v.sourceType === 'character' || v.sourceType === 'foreshadowing') {
-      return validSourceIds.has(v.sourceId)
-    }
-    return false
-  })
-
-  if (orphansToDelete.length === 0) {
-    return c.json({ ok: true, deleted: 0, message: '没有发现残留索引' })
-  }
-
-  let deletedCount = 0
-  for (const v of orphansToDelete) {
-    await c.env.VECTORIZE.deleteByIds([v.id]).catch(() => {})
-    await db.delete(vectorIndex).where(eq(vectorIndex.id, v.id)).run()
-    deletedCount++
-  }
-
-  return c.json({ ok: true, deleted: deletedCount, message: `已清空 ${deletedCount} 条残留索引` })
-})
-
 router.post('/clear-all', async (c) => {
   if (!c.env.CLOUDFLARE_API_TOKEN || !c.env.CLOUDFLARE_ACCOUNT_ID) {
     return c.json({ error: 'Cloudflare API credentials not configured. Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in environment variables.' }, 503)

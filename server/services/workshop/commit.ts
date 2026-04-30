@@ -447,6 +447,18 @@ export async function commitWorkshopSessionCore(
   return { ok: true, novelId, createdItems }
 }
 
+/**
+ * workshop_post_commit：纯调度器，不做任何 LLM 调用。
+ * 将所有耗时 AI 任务拆分成独立 Queue 消息，每条单次 LLM 调用，
+ * 天然不超 Cloudflare Queue visibility timeout，无需幂等锁。
+ *
+ * 执行顺序（串行入队，各自独立重试）：
+ * 1. workshop_gen_system_prompt  — genre 专属 system prompt
+ * 2. workshop_gen_outline        — AI 总纲内容生成
+ * 3. workshop_gen_setting_summary × N  — 每条设定摘要
+ * 4. workshop_gen_volume_summary  × N  — 每卷摘要
+ * 5. workshop_gen_master_summary  — 总纲聚合摘要（依赖上面完成，串行靠队列顺序保证）
+ */
 export async function workshopPostCommit(
   env: Env,
   sessionId: string,
@@ -465,96 +477,84 @@ export async function workshopPostCommit(
     return
   }
 
-  const data: WorkshopExtractedData = JSON.parse(session.extractedData || '{}')
-
   if (session.status !== 'committed') {
     console.warn('[workshop_post_commit] Session not committed yet:', sessionId)
     return
   }
 
+  const data: WorkshopExtractedData = JSON.parse(session.extractedData || '{}')
+  const messages: import('../../lib/queue').QueueMessage[] = []
+
+  // 1. genre system prompt
   if (data.genre) {
-    try {
-      const { generateGenreSystemPrompt } = await import('./generateGenreSystemPrompt')
-      const genrePrompt = await generateGenreSystemPrompt(env, novelId, data)
-      await db.update(novels).set({ systemPrompt: genrePrompt }).where(eq(novels.id, novelId)).run()
-      console.log(`[workshop_post_commit] genre systemPrompt generated for novel ${novelId}`)
-    } catch (e) {
-      console.warn('[workshop_post_commit] 生成genre专属systemPrompt失败:', e)
-    }
+    messages.push({
+      type: 'workshop_gen_system_prompt',
+      payload: { sessionId, novelId },
+    })
   }
 
+  // 2. AI 总纲生成
   if (data.title) {
-    try {
-      const { buildOutlineContentWithAI } = await import('./helpers')
-      const aiOutlineContent = await buildOutlineContentWithAI(env, data)
-      await db.update(masterOutline)
-        .set({ content: aiOutlineContent, wordCount: aiOutlineContent.length })
-        .where(eq(masterOutline.novelId, novelId))
-        .run()
-      console.log(`[workshop_post_commit] AI 总纲生成完成 for novel ${novelId}`)
-    } catch (e) {
-      console.warn(`[workshop_post_commit] AI 总纲生成失败:`, e)
-    }
+    messages.push({
+      type: 'workshop_gen_outline',
+      payload: { sessionId, novelId },
+    })
   }
 
+  // 3. 设定摘要（每条独立）
   if (data.worldSettings?.length) {
     const existingSettings = await db
-      .select()
+      .select({ id: novelSettings.id, type: novelSettings.type, name: novelSettings.name })
       .from(novelSettings)
       .where(and(eq(novelSettings.novelId, novelId), isNull(novelSettings.deletedAt)))
       .all()
     const settingMap = new Map(
-      existingSettings.map((s: typeof existingSettings[number]) => [`${s.type}:${s.name}`, s])
+      existingSettings.map(s => [`${s.type}:${s.name}`, s])
     )
 
     for (const setting of data.worldSettings) {
-      const key = `${setting.type}:${setting.title}`
-      const existing = settingMap.get(key)
+      const existing = settingMap.get(`${setting.type}:${setting.title}`)
       if (!existing) continue
-
-      try {
-        const { generateSettingSummary } = await import('../agent/summarizer')
-        await generateSettingSummary(env, existing.id)
-        console.log(`[workshop_post_commit] setting summary generated: ${setting.title}`)
-      } catch (e) {
-        console.warn(`[workshop_post_commit] 设定摘要生成失败 ${setting.title}:`, e)
-      }
+      messages.push({
+        type: 'workshop_gen_setting_summary',
+        payload: { novelId, settingId: existing.id, settingTitle: setting.title },
+      })
     }
   }
 
+  // 4. 卷摘要（每卷独立）
   if (data.volumes?.length) {
     const existingVolumes = await db
-      .select()
+      .select({ id: volumes.id, title: volumes.title })
       .from(volumes)
       .where(and(eq(volumes.novelId, novelId), isNull(volumes.deletedAt)))
       .all()
-    const volumeMap = new Map(existingVolumes.map((v: typeof existingVolumes[number]) => [v.title, v]))
+    const volumeMap = new Map(existingVolumes.map(v => [v.title, v]))
 
     for (const vol of data.volumes) {
       const existing = volumeMap.get(vol.title)
       if (!existing) continue
-
-      try {
-        const { generateVolumeSummary } = await import('../agent/summarizer')
-        await generateVolumeSummary(env, existing.id, novelId)
-        console.log(`[workshop_post_commit] volume summary generated: ${vol.title}`)
-      } catch (e) {
-        console.warn(`[workshop_post_commit] 卷摘要生成失败 ${vol.title}:`, e)
-      }
+      messages.push({
+        type: 'workshop_gen_volume_summary',
+        payload: { novelId, volumeId: existing.id, volumeTitle: vol.title },
+      })
     }
   }
 
+  // 5. 总纲聚合摘要（串行排在最后，等上面都完成后才跑）
   if (data.title && data.worldSettings) {
-    try {
-      const { generateMasterOutlineSummary } = await import('../agent/summarizer')
-      await generateMasterOutlineSummary(env, novelId)
-      console.log(`[workshop_post_commit] 总纲摘要生成完成 for novel ${novelId}`)
-    } catch (e) {
-      console.warn(`[workshop_post_commit] 总纲摘要生成失败:`, e)
-    }
+    messages.push({
+      type: 'workshop_gen_master_summary',
+      payload: { novelId },
+    })
   }
 
-  console.log(`[workshop_post_commit] 完成 for novel ${novelId}`)
+  if (messages.length > 0) {
+    const { enqueueBatch } = await import('../../lib/queue')
+    await enqueueBatch(env, messages)
+  }
+
+  console.log(`[workshop_post_commit] 已入队 ${messages.length} 个子任务 for novel ${novelId}`)
 }
 
 export async function rebuildEntityIndex(

@@ -70,7 +70,6 @@ export default function AiMonitorPage() {
   const [isSearching, setIsSearching] = useState(false)
   const [isReindexing, setIsReindexing] = useState(false)
   const [isIndexingMissing, setIsIndexingMissing] = useState(false)
-  const [isClearingOrphans, setIsClearingOrphans] = useState(false)
   const [isClearingAll, setIsClearingAll] = useState(false)
   const [contextChapterId, setContextChapterId] = useState<string>('')
   const [contextResult, setContextResult] = useState<any>(null)
@@ -177,19 +176,6 @@ export default function AiMonitorPage() {
       queryClient.invalidateQueries({ queryKey: ['vector-stats'] })
     } catch {
       toast.error('实体树重建失败')
-    }
-  }
-
-  const handleClearOrphanIndexes = async () => {
-    if (!confirm('确定要清空残留索引吗？这将删除所有已不存在的小说的向量索引残留。')) return
-    setIsClearingOrphans(true)
-    try {
-      const result = await api.vectorize.clearOrphanIndexes()
-      toast.success(result.message, { duration: 5000 })
-    } catch (e: any) {
-      toast.error(`清空残留索引失败：${e.message || '未知错误'}`, { duration: 8000 })
-    } finally {
-      setIsClearingOrphans(false)
     }
   }
 
@@ -653,26 +639,9 @@ export default function AiMonitorPage() {
                       <AlertTriangle className="w-5 h-5" />
                       索引维护
                     </CardTitle>
-                    <CardDescription>清理残留索引数据</CardDescription>
+                    <CardDescription>清理全部向量索引数据</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <Button
-                      variant="destructive"
-                      className="w-full"
-                      onClick={handleClearOrphanIndexes}
-                      disabled={isClearingOrphans}
-                    >
-                      {isClearingOrphans ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <AlertTriangle className="w-4 h-4 mr-2" />
-                      )}
-                      清空残留索引
-                    </Button>
-                    <p className="text-sm text-muted-foreground text-center">
-                      删除已不存在的小说的向量索引残留
-                    </p>
-
                     <Button
                       variant="destructive"
                       className="w-full"

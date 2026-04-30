@@ -112,6 +112,42 @@ export type QueueMessage =
         novelId: string
       }
     }
+  | {
+      type: 'workshop_gen_system_prompt'
+      payload: {
+        sessionId: string
+        novelId: string
+      }
+    }
+  | {
+      type: 'workshop_gen_outline'
+      payload: {
+        sessionId: string
+        novelId: string
+      }
+    }
+  | {
+      type: 'workshop_gen_setting_summary'
+      payload: {
+        novelId: string
+        settingId: string
+        settingTitle: string
+      }
+    }
+  | {
+      type: 'workshop_gen_volume_summary'
+      payload: {
+        novelId: string
+        volumeId: string
+        volumeTitle: string
+      }
+    }
+  | {
+      type: 'workshop_gen_master_summary'
+      payload: {
+        novelId: string
+      }
+    }
 
 export async function enqueue(
   env: Env,

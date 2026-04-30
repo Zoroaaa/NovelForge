@@ -326,12 +326,10 @@ router.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB)
 
   try {
-    await c.env.DB.prepare(`DELETE FROM vector_index WHERE source_type = 'setting' AND source_id = ?`).bind(id).run()
-    await c.env.DB.prepare(`DELETE FROM entity_index WHERE entity_type = 'setting' AND entity_id = ?`).bind(id).run()
+    // 先清 Vectorize + D1 vector_index，再软删除
+    await deindexContent(c.env, 'setting', id)
 
-    if (c.env.VECTORIZE) {
-      deindexContent(c.env, 'setting', id).then(() => {}).catch(e => console.warn('Setting deindex failed:', e))
-    }
+    await c.env.DB.prepare(`DELETE FROM entity_index WHERE entity_type = 'setting' AND entity_id = ?`).bind(id).run()
 
     await db
       .update(novelSettings)
