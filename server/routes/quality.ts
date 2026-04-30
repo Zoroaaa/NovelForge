@@ -1,19 +1,20 @@
 /**
  * @file quality.ts
  * @description 质量检查路由模块 - 提供章节质量评分、批量检查、质量汇总等功能
- * @version 2.0.0
- * @modified 2026-04-30 - 新增质量聚合API（summary + batch-check）用于AI监控中心
+ * @version 2.1.0
+ * @modified 2026-04-30 - 完整集成角色一致性检查到批量检查和汇总功能
  */
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
 import type { Env } from '../lib/types'
 import { qualityScores, checkLogs, chapters } from '../db/schema'
-import { eq, and, desc, sql } from 'drizzle-orm'
+import { eq, and, desc, sql, inArray } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import {
   checkChapterCoherence,
   checkVolumeProgress,
+  checkCharacterConsistency,
 } from '../services/agent'
 
 const router = new Hono<{ Bindings: Env }>()
@@ -104,12 +105,16 @@ router.get('/summary', zValidator('query', z.object({
         status: checkLogs.status,
         coherenceResult: checkLogs.coherenceResult,
         volumeProgressResult: checkLogs.volumeProgressResult,
+        characterResult: checkLogs.characterResult,
         issuesCount: checkLogs.issuesCount,
         createdAt: checkLogs.createdAt,
       })
       .from(checkLogs)
       .where(
-        sql`${checkLogs.chapterId} IN (${chapterIds.join(',')}) AND ${checkLogs.status} = 'success'`
+        and(
+          inArray(checkLogs.chapterId, chapterIds),
+          eq(checkLogs.status, 'success')
+        )
       )
       .orderBy(desc(checkLogs.createdAt))
       .all()
@@ -126,64 +131,105 @@ router.get('/summary', zValidator('query', z.object({
       const checks = chapterCheckMap.get(chapter.id) || []
 
       let coherenceScore: number | null = null
+      let characterScore: number | null = null
       let progressScore: number | null = null
       let lastCheckedAt: number | null = null
       const issues: Array<{ severity: 'error' | 'warning'; category: string; message: string }> = []
 
-      checks.forEach(check => {
-        if (!lastCheckedAt || check.createdAt > lastCheckedAt) {
-          lastCheckedAt = check.createdAt
-        }
+      const coherenceCheck = checks.find(c =>
+        (c.checkType === 'chapter_coherence' || c.checkType === 'combined')
+      )
+      const progressCheck = checks.find(c =>
+        c.checkType === 'volume_progress' || c.checkType === 'combined'
+      )
+      const characterCheck = checks.find(c =>
+        c.checkType === 'character_consistency'
+      )
 
-        if (check.checkType === 'chapter_coherence' || check.checkType === 'combined') {
-          coherenceScore = check.score
-          if (check.coherenceResult) {
-            try {
-              const result = JSON.parse(check.coherenceResult)
-              if (result.issues && Array.isArray(result.issues)) {
-                result.issues.forEach((issue: { severity?: string; category?: string; message?: string }) => {
-                  issues.push({
-                    severity: (issue.severity === 'error' ? 'error' : 'warning') as 'error' | 'warning',
-                    category: issue.category || 'coherence',
-                    message: issue.message || '连贯性问题',
-                  })
-                })
-              }
-            } catch {}
-          }
+      if (coherenceCheck) {
+        coherenceScore = coherenceCheck.score
+        if (!lastCheckedAt || coherenceCheck.createdAt > lastCheckedAt) {
+          lastCheckedAt = coherenceCheck.createdAt
         }
-
-        if (check.checkType === 'volume_progress' || check.checkType === 'combined') {
-          progressScore = check.score
-          if (check.volumeProgressResult) {
-            try {
-              const result = JSON.parse(check.volumeProgressResult)
-              if (result.wordCountIssues && Array.isArray(result.wordCountIssues)) {
-                result.wordCountIssues.forEach((issue: { severity?: string; message?: string; dimension?: string }) => {
-                  issues.push({
-                    severity: (issue.severity === 'error' ? 'error' : 'warning') as 'error' | 'warning',
-                    category: issue.dimension || 'progress',
-                    message: issue.message || '进度偏差问题',
-                  })
+        if (coherenceCheck.coherenceResult) {
+          try {
+            const result = JSON.parse(coherenceCheck.coherenceResult)
+            if (result.issues && Array.isArray(result.issues)) {
+              result.issues.forEach((issue: { severity?: string; category?: string; message?: string }) => {
+                issues.push({
+                  severity: (issue.severity === 'error' ? 'error' : 'warning') as 'error' | 'warning',
+                  category: issue.category || 'coherence',
+                  message: issue.message || '连贯性问题',
                 })
-              }
-              if (result.rhythmIssues && Array.isArray(result.rhythmIssues)) {
-                result.rhythmIssues.forEach((issue: { severity?: string; message?: string }) => {
-                  issues.push({
-                    severity: 'warning',
-                    category: 'rhythm',
-                    message: issue.message || '节奏问题',
-                  })
-                })
-              }
-            } catch {}
-          }
+              })
+            }
+          } catch {}
         }
-      })
+      }
 
-      const characterScore = null
-      const overallScore = [coherenceScore, progressScore].filter(s => s !== null).length > 0
-        ? Math.round([coherenceScore, progressScore].filter(s => s !== null).reduce((a, b) => a + b!, 0) / [coherenceScore, progressScore].filter(s => s !== null).length)
+      if (progressCheck) {
+        progressScore = progressCheck.score
+        if (!lastCheckedAt || progressCheck.createdAt > lastCheckedAt) {
+          lastCheckedAt = progressCheck.createdAt
+        }
+        if (progressCheck.volumeProgressResult) {
+          try {
+            const result = JSON.parse(progressCheck.volumeProgressResult)
+            if (result.wordCountIssues && Array.isArray(result.wordCountIssues)) {
+              result.wordCountIssues.forEach((issue: { severity?: string; message?: string; dimension?: string }) => {
+                issues.push({
+                  severity: (issue.severity === 'error' ? 'error' : 'warning') as 'error' | 'warning',
+                  category: issue.dimension || 'progress',
+                  message: issue.message || '进度偏差问题',
+                })
+              })
+            }
+            if (result.rhythmIssues && Array.isArray(result.rhythmIssues)) {
+              result.rhythmIssues.forEach((issue: { severity?: string; message?: string }) => {
+                issues.push({
+                  severity: 'warning',
+                  category: 'rhythm',
+                  message: issue.message || '节奏问题',
+                })
+              })
+            }
+          } catch {}
+        }
+      }
+
+      if (characterCheck) {
+        characterScore = characterCheck.score
+        if (!lastCheckedAt || characterCheck.createdAt > lastCheckedAt) {
+          lastCheckedAt = characterCheck.createdAt
+        }
+        if (characterCheck.characterResult) {
+          try {
+            const result = JSON.parse(characterCheck.characterResult)
+            if (result.conflicts && Array.isArray(result.conflicts)) {
+              result.conflicts.forEach((conflict: { type?: string; description?: string; severity?: string }) => {
+                issues.push({
+                  severity: (conflict.severity === 'error' ? 'error' : 'warning') as 'error' | 'warning',
+                  category: conflict.type || 'character',
+                  message: conflict.description || '角色冲突问题',
+                })
+              })
+            }
+            if (result.warnings && Array.isArray(result.warnings)) {
+              result.warnings.forEach((warning: { type?: string; description?: string }) => {
+                issues.push({
+                  severity: 'warning',
+                  category: warning.type || 'character',
+                  message: warning.description || '角色一致性警告',
+                })
+              })
+            }
+          } catch {}
+        }
+      }
+
+      const allScores = [coherenceScore, characterScore, progressScore].filter(s => s !== null)
+      const overallScore = allScores.length > 0
+        ? Math.round(allScores.reduce((a, b) => a + b!, 0) / allScores.length)
         : null
 
       return {
@@ -273,18 +319,20 @@ router.post('/batch-check', zValidator('json', z.object({
       try {
         console.log(`[BatchCheck] Checking chapter ${chapterId}`)
 
-        const [coherenceResult, progressResult] = await Promise.allSettled([
+        const [coherenceResult, progressResult, characterResult] = await Promise.allSettled([
           checkChapterCoherence(c.env, chapterId, novelId),
           checkVolumeProgress(c.env, chapterId, novelId),
+          checkCharacterConsistency(c.env, { chapterId, characterIds: [] }),
         ])
 
         if (coherenceResult.status === 'fulfilled' && coherenceResult.value?.score !== undefined) {
           checkedCount++
         }
         if (progressResult.status === 'fulfilled' && progressResult.value?.score !== undefined) {
-          if (coherenceResult.status === 'rejected' || coherenceResult.value?.score === undefined) {
-            checkedCount++
-          }
+          checkedCount++
+        }
+        if (characterResult.status === 'fulfilled' && characterResult.value?.score !== undefined) {
+          checkedCount++
         }
 
         if (coherenceResult.status === 'rejected') {
@@ -293,15 +341,19 @@ router.post('/batch-check', zValidator('json', z.object({
         if (progressResult.status === 'rejected') {
           errors.push(`章节${chapterId}进度检查失败`)
         }
+        if (characterResult.status === 'rejected') {
+          errors.push(`章节${chapterId}角色一致性检查失败`)
+        }
       } catch (error) {
         console.error(`[BatchCheck] Error checking chapter ${chapterId}:`, error)
         errors.push(`章节${chapterId}检查异常`)
       }
     }
 
+    const totalChecks = targetChapterIds.length * 3
     const successMessage = errors.length > 0
-      ? `已完成 ${checkedCount}/${targetChapterIds.length} 章检查，${errors.length}个任务遇到错误`
-      : `成功完成 ${checkedCount}/${targetChapterIds.length} 章的质量检查`
+      ? `已完成 ${checkedCount}/${totalChecks} 项检查，${errors.length}个任务遇到错误`
+      : `成功完成全部 ${totalChecks} 项质量检查（连贯性+进度+角色一致性）`
 
     return c.json({
       ok: true,
