@@ -178,10 +178,18 @@ router.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB)
   const id = c.req.param('id')
 
-  await db
-    .update(t)
-    .set({ deletedAt: Math.floor(Date.now() / 1000) })
-    .where(eq(t.id, id))
+  const chapter = await db.select({ novelId: t.novelId }).from(t).where(eq(t.id, id)).get()
+  if (!chapter) return c.json({ error: 'Chapter not found' }, 404)
+
+  await c.env.DB.prepare(`DELETE FROM generation_logs WHERE chapter_id = ?`).bind(id).run()
+  await c.env.DB.prepare(`DELETE FROM check_logs WHERE chapter_id = ?`).bind(id).run()
+  await c.env.DB.prepare(`DELETE FROM quality_scores WHERE chapter_id = ?`).bind(id).run()
+  await c.env.DB.prepare(`DELETE FROM foreshadowing_progress WHERE chapter_id = ?`).bind(id).run()
+  await c.env.DB.prepare(`DELETE FROM vector_index WHERE source_type = 'chapter' AND source_id = ?`).bind(id).run()
+  await c.env.DB.prepare(`DELETE FROM entity_index WHERE entity_type = 'chapter' AND entity_id = ?`).bind(id).run()
+  await c.env.DB.prepare(`DELETE FROM plot_nodes WHERE chapter_id = ?`).bind(id).run()
+
+  await db.update(t).set({ deletedAt: Math.floor(Date.now() / 1000) }).where(eq(t.id, id))
 
   return c.json({ ok: true })
 })

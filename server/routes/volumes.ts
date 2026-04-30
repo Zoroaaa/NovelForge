@@ -106,9 +106,17 @@ router.patch('/:id', zValidator('json', CreateSchema.partial()), async (c) => {
  */
 router.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB)
-  await db.update(t)
-    .set({ deletedAt: Math.floor(Date.now() / 1000) })
-    .where(eq(t.id, c.req.param('id')))
+  const id = c.req.param('id')
+
+  const volume = await db.select({ novelId: t.novelId }).from(t).where(eq(t.id, id)).get()
+  if (!volume) return c.json({ error: 'Volume not found' }, 404)
+
+  await c.env.DB.prepare(`DELETE FROM chapters WHERE volume_id = ?`).bind(id).run()
+  await c.env.DB.prepare(`DELETE FROM foreshadowing WHERE volume_id = ?`).bind(id).run()
+  await c.env.DB.prepare(`DELETE FROM batch_generation_tasks WHERE volume_id = ?`).bind(id).run()
+  await c.env.DB.prepare(`DELETE FROM entity_index WHERE entity_type = 'volume' AND entity_id = ?`).bind(id).run()
+
+  await db.update(t).set({ deletedAt: Math.floor(Date.now() / 1000) }).where(eq(t.id, id))
   return c.json({ ok: true })
 })
 

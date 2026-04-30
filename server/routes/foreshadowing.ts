@@ -137,6 +137,10 @@ router.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB)
 
   try {
+    await c.env.DB.prepare(`DELETE FROM foreshadowing_progress WHERE foreshadowing_id = ?`).bind(id).run()
+    await c.env.DB.prepare(`DELETE FROM vector_index WHERE source_type = 'foreshadowing' AND source_id = ?`).bind(id).run()
+    await c.env.DB.prepare(`DELETE FROM entity_index WHERE entity_type = 'foreshadowing' AND entity_id = ?`).bind(id).run()
+
     if (c.env.VECTORIZE) {
       deindexContent(c.env, 'foreshadowing', id).then(() => {}).catch(e => console.warn('Foreshadowing deindex failed:', e))
     }

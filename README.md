@@ -3,8 +3,8 @@
 <div align="center">
 
 ![NovelForge Logo](https://img.shields.io/badge/NovelForge-AI%20Writing%20Studio-blue?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-2.2.0-success?style=for-the-badge)
-![Phase](https://img.shields.io/badge/Phase-13%20Complete-success?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-2.3.0-success?style=for-the-badge)
+![Phase](https://img.shields.io/badge/Phase-14%20Complete-success?style=for-the-badge)
 ![Cloudflare](https://img.shields.io/badge/Cloudflare-Pages%2BWorkers-orange?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
@@ -235,7 +235,7 @@ Total: 128,000 tokens
 | **🔍 内容搜索** | 章节关键词搜索 · 结果高亮预览 · 限定范围搜索 |
 | **📦 多格式导出** | Markdown/TXT/EPUB/HTML/ZIP · 卷范围选择 · 目录生成 · 实体树数据包 |
 | **🔗 MCP 集成** | Claude Desktop 直接访问 · 小说数据查询 · 语义搜索 · 14个工具函数 |
-| **🖥️ AI 监控中心** | 向量索引统计 · 生成日志 · 上下文诊断 · 服务状态检查 |
+| **🖥️ AI 监控中心** | 向量索引统计 · 生成日志 · 上下文诊断 · 服务状态检查 · **成本分析** · **质量监控** |
 | **🌳 实体树** | 树形结构展示 · 快速定位章节 · 元数据展示 |
 | **🗑️ 回收站** | 软删除数据查看 · 按表分类 · 单条/批量永久删除 |
 | **🛡️ 质量检查** | 角色一致性检查 · 章节连贯性检查 · 卷进度检查 · 综合评分 · 自动修复 |
@@ -244,6 +244,7 @@ Total: 128,000 tokens
 | **📥 工坊导入** | 结构化数据导入 · 批量创建 · 数据验证 |
 | **🪝 伏笔进度** | 伏笔收尾进度追踪 · 多章节分布 · 状态可视化 · 沉寂检测 |
 | **📊 批量生成** | 批量章节生成 · 任务暂停/恢复/取消 · 进度追踪 · 后台异步处理 |
+| **📊 成本分析** | 消耗统计总览 · 趋势图表追踪 · 分类分项明细 · 优化建议生成 |
 | **🏆 质量评分** | 多维度质量评估(情节/连贯/伏笔/节奏/流畅) · 评分历史 · 质量趋势分析 |
 | **💡 上一章建议** | 基于上一章续写建议 · 文风延续 · 剧情衔接优化 |
 | **📈 卷完成检测** | 卷完成度评估 · 字数/章节数进度 · 完成百分比计算 |
@@ -684,6 +685,6 @@ novelforge/
 
 <div align="center">
 
-**Made with ❤️ by the NovelForge Team · Version 2.2.0**
+**Made with ❤️ by the NovelForge Team · Version 2.3.0**
 
 </div>

@@ -2,7 +2,7 @@
 
 > 完整的技术架构、数据流设计和模块依赖关系图。
 >
-> **版本**: 2.1.0 | **最后更新**: 2026-04-28
+> **版本**: 2.3.0 | **最后更新**: 2026-04-30
 
 ---
 
@@ -201,6 +201,17 @@ src/
 │   │   ├── GeneratePanel.tsx
 │   │   ├── StreamOutput.tsx
 │   │   └── ContextPreview.tsx
+│   ├── monitor/               # AI 监控中心 (v2.3.0 全面升级)
+│   │   ├── QualityDashboard.tsx    # 质量监控仪表台
+│   │   ├── QualityChart.tsx        # 质量趋势图表
+│   │   ├── QualityDetailModal.tsx  # 质量详情弹窗
+│   │   ├── ChapterQualityList.tsx  # 章节质量列表
+│   │   ├── QualityScoreCard.tsx    # 质量评分卡片
+│   │   ├── CostAnalysis.tsx        # 成本分析主组件
+│   │   ├── CostBreakdownTable.tsx # 成本分类明细
+│   │   ├── CostSummaryCards.tsx   # 成本汇总卡片
+│   │   ├── CostTrendChart.tsx     # 成本趋势图表
+│   │   └── types.ts               # 监控组件类型定义
 │   ├── character/             # 角色管理
 │   ├── workshop/              # 创意工坊 (v1.11.0 全新重构)
 │   │   ├── WorkshopSidebar.tsx
@@ -366,9 +377,11 @@ server/
 │   ├── workshop-format-import.ts # 格式化导入路由
 │   ├── batch.ts               # 批量生成路由 (v2.1.0)
 │   ├── quality.ts             # 质量评分路由 (v2.1.0)
+│   ├── cost-analysis.ts       # 成本分析路由 (v2.3.0)
 │   └── settings.ts             # 模型配置路由
 ├── services/                   # 服务层
 │   ├── llm.ts                  # LLM 统一调用层
+│   ├── costAnalysis.ts          # 成本分析服务 (v2.3.0)
 │   ├── agent/                  # Agent 系统 (v1.6.0 模块化重构)
 │   │   ├── index.ts            # 统一导出
 │   │   ├── types.ts            # 类型定义
@@ -406,18 +419,13 @@ server/
 │       └── types.ts            # 类型定义 (65行)
 ├── lib/
 │   ├── auth.ts                 # 认证与安全模块
-│   ├── queue.ts                # 队列操作库 (v1.6.0)
+│   ├── queue.ts                # 队列操作库 (v2.3.0 新增quality_check/batch_chapter_done消息类型)
 │   └── types.ts                # 共享类型定义
 └── db/
     ├── schema.ts               # 数据库 Schema
-    └── migrations/             # 数据库迁移
-        ├── 0010_schema.sql
-        ├── 0011_check_logs.sql
-        ├── 0012_foreshadowing_progress.sql
-        ├── 0013_novel_target_word_count.sql      # v1.7.0
-        ├── 0014_volume_target_chapter_count.sql  # v1.7.0
-        ├── 0015_check_logs_volume_progress.sql  # v1.7.0
-        └── 0016_novel_target_chapter_count.sql  # v1.7.0
+└── migrations/             # 数据库迁移
+    ├── 0000_schema.sql
+    ├── 0001_add_post_processed_at.sql  # v2.3.0
 ```
 
 ### 中间件链
@@ -529,7 +537,7 @@ app.use('*', cors())
 | `writingRules` | 创作规则 | id, novelId, category, title, content, priority, isActive, sortOrder | v1.0 |
 | `novelSettings` | 小说设定 | id, novelId, type, name, content, parentId, importance, attributes | v1.0 |
 | `volumes` | 卷表 | id, novelId, title, sortOrder, outline, blueprint, summary, wordCount, chapterCount, **targetChapterCount**, status, notes | v1.0 (+v1.7.0) |
-| `chapters` | 章节表 | id, novelId, volumeId, title, content, wordCount, status, modelUsed, summary, sortOrder | v1.0 |
+| `chapters` | 章节表 | id, novelId, volumeId, title, content, wordCount, status, modelUsed, summary, sortOrder, **postProcessedAt** | v1.0 (+v2.3.0) |
 | `characters` | 角色表 | id, novelId, name, aliases, role, description, imageR2Key, attributes, powerLevel | v1.0 |
 | `foreshadowing` | 伏笔表 | id, novelId, chapterId, title, description, status, importance | v1.0 |
 | `foreshadowingProgress` | 伏笔进度 | id, foreshadowingId, chapterId, **progressType**, **summary**, **mentionedKeywords**, createdAt | v1.7.0 |
@@ -558,6 +566,7 @@ app.use('*', cors())
 | `0018_foreshadowing_volume_relation.sql` | v2.1.0 | 伏笔卷关联（新增volumeId字段） |
 | `0019_batch_generation_tasks.sql` | v2.1.0 | 批量生成任务队列表 |
 | `0020_quality_scores.sql` | v2.1.0 | 质量评分表 |
+| `0021_chapter_post_processed_at.sql` | v2.3.0 | chapters表新增postProcessedAt字段 |
 
 ---
 
@@ -1249,11 +1258,12 @@ CLOUDFLARE_API_TOKEN=xxx      # Cloudflare API Token
 | **v1.10.0** | Agent工具v2 + 上下文构建优化 + 摘要质量提升 |
 | **v1.11.0** | Workshop架构模块化拆分 + 10+前端组件全新设计 |
 | **v2.1.0** | 批量生成系统 + 质量评分 + 上一章建议 + 卷完成检测 |
+| **v2.3.0** | 成本分析系统 + 上下文构建优化 + 队列处理优化 |
 
----
+----
 
 <div align="center">
 
-**Architecture Version: 2.1.0 · 最后更新: 2026-04-28**
+**Architecture Version: 2.3.0 · 最后更新: 2026-04-30**
 
 </div>

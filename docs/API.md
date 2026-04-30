@@ -114,6 +114,12 @@
 - **质量评分 (Quality)** - v2.1.0新增
   - [获取章节评分](#获取章节评分)
   - [获取小说评分列表](#获取小说评分列表)
+  - [获取质量检查汇总](#获取质量检查汇总) - v2.3.0新增
+- **成本分析 (Cost Analysis)** - v2.3.0新增
+  - [获取消耗统计总览](#获取消耗统计总览)
+  - [获取每日消耗明细](#获取每日消耗明细)
+  - [获取消耗趋势数据](#获取消耗趋势数据)
+  - [获取分类分项明细](#获取分类分项明细)
 - **境界管理 (Power Level)**
   - [检测境界突破](#检测境界突破)
   - [批量检测境界](#批量检测境界)
@@ -2604,6 +2610,183 @@ data: [DONE]
     "createdAt": 1714348800
   }
 ]
+```
+
+---
+
+### 获取质量检查汇总
+
+**GET** `/api/quality/summary`
+
+> v2.3.0 新增 - 聚合多章质量检查结果
+
+> **需要认证**
+
+**查询参数**:
+- `novelId` (必填) - 小说ID
+- `limit` (可选) - 返回章节数限制，默认 10，最大 50
+
+**响应示例**:
+```json
+{
+  "chapters": [
+    {
+      "id": "chap123",
+      "chapterNumber": 10,
+      "title": "第十章 宗门试炼",
+      "coherenceScore": 85,
+      "characterScore": 78,
+      "progressScore": 82,
+      "overallScore": 82,
+      "issueCount": 2,
+      "lastCheckedAt": 1714348800,
+      "issues": [
+        {
+          "severity": "warning",
+          "category": "character_consistency",
+          "message": "角色'林风'在前后描述中境界不一致"
+        }
+      ]
+    }
+  ],
+  "averages": {
+    "coherence": 83,
+    "character": 79,
+    "progress": 81,
+    "overall": 81
+  }
+}
+```
+
+---
+
+## 成本分析 (Cost Analysis)
+
+> v2.3.0 新增 - AI 消耗成本追踪与分析系统
+
+### 获取消耗统计总览
+
+**GET** `/api/cost-analysis/overview`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "totalTokens": 1250000,
+  "totalCost": 3.75,
+  "dailyStats": [
+    {
+      "date": "2026-04-30",
+      "tokens": 450000,
+      "cost": 1.35
+    }
+  ],
+  "categoryBreakdown": {
+    "generation": 2.50,
+    "quality": 0.80,
+    "other": 0.45
+  }
+}
+```
+
+---
+
+### 获取每日消耗明细
+
+**GET** `/api/cost-analysis/daily`
+
+> **需要认证**
+
+**查询参数**:
+- `startDate` (可选) - 开始日期，格式 YYYY-MM-DD
+- `endDate` (可选) - 结束日期，格式 YYYY-MM-DD
+- `novelId` (可选) - 小说ID筛选
+
+**响应示例**:
+```json
+{
+  "daily": [
+    {
+      "date": "2026-04-30",
+      "totalTokens": 450000,
+      "totalCost": 1.35,
+      "byCategory": {
+        "generation": 1.00,
+        "quality": 0.25,
+        "context": 0.10
+      }
+    }
+  ]
+}
+```
+
+---
+
+### 获取消耗趋势数据
+
+**GET** `/api/cost-analysis/trend`
+
+> **需要认证**
+
+**查询参数**:
+- `period` (可选) - 趋势周期: `7d`, `30d`, `90d` (默认: `30d`)
+
+**响应示例**:
+```json
+{
+  "trend": [
+    {
+      "date": "2026-04-30",
+      "tokens": 450000,
+      "cost": 1.35
+    }
+  ],
+  "averageDailyCost": 1.20,
+  "predictedMonthlyCost": 36.00
+}
+```
+
+---
+
+### 获取分类分项明细
+
+**GET** `/api/cost-analysis/breakdown`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "byOperation": [
+    {
+      "operation": "章节生成",
+      "count": 45,
+      "tokens": 800000,
+      "cost": 2.40
+    },
+    {
+      "operation": "质量评分",
+      "count": 120,
+      "tokens": 300000,
+      "cost": 0.90
+    }
+  ],
+  "byModel": [
+    {
+      "model": "gpt-4o",
+      "tokens": 900000,
+      "cost": 2.70
+    }
+  ],
+  "optimizationSuggestions": [
+    {
+      "type": "高频操作",
+      "description": "质量评分请求可考虑合并批量处理",
+      "potentialSavings": "15%"
+    }
+  ]
+}
 ```
 
 ---

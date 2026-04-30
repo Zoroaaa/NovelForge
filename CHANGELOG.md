@@ -7,6 +7,206 @@
 
 ---
 
+## [2.3.0] - 2026-04-30
+
+### 🎉 重大更新：Phase 14 · AI监控中心全面升级 + 架构深度优化
+
+#### 🆕 新增功能
+
+##### AI 质量监控系统 📊
+- **质量监控仪表台** (`src/components/monitor/QualityDashboard.tsx`)
+  - 质量概览卡片展示
+  - 批量检查功能
+  - 实时刷新与问题告警
+
+- **质量图表组件** (`src/components/monitor/QualityChart.tsx`)
+  - 多维度质量趋势可视化
+  - 连贯性/角色一致性/进度符合度曲线
+  - SVG手绘图表，无外部依赖
+
+- **质量详情弹窗** (`src/components/monitor/QualityDetailModal.tsx`)
+  - 章节质量诊断报告
+  - 问题列表与严重程度分级
+  - 分数颜色编码与状态图标
+
+- **章节质量列表** (`src/components/monitor/ChapterQualityList.tsx`)
+  - 章节质量快速浏览
+  - 问题数量实时告警
+  - 点击查看详情
+
+- **质量评分卡片** (`src/components/monitor/QualityScoreCard.tsx`)
+  - 环形进度图展示
+  - 四维度评分：连贯性/角色一致性/进度符合度/综合评分
+
+- **质量检查汇总API** (`server/routes/quality.ts`)
+  - `GET /api/quality/summary` - 获取质量汇总数据
+  - 聚合多章检查结果
+  - 计算各维度平均分
+
+##### AI 成本分析系统 💰
+- **成本分析路由** (`server/routes/cost-analysis.ts`)
+  - `GET /api/cost-analysis/overview` - 获取消耗统计总览
+  - `GET /api/cost-analysis/daily` - 获取每日消耗明细
+  - `GET /api/cost-analysis/trend` - 获取消耗趋势数据
+  - `GET /api/cost-analysis/breakdown` - 获取分类分项明细
+
+- **成本分析服务** (`server/services/costAnalysis.ts`)
+  - 生成消耗统计
+  - 成本趋势分析
+  - 分类分项明细
+
+- **前端成本分析组件**
+  - `CostAnalysis.tsx` - 成本分析主组件
+  - `CostBreakdownTable.tsx` - 分类分项明细表格
+  - `CostSummaryCards.tsx` - 消耗汇总卡片
+  - `CostTrendChart.tsx` - 成本趋势图表
+
+##### 队列系统升级 ⚡
+- **队列消息类型扩展** (`server/lib/queue.ts`)
+  - 新增 `quality_check` 消息类型
+  - 新增 `batch_chapter_done` 消息类型
+  - 完善任务上下文传递
+
+- **队列处理器重构** (`server/queue-handler.ts`)
+  - 任务日志追踪
+  - 错误重试机制
+  - 批量生成后处理联动
+
+##### 数据库 Schema 更新 🗄️
+- **迁移文件** (`server/db/migrations/0001_add_post_processed_at.sql`)
+  - chapters 表新增 `postProcessedAt` 字段
+
+- **Schema 更新** (`server/db/schema.ts`)
+  - `chapters` 表新增 `postProcessedAt` 字段（记录后处理完成时间）
+
+#### 🔧 架构优化
+
+##### 上下文构建器增强 🚀
+- **上下文构建器优化** (`server/services/contextBuilder.ts`)
+  - 优化查询文本构建逻辑
+  - 增强 RAG 召回质量
+  - 改进 Slot 预算分配
+
+##### Agent 服务全面优化 🔧
+- **生成服务优化** (`server/services/agent/generation.ts`)
+  - 生成质量提升
+  - 错误处理增强
+
+- **后处理服务增强** (`server/services/agent/postProcess.ts`)
+  - 增强的后处理任务调度
+  - 支持更多后处理任务类型
+  - 质量检查联动
+
+- **摘要生成服务优化** (`server/services/agent/summarizer.ts`)
+  - 改进摘要生成质量
+  - 优化 token 使用效率
+
+- **连贯性检查服务优化** (`server/services/agent/coherence.ts`)
+  - 检查算法增强
+  - 结果准确性提升
+
+- **一致性检查服务优化** (`server/services/agent/consistency.ts`)
+  - 角色一致性检测增强
+  - 问题识别更精准
+
+- **卷进度检查服务优化** (`server/services/agent/volumeProgress.ts`)
+  - 进度计算优化
+  - 历史记录管理
+
+- **批量生成服务优化** (`server/services/agent/batchGenerate.ts`)
+  - 任务调度优化
+  - 错误恢复机制
+  - 后处理联动
+
+- **常量定义更新** (`server/services/agent/constants.ts`)
+  - 新增/更新检查常量
+
+- **消息构建优化** (`server/services/agent/messages.ts`)
+  - Prompt 模板优化
+
+- **类型定义更新** (`server/services/agent/types.ts`)
+  - 类型安全性增强
+
+- **执行器优化** (`server/services/agent/executor.ts`)
+  - 执行流程优化
+
+##### 伏笔服务优化 🎯
+- **伏笔服务增强** (`server/services/foreshadowing.ts`)
+  - 伏笔提取算法增强
+  - 进度追踪功能改进
+
+##### 境界检测服务优化 ⚔️
+- **境界检测服务优化** (`server/services/powerLevel.ts`)
+  - 检测精度提升
+  - 历史记录管理优化
+
+- **境界路由优化** (`server/routes/power-level.ts`)
+  - API 响应优化
+  - 数据处理改进
+
+##### 批量生成路由优化 📦
+- **批量生成路由增强** (`server/routes/batch.ts`)
+  - 任务控制增强
+  - 进度追踪优化
+
+##### LLM 服务优化 🔄
+- **LLM 服务增强** (`server/services/llm.ts`)
+  - 成本追踪功能
+  - 请求优化
+  - 配置解析增强
+
+##### 路由层优化 🛣️
+- **生成路由优化** (`server/routes/generate.ts`)
+  - 增强生成控制
+  - 更好的错误处理
+
+- **质量路由优化** (`server/routes/quality.ts`)
+  - 质量评分逻辑增强
+  - 历史记录管理
+  - 角色一致性检查完整集成
+
+##### 前端类型定义 📝
+- **质量监控类型** (`src/components/monitor/types.ts`)
+  - 质量数据接口定义
+
+#### 📝 文档更新
+
+- 📝 **CHAPTER-GENERATION-USAGE-GUIDE.md** - 新增章节生成完整使用指南
+  - 单章生成流程详解
+  - 批量生成流程详解
+  - 草稿模式使用说明
+  - 常见问题 FAQ
+
+- 📝 **CHAPTER-GENERATION-CONTEXT-GUIDE.md** - 更新至 v4.5
+  - 新增自动修复写库机制
+  - 新增草稿预览模式
+  - 新增 SSE 时序优化
+  - 新增超时统一配置
+
+- 📝 **MODEL-USAGE-GUIDE.md** - 模型使用指南更新
+  - 新增 image_gen 用途说明
+  - 更新推荐配置方案
+
+- 🗑️ **删除旧文档**
+  - `NovelForge-上下文与工程优化方案.md` - 已合并到新文档
+
+#### 🚀 部署优化
+
+- **GitHub Actions 工作流更新** (`.github/workflows/deploy.yml`)
+  - 部署流程优化
+
+#### ✅ 改进
+
+- 🔧 AI 质量监控系统提供全面的章节质量评估
+- 🔧 成本分析系统提供消耗可视化追踪
+- 🔧 上下文构建质量进一步提升
+- 🔧 Agent 服务更稳定高效
+- 🔧 队列任务处理更可靠
+- 🔧 质量评分功能增强（连贯性/角色一致性/进度符合度三维度）
+- 🔧 批量生成与后处理联动更流畅
+
+---
+
 ## [2.2.0] - 2026-04-29
 
 ### 🎉 重大更新：Phase 13 · 情节图谱与封面生成系统
@@ -1436,6 +1636,30 @@
 ---
 
 ## 升级指南
+
+### 升级到 2.3.0
+
+```bash
+# 拉取最新代码
+git pull origin main
+
+# 更新依赖
+pnpm update
+
+# 运行数据库迁移（如有）
+wrangler d1 migrations apply novelforge --remote
+
+# 重新部署
+pnpm build
+wrangler pages deploy dist
+```
+
+**重要变更说明**：
+- 新增成本分析系统：提供消耗统计、趋势图表、分类分项明细
+- 新增章节质量评分列表组件：ChapterQualityList
+- chapters表新增postProcessedAt字段，记录后处理完成时间
+- 上下文构建器进一步优化，提升RAG召回质量
+- 队列处理系统稳定性增强
 
 ### 升级到 2.2.0
 

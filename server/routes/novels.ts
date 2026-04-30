@@ -11,7 +11,7 @@ import { drizzle } from 'drizzle-orm/d1'
 import { novels as t, chapters, characters, novelSettings, masterOutline, volumes, foreshadowing, writingRules } from '../db/schema'
 import { eq, isNull, desc, and, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
-import { deindexContent } from '../services/embedding'
+import { deindexContent, deindexNovel } from '../services/embedding'
 import { generateGenreSystemPrompt } from '../services/workshop/commit'
 
 const router = new Hono<{ Bindings: Env }>()
@@ -145,6 +145,14 @@ router.delete('/trash', async (c) => {
     ).bind(novelId).run()
 
     await c.env.DB.prepare(
+      `DELETE FROM batch_generation_tasks WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM quality_scores WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
       `DELETE FROM workshop_sessions WHERE novel_id = ?`
     ).bind(novelId).run()
 
@@ -156,9 +164,7 @@ router.delete('/trash', async (c) => {
       `DELETE FROM entity_index WHERE novel_id = ?`
     ).bind(novelId).run()
 
-    await c.env.DB.prepare(
-      `DELETE FROM vector_index WHERE novel_id = ?`
-    ).bind(novelId).run()
+    await deindexNovel(c.env, novelId)
 
     await c.env.DB.prepare(
       `DELETE FROM plot_edges WHERE novel_id = ?`

@@ -132,6 +132,9 @@ router.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB)
   const id = c.req.param('id')
 
+  await c.env.DB.prepare(`DELETE FROM vector_index WHERE source_type = 'character' AND source_id = ?`).bind(id).run()
+  await c.env.DB.prepare(`DELETE FROM entity_index WHERE entity_type = 'character' AND entity_id = ?`).bind(id).run()
+
   if (c.env.VECTORIZE) {
     deindexContent(c.env, 'character', id).then(() => {}).catch(e => console.warn('Character deindex failed:', e))
   }

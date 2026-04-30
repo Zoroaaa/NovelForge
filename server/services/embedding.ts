@@ -450,8 +450,10 @@ export async function deindexContent(
     return
   }
 
-  for (const record of existingRecords) {
-    await deleteVector(env.VECTORIZE, record.id)
+  if (env.VECTORIZE) {
+    for (const record of existingRecords) {
+      await deleteVector(env.VECTORIZE, record.id)
+    }
   }
 
   await db.delete(vectorIndex).where(eq(vectorIndex.sourceId, sourceId))
@@ -472,6 +474,27 @@ export async function deindexContent(
   } catch (e) {
     console.warn(`Failed to clear vectorId on source table for ${sourceType}:${sourceId}:`, e)
   }
+}
+
+export async function deindexNovel(env: Env, novelId: string): Promise<void> {
+  const db = drizzle(env.DB)
+  const existingRecords = await db
+    .select({ id: vectorIndex.id })
+    .from(vectorIndex)
+    .where(eq(vectorIndex.novelId, novelId))
+    .all()
+
+  if (existingRecords.length === 0) {
+    return
+  }
+
+  if (env.VECTORIZE) {
+    for (const record of existingRecords) {
+      await deleteVector(env.VECTORIZE, record.id)
+    }
+  }
+
+  await db.delete(vectorIndex).where(eq(vectorIndex.novelId, novelId))
 }
 
 export async function fetchContentForIndexing(

@@ -194,6 +194,9 @@ router.delete('/:id', async (c) => {
   const id = c.req.param('id')
   const db = drizzle(c.env.DB)
 
+  await c.env.DB.prepare(`DELETE FROM vector_index WHERE source_type = 'summary' AND source_id = ?`).bind(id).run()
+  await c.env.DB.prepare(`DELETE FROM entity_index WHERE entity_type = 'master_outline' AND entity_id = ?`).bind(id).run()
+
   await db
     .update(masterOutline)
     .set({ deletedAt: Math.floor(Date.now() / 1000) })
