@@ -9,7 +9,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../lib/types'
 import { generationLogs, chapters } from '../db/schema'
-import { eq, and, desc, sql } from 'drizzle-orm'
+import { eq, and, desc, sql, inArray } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 
 const router = new Hono<{ Bindings: Env }>()
@@ -222,7 +222,7 @@ router.get('/details', zValidator('query', z.object({
       const chapterRows = await db
         .select({ id: chapters.id, sortOrder: chapters.sortOrder })
         .from(chapters)
-        .where(sql`${chapters.id} IN (${chapterIds.join(',')})`)
+        .where(inArray(chapters.id, chapterIds))
         .all()
 
       chapterNumberMap = Object.fromEntries(chapterRows.map(ch => [ch.id, ch.sortOrder]))
