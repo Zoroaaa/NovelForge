@@ -19,7 +19,7 @@ import {
   embedText,
   fetchContentForIndexing,
 } from '../services/embedding'
-import { vectorIndex, novelSettings, characters as charactersTable, masterOutline, foreshadowing, novels } from '../db/schema'
+import { vectorIndex, novelSettings, characters as charactersTable, foreshadowing, novels } from '../db/schema'
 import { enqueue, enqueueBatch, QueueMessage } from '../lib/queue'
 
 const router = new Hono<{ Bindings: Env }>()
@@ -528,19 +528,40 @@ router.delete('/orphan-indexes', async (c) => {
 
   const db = drizzle(c.env.DB)
 
-  const allNovelIds = await db
-    .select({ id: novels.id })
-    .from(novels)
+  const validSourceIds = new Set<string>()
+
+  const deletedSettings = await db
+    .select({ id: novelSettings.id })
+    .from(novelSettings)
+    .where(sql`${novelSettings.deletedAt} IS NOT NULL`)
     .all()
+  deletedSettings.forEach(r => validSourceIds.add(r.id))
 
-  const validNovelIds = new Set(allNovelIds.map(n => n.id))
+  const deletedCharacters = await db
+    .select({ id: charactersTable.id })
+    .from(charactersTable)
+    .where(sql`${charactersTable.deletedAt} IS NOT NULL`)
+    .all()
+  deletedCharacters.forEach(r => validSourceIds.add(r.id))
 
-  const orphanedVectors = await db
-    .select({ id: vectorIndex.id, novelId: vectorIndex.novelId, sourceType: vectorIndex.sourceType, sourceId: vectorIndex.sourceId })
+  const deletedForeshadowing = await db
+    .select({ id: foreshadowing.id })
+    .from(foreshadowing)
+    .where(sql`${foreshadowing.deletedAt} IS NOT NULL`)
+    .all()
+  deletedForeshadowing.forEach(r => validSourceIds.add(r.id))
+
+  const allVectors = await db
+    .select({ id: vectorIndex.id, sourceType: vectorIndex.sourceType, sourceId: vectorIndex.sourceId })
     .from(vectorIndex)
     .all()
 
-  const orphansToDelete = orphanedVectors.filter(v => !validNovelIds.has(v.novelId))
+  const orphansToDelete = allVectors.filter(v => {
+    if (v.sourceType === 'setting' || v.sourceType === 'character' || v.sourceType === 'foreshadowing') {
+      return validSourceIds.has(v.sourceId)
+    }
+    return false
+  })
 
   if (orphansToDelete.length === 0) {
     return c.json({ ok: true, deleted: 0, message: '没有发现残留索引' })
@@ -557,23 +578,54 @@ router.delete('/orphan-indexes', async (c) => {
 })
 
 router.post('/clear-all', async (c) => {
-  if (!c.env.VECTORIZE) {
-    return c.json({ error: 'Vectorize binding not configured' }, 503)
+  if (!c.env.CLOUDFLARE_API_TOKEN || !c.env.CLOUDFLARE_ACCOUNT_ID) {
+    return c.json({ error: 'Cloudflare API credentials not configured. Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in environment variables.' }, 503)
   }
 
   const db = drizzle(c.env.DB)
 
-  const allVectors = await db.select({ id: vectorIndex.id }).from(vectorIndex).all()
+  const indexName = 'novelforge-index'
+  const accountId = c.env.CLOUDFLARE_ACCOUNT_ID
+  const token = c.env.CLOUDFLARE_API_TOKEN
+  const baseUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/vectorize/v2/indexes/${indexName}`
 
-  if (allVectors.length === 0) {
-    return c.json({ ok: true, deleted: 0, message: '没有索引记录' })
-  }
+  let totalDeleted = 0
+  let cursor: string | undefined
 
-  for (const v of allVectors) {
-    await c.env.VECTORIZE.deleteByIds([v.id]).catch(() => {})
-  }
+  do {
+    const listUrl = cursor ? `${baseUrl}/list?count=1000&cursor=${cursor}` : `${baseUrl}/list?count=1000`
+    try {
+      const response = await fetch(listUrl, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!response.ok) break
+      const data = await response.json() as { vectors?: Array<{ id: string }>; cursor?: string }
+      const vectors = data.vectors ?? []
+      if (vectors.length === 0) break
 
+      const ids = vectors.map(v => v.id)
+      const deleteRes = await fetch(`${baseUrl}/delete_by_ids`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+      })
+      if (deleteRes.ok) {
+        totalDeleted += ids.length
+      }
+      cursor = data.cursor
+      if (!data.cursor || vectors.length < 1000) break
+    } catch {
+      break
+    }
+  } while (cursor)
+
+  const allLocalVectors = await db.select({ id: vectorIndex.id }).from(vectorIndex).all()
   await db.delete(vectorIndex).run()
 
-  return c.json({ ok: true, deleted: allVectors.length, message: `已清空全部 ${allVectors.length} 条索引记录` })
+  return c.json({
+    ok: true,
+    deleted: totalDeleted,
+    localRecordsCleared: allLocalVectors.length,
+    message: `已从 Vectorize 清空 ${totalDeleted} 条向量记录`
+  })
 })

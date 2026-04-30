@@ -17,6 +17,8 @@ export type Env = {
   OPENAI_API_KEY: string
   API_KEY?: string
   JWT_SECRET?: string
+  CLOUDFLARE_API_TOKEN?: string
+  CLOUDFLARE_ACCOUNT_ID?: string
 }
 
 export type UserPayload = {
