@@ -22,6 +22,7 @@ const ExportSchema = z.object({
   volumeIds: z.array(z.string()).optional(),
   includeTOC: z.boolean().optional(),
   includeMeta: z.boolean().optional(),
+  chapterSeparator: z.enum(['none', 'line', 'decorated']).optional(),
 })
 
 /**

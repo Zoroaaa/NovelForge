@@ -195,9 +195,15 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
             aliases?: string[]
             attributes?: Record<string, unknown>
             powerLevel?: string
+            relationships?: string[]
           }
 
           const name = charData.name || '未命名角色'
+
+          const finalAttributes = {
+            ...(charData.attributes || {}),
+            ...(charData.relationships ? { relationships: charData.relationships } : {}),
+          }
 
           if (importMode === 'update') {
             if (!charData.id) {
@@ -209,9 +215,11 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
                 name,
                 role: charData.role || 'supporting',
                 description: charData.description || '',
-                aliases: charData.aliases ? JSON.stringify(charData.aliases) : null,
-                attributes: charData.attributes ? JSON.stringify(charData.attributes) : null,
-                powerLevel: charData.powerLevel || null,
+                aliases: charData.aliases ? JSON.stringify(charData.aliases) : undefined,
+                powerLevel: charData.powerLevel || undefined,
+                attributes: Object.keys(finalAttributes).length > 0
+                  ? JSON.stringify(finalAttributes)
+                  : undefined,
                 updatedAt: Math.floor(Date.now() / 1000),
               })
               .where(eq(characters.id, charData.id))
@@ -236,8 +244,10 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
                     role: charData.role || existing[0].role,
                     description: charData.description || existing[0].description,
                     aliases: charData.aliases ? JSON.stringify(charData.aliases) : existing[0].aliases,
-                    attributes: charData.attributes ? JSON.stringify(charData.attributes) : existing[0].attributes,
                     powerLevel: charData.powerLevel || existing[0].powerLevel,
+                    attributes: Object.keys(finalAttributes).length > 0
+                      ? JSON.stringify(finalAttributes)
+                      : existing[0].attributes,
                     updatedAt: Math.floor(Date.now() / 1000),
                   })
                   .where(eq(characters.id, existing[0].id))
@@ -250,8 +260,10 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
                 role: charData.role || 'supporting',
                 description: charData.description || '',
                 aliases: charData.aliases ? JSON.stringify(charData.aliases) : null,
-                attributes: charData.attributes ? JSON.stringify(charData.attributes) : null,
                 powerLevel: charData.powerLevel || null,
+                attributes: Object.keys(finalAttributes).length > 0
+                  ? JSON.stringify(finalAttributes)
+                  : null,
               }).returning()
               results.push({ action: 'created', id: character.id, name, existed: false })
             }
@@ -268,6 +280,10 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
             eventLine?: string | string[]
             notes?: string | string[]
             chapterCount?: number
+            targetWordCount?: number | null
+            targetChapterCount?: number | null
+            foreshadowingSetup?: string[]
+            foreshadowingResolve?: string[]
           }
 
           const title = volData.title || '未命名卷'
@@ -277,6 +293,12 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
           const notesValue = Array.isArray(volData.notes)
             ? JSON.stringify(volData.notes)
             : volData.notes || null
+          const foreshadowingSetupValue = Array.isArray(volData.foreshadowingSetup)
+            ? JSON.stringify(volData.foreshadowingSetup)
+            : null
+          const foreshadowingResolveValue = Array.isArray(volData.foreshadowingResolve)
+            ? JSON.stringify(volData.foreshadowingResolve)
+            : null
 
           if (importMode === 'update') {
             if (!volData.id) {
@@ -290,7 +312,11 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
                 blueprint: volData.blueprint || null,
                 eventLine: eventLineValue,
                 notes: notesValue,
-                chapterCount: volData.chapterCount || 0,
+                foreshadowingSetup: foreshadowingSetupValue,
+                foreshadowingResolve: foreshadowingResolveValue,
+                chapterCount: volData.chapterCount ?? volumes.chapterCount,
+                targetWordCount: volData.targetWordCount ?? volumes.targetWordCount,
+                targetChapterCount: volData.targetChapterCount ?? volumes.targetChapterCount,
                 updatedAt: Math.floor(Date.now() / 1000),
               })
               .where(eq(volumes.id, volData.id))
@@ -316,7 +342,11 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
                     blueprint: volData.blueprint || existing[0].blueprint,
                     eventLine: eventLineValue || existing[0].eventLine,
                     notes: notesValue || existing[0].notes,
-                    chapterCount: volData.chapterCount || existing[0].chapterCount,
+                    foreshadowingSetup: foreshadowingSetupValue || existing[0].foreshadowingSetup,
+                    foreshadowingResolve: foreshadowingResolveValue || existing[0].foreshadowingResolve,
+                    chapterCount: volData.chapterCount ?? existing[0].chapterCount,
+                    targetWordCount: volData.targetWordCount ?? existing[0].targetWordCount,
+                    targetChapterCount: volData.targetChapterCount ?? existing[0].targetChapterCount,
                     updatedAt: Math.floor(Date.now() / 1000),
                   })
                   .where(eq(volumes.id, existing[0].id))
@@ -333,7 +363,11 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
                 blueprint: volData.blueprint || '',
                 eventLine: eventLineValue || '',
                 notes: notesValue || '',
+                foreshadowingSetup: foreshadowingSetupValue,
+                foreshadowingResolve: foreshadowingResolveValue,
                 chapterCount: volData.chapterCount || 0,
+                targetWordCount: volData.targetWordCount || null,
+                targetChapterCount: volData.targetChapterCount || null,
                 sortOrder,
                 status: 'draft',
               }).returning()
@@ -349,26 +383,47 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
             title?: string
             content?: string
             summary?: string
+            volumeId?: string
+            volumeTitle?: string
           }
 
           const title = chapData.title || '未命名章节'
+
+          let finalVolumeId = chapData.volumeId || null
+          if (!finalVolumeId && chapData.volumeTitle) {
+            try {
+              const matchedVolume = await db.select({ id: volumes.id })
+                .from(volumes)
+                .where(and(
+                  eq(volumes.novelId, novelId),
+                  eq(volumes.title, chapData.volumeTitle!)
+                ))
+                .limit(1)
+                .get()
+              finalVolumeId = matchedVolume?.id || null
+            } catch (e) {
+              console.error('Failed to match volume by title:', e)
+            }
+          }
 
           if (importMode === 'update' && chapData.id) {
             await db.update(chapters)
               .set({
                 title,
                 content: chapData.content || null,
-                summary: chapData.summary || null,
+                summary: chapData.summary || undefined,
+                volumeId: finalVolumeId,
                 wordCount: chapData.content ? chapData.content.length : 0,
                 updatedAt: Math.floor(Date.now() / 1000),
               })
               .where(eq(chapters.id, chapData.id))
             results.push({ action: 'updated', id: chapData.id, name: title, existed: true })
           } else {
-            let volumeId: string | null = null
-            const existVolumes = await db.select().from(volumes).where(eq(volumes.novelId, novelId)).all()
-            if (existVolumes.length > 0) {
-              volumeId = existVolumes[0].id
+            if (!finalVolumeId) {
+              const existVolumes = await db.select().from(volumes).where(eq(volumes.novelId, novelId)).all()
+              if (existVolumes.length > 0) {
+                finalVolumeId = existVolumes[0].id
+              }
             }
 
             const existChapters = await db.select().from(chapters).where(eq(chapters.novelId, novelId)).all()
@@ -376,7 +431,7 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
 
             const [chapter] = await db.insert(chapters).values({
               novelId,
-              volumeId,
+              volumeId: finalVolumeId,
               title,
               content: chapData.content || '',
               summary: chapData.summary || null,
@@ -393,12 +448,15 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
           const settingData = itemData as {
             id?: string
             type?: string
+            category?: string
             name?: string
             content?: string
             importance?: string
           }
 
           const name = settingData.name || '未命名设定'
+          const typeValue = settingData.type || 'misc'
+          const categoryValue = settingData.category || typeValue
           const importanceValue = settingData.importance ?? 'normal'
 
           if (importMode === 'update') {
@@ -409,8 +467,8 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
             await db.update(novelSettings)
               .set({
                 name,
-                type: settingData.type || 'misc',
-                category: settingData.type || 'misc',
+                type: typeValue,
+                category: categoryValue,
                 content: settingData.content || '',
                 importance: importanceValue,
                 updatedAt: Math.floor(Date.now() / 1000),
@@ -434,6 +492,8 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
               } else {
                 await db.update(novelSettings)
                   .set({
+                    type: typeValue,
+                    category: categoryValue,
                     content: settingData.content || existing[0].content,
                     importance: importanceValue,
                     updatedAt: Math.floor(Date.now() / 1000),
@@ -447,8 +507,8 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
 
               const [setting] = await db.insert(novelSettings).values({
                 novelId,
-                type: settingData.type || 'misc',
-                category: settingData.type || 'misc',
+                type: typeValue,
+                category: categoryValue,
                 name,
                 content: settingData.content || '',
                 importance: importanceValue,
@@ -481,7 +541,7 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
                 title,
                 category: ruleData.category || 'custom',
                 content: ruleData.content || '',
-                priority: ruleData.priority || 3,
+                priority: ruleData.priority ?? 3,
                 updatedAt: Math.floor(Date.now() / 1000),
               })
               .where(eq(writingRules.id, ruleData.id))
@@ -505,7 +565,7 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
                   .set({
                     content: ruleData.content || existing[0].content,
                     category: ruleData.category || existing[0].category,
-                    priority: ruleData.priority || existing[0].priority,
+                    priority: ruleData.priority ?? existing[0].priority ?? 3,
                     updatedAt: Math.floor(Date.now() / 1000),
                   })
                   .where(eq(writingRules.id, existing[0].id))
@@ -520,7 +580,7 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
                 category: ruleData.category || 'custom',
                 title,
                 content: ruleData.content || '',
-                priority: ruleData.priority || 3,
+                priority: ruleData.priority ?? 3,
                 isActive: 1,
                 sortOrder,
               }).returning()
@@ -537,11 +597,68 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
             description?: string
             status?: string
             importance?: string
+            volumeId?: string
+            volumeTitle?: string
+            chapterId?: string
+            chapterTitle?: string
+            resolvedChapterId?: string
+            resolvedChapterTitle?: string
           }
 
           const title = fsData.title || '未命名伏笔'
           const statusValue = fsData.status ?? 'open'
           const importanceValue = fsData.importance ?? 'normal'
+
+          let finalVolumeId = fsData.volumeId || null
+          if (!finalVolumeId && fsData.volumeTitle) {
+            try {
+              const matchedVolume = await db.select({ id: volumes.id })
+                .from(volumes)
+                .where(and(
+                  eq(volumes.novelId, novelId),
+                  eq(volumes.title, fsData.volumeTitle!)
+                ))
+                .limit(1)
+                .get()
+              finalVolumeId = matchedVolume?.id || null
+            } catch (e) {
+              console.error('Failed to match volume by title:', e)
+            }
+          }
+
+          let finalChapterId = fsData.chapterId || null
+          if (!finalChapterId && fsData.chapterTitle) {
+            try {
+              const matched = await db.select({ id: chapters.id })
+                .from(chapters)
+                .where(and(
+                  eq(chapters.novelId, novelId),
+                  eq(chapters.title, fsData.chapterTitle!)
+                ))
+                .limit(1)
+                .get()
+              finalChapterId = matched?.id || null
+            } catch (e) {
+              console.error('Failed to match chapter by title:', e)
+            }
+          }
+
+          let finalResolvedChapterId = fsData.resolvedChapterId || null
+          if (!finalResolvedChapterId && fsData.resolvedChapterTitle) {
+            try {
+              const matched = await db.select({ id: chapters.id })
+                .from(chapters)
+                .where(and(
+                  eq(chapters.novelId, novelId),
+                  eq(chapters.title, fsData.resolvedChapterTitle!)
+                ))
+                .limit(1)
+                .get()
+              finalResolvedChapterId = matched?.id || null
+            } catch (e) {
+              console.error('Failed to match resolved chapter by title:', e)
+            }
+          }
 
           if (importMode === 'update') {
             if (!fsData.id) {
@@ -554,6 +671,9 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
                 description: fsData.description || '',
                 status: statusValue,
                 importance: importanceValue,
+                volumeId: finalVolumeId,
+                chapterId: finalChapterId,
+                resolvedChapterId: finalResolvedChapterId,
                 updatedAt: Math.floor(Date.now() / 1000),
               })
               .where(eq(foreshadowing.id, fsData.id))
@@ -577,6 +697,9 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
                     description: fsData.description || existing[0].description,
                     status: statusValue,
                     importance: importanceValue,
+                    volumeId: finalVolumeId || existing[0].volumeId,
+                    chapterId: finalChapterId || existing[0].chapterId,
+                    resolvedChapterId: finalResolvedChapterId || existing[0].resolvedChapterId,
                     updatedAt: Math.floor(Date.now() / 1000),
                   })
                   .where(eq(foreshadowing.id, existing[0].id))
@@ -585,10 +708,13 @@ router.post('/import', zValidator('json', importDataSchema), async (c) => {
             } else {
               const [foreshadow] = await db.insert(foreshadowing).values({
                 novelId,
+                volumeId: finalVolumeId,
                 title,
                 description: fsData.description || '',
                 status: statusValue,
                 importance: importanceValue,
+                chapterId: finalChapterId,
+                resolvedChapterId: finalResolvedChapterId,
               }).returning()
               results.push({ action: 'created', id: foreshadow.id, name: title, existed: false })
             }

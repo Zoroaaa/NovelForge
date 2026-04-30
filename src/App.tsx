@@ -8,6 +8,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, useState, useRef } from 'react'
 import { Toaster } from '@/components/ui/sonner'
+import { PWAInstallPrompt } from '@/components/ui/pwa-install-prompt'
 import { useAuthStore } from '@/store/authStore'
 import { api, getToken } from '@/lib/api'
 
@@ -221,6 +222,7 @@ export default function App() {
         </Routes>
         </SetupGuard>
       </BrowserRouter>
+      <PWAInstallPrompt />
       <Toaster richColors />
     </QueryClientProvider>
   )

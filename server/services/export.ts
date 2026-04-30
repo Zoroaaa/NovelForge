@@ -15,6 +15,7 @@ export interface ExportOptions {
   volumeIds?: string[]
   includeTOC?: boolean
   includeMeta?: boolean
+  chapterSeparator?: 'none' | 'line' | 'decorated'
 }
 
 export interface ChapterData {
@@ -125,7 +126,9 @@ export async function exportAsMarkdown(env: Env, options: ExportOptions): Promis
 
   // 正文
   data.chapters.forEach((ch, idx) => {
-    if (idx > 0) md += `\n\n---\n\n`  // 章节分隔线
+    if (idx > 0) {
+      md += generateChapterSeparator(options.chapterSeparator || 'line', idx - 1, data.chapters[idx - 1].title, 'md')
+    }
     md += `## ${ch.title}\n\n`
 
     // 将 HTML 转换为简单 Markdown（保留段落结构）
@@ -162,7 +165,9 @@ export async function exportAsTxt(env: Env, options: ExportOptions): Promise<Blo
 
   // 正文
   data.chapters.forEach((ch, idx) => {
-    if (idx > 0) txt += '\n'
+    if (idx > 0) {
+      txt += generateChapterSeparator(options.chapterSeparator || 'line', idx - 1, data.chapters[idx - 1].title, 'txt')
+    }
     txt += `【第 ${idx + 1} 章】${ch.title}\n\n`
 
     if (ch.content) {
@@ -916,6 +921,43 @@ export async function exportAsEntityTreeZip(env: Env, options: ExportOptions): P
 }
 
 // ========== 工具函数 ==========
+
+/**
+ * 生成章节分隔符
+ * @param {string} separatorType - 分隔符类型: 'none' | 'line' | 'decorated'
+ * @param {number} chapterIndex - 当前章节索引（从0开始）
+ * @param {string} chapterTitle - 章节标题
+ * @param {string} format - 导出格式: 'md' | 'txt'
+ * @returns {string} 分隔符字符串
+ */
+function generateChapterSeparator(
+  separatorType: string,
+  chapterIndex: number,
+  chapterTitle: string,
+  format: string
+): string {
+  const chapterNum = chapterIndex + 1
+
+  switch (separatorType) {
+    case 'none':
+      return '\n\n'
+
+    case 'line':
+      if (format === 'md') {
+        return '\n\n---\n\n'
+      }
+      return `\n\n${'═'.repeat(50)}\n\n`
+
+    case 'decorated':
+      if (format === 'md') {
+        return `\n\n***\n\n*★ 第 ${chapterNum} 章「${chapterTitle}」结束 ★*\n\n***\n\n`
+      }
+      return `\n\n${'★'.repeat(25)}\n   ✦ 第 ${chapterNum} 章「${chapterTitle}」结束 ✦\n${'★'.repeat(25)}\n\n`
+
+    default:
+      return '\n\n'
+  }
+}
 
 /**
  * 将 HTML 转换为简化 Markdown

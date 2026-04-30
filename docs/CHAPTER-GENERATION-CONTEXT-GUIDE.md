@@ -53,7 +53,7 @@
 │  【Dynamic 层 - 动态数据（RAG+DB）】                            │
 │  ┌─────────┬───────────────┬────────────────────────────────┐ │
 │  │ Slot-5  │ 出场角色卡     │ RAG(character)→DB完整卡片      │ │
-│  │ Slot-6  │ 世界设定       │ RAG(setting).summary 分6槽     │ │
+│  │ Slot-6  │ 世界设定       │ RAG(setting)分6槽：普通显示【名称】+summary，high直接替换DB全文 │ │
 │  │ Slot-7  │ 待回收伏笔     │ DB高优兜底 + RAG普通伏笔        │ │
 │  │ Slot-8  │ 本章类型规则   │ DB category匹配                │ │
 │  │ Slot-9  │ 近期剧情摘要链 │ DB chapters.summary × 20章     │ │
@@ -135,9 +135,9 @@ buildChapterContext(env, novelId, chapterId)
 │   │   └─→ 路径B: RAG score > 0.42 AND status=open（普通伏笔）
 │   │
 │   └── RAG #3: searchSimilar(sourceType='setting', topK=20)
-│       ├─→ 用 metadata.content（即 summary 字段）作为上下文
-│       ├─→ 按 settingType 分 6 槽独立预算
-│       └─→ importance='high' 的额外追加了 DB content 全文
+│       ├─→ 普通设定：RAG summary 增加显示设定名称【名称】\nsummary
+│       ├─→ importance='high'：直接替换为 DB content 全文（不再显示RAG摘要）
+│       └─→ 每个设定之间空行分隔
 │
 ├── Step 4: Core Token 预算检查
 │   └─ 超预算时从尾部弹出规则项（规则优先级最低）
@@ -159,7 +159,7 @@ buildChapterContext(env, novelId, chapterId)
 | **Core 小计** | | **≤42500** | |
 | 摘要链 (Slot-9) | L1 Dynamic | ≤25000 | DB chapters.summary × 20 |
 | 出场角色 (Slot-5) | L2 Dynamic | ≤20000 | RAG(character) → DB 完整卡片 |
-| 世界设定 (Slot-6) | L2 Dynamic | ≤25000 | RAG(setting).summary + high优全文 |
+| 世界设定 (Slot-6) | L2 Dynamic | ≤25000 | RAG(setting)：普通【名称】+summary，high替换DB全文 |
 | 待回收伏笔 (Slot-7) | L2 Dynamic | ≤10000 | DB高优兜底 + RAG(foreshadowing) |
 | 本章规则 (Slot-8) | L2 Dynamic | ≤8000 | DB writingRules(category匹配) |
 | **总计** | | **≤128000** (~90k 中文字) | |
@@ -697,7 +697,8 @@ const findChapterLine = (chapterNum) => lines.find(l => l.match(new RegExp(`第$
 
 **文件位置**: [contextBuilder.ts:517-625](file:///d:/开发项目/NovelForge/server/services/contextBuilder.ts#L517-L625)
 
-**v4 变更**: RAG 返回的是 `novelSettings.summary`（而非全文切块），且 importance=high 的设定会追加 DB 全文。
+**v4 变更**: RAG 返回的是 `novelSettings.summary`，且 importance=high 的设定会替换为 DB 全文。
+**v4.6 变更**: 普通设定增加显示【设定名称】前缀；high importance 直接替换（不再追加）；每个设定间空行分隔。
 
 **执行流程**:
 ```
@@ -724,17 +725,15 @@ const findChapterLine = (chapterNum) => lines.find(l => l.match(new RegExp(`第$
   │     ├─ 对每个结果 r:
   │     │   ├─ 判断所属 slotKey
   │     │   ├─ score < threshold → 跳过
-  │     │   ├─ 使用 r.metadata.content（即 summary 字段值）
-  │     │   └─ 超出 slotBudget → 跳过
+  │     │   ├─ importance='high' AND score>=0.38 → 跳过 RAG summary，记录到 highImportanceIds
+  │     │   └─ 普通设定：显示【设定名称】\n{summary} + 空行
   │     │
-  │     └─ 记录 sourceIdSlotMap: { sourceId → { slotKey, index } }
-  │        （用于 Phase 2 精确插入完整设定）
+  │     └─ 记录 highImportanceIds + sourceIdSlotMap: { sourceId → { slotKey, index } }
   │
-  ├─ Phase 2: 高重要性设定追加全文（插入到对应 summary 之后）
-  │     ├─ 收集 importance='high' AND score>=0.38 的 sourceId 列表
+  ├─ Phase 2: 高重要性设定替换为 DB 全文（替换对应位置）
   │     ├─ DB 批量查询: SELECT id, name, type, content FROM novelSettings WHERE id IN (...)
-  │     ├─ 用 sourceIdSlotMap[fr.id] 精确定位插入位置
-  │     └─ 插入到对应 summary 的后面: `【name·完整设定】\n{content全文}`
+  │     ├─ 用 sourceIdSlotMap[fr.id] 精确定位替换位置
+  │     └─ 替换为: `【name·完整设定】\n{content全文}` + 空行
   │        （允许超出原 budget 的 1.5 倍作为缓冲）
   │
   └─ 返回 SlottedSettings (6 个子槽的字符串数组)
@@ -891,26 +890,36 @@ const findChapterLine = (chapterNum) => lines.find(l => l.match(new RegExp(`第$
 
 ## 相关世界设定
 【世界法则】
+【灵气复苏规则】
 {setting summary 1}
+
+【境界划分标准】
 {setting summary 2}
 
 【境界体系】
+【练气境描述】
 {setting summary 1}
+
+【筑基境描述】
 {setting summary 2}
 
 【场景地理】
+【云隐山脉】
 {setting summary}
 
 【相关势力】
+【青云门】
 {setting summary}
 
 【相关法宝】
+【青木剑】
 {setting summary}
 
 【其他设定】
+【炼丹术基础】
 {setting summary}
 
-【完整设定】(high-importance setting full text)
+【灵气复苏·完整设定】(high-importance setting full text)
 {setting full content}
 ...
 

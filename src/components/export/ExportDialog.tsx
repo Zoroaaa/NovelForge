@@ -29,6 +29,7 @@ import {
   CheckCircle2,
   Settings2,
   TreePine,
+  SeparatorHorizontal,
 } from 'lucide-react'
 
 interface ExportDialogProps {
@@ -37,6 +38,7 @@ interface ExportDialogProps {
 }
 
 type FormatId = 'md' | 'txt' | 'epub' | 'zip' | 'entity-tree'
+type SeparatorType = 'none' | 'line' | 'decorated'
 
 interface FormatOption {
   id: FormatId
@@ -46,6 +48,13 @@ interface FormatOption {
   extension: string
   color: string
   bgColor: string
+}
+
+interface SeparatorOption {
+  id: SeparatorType
+  name: string
+  description: string
+  preview: string
 }
 
 const FORMAT_OPTIONS: FormatOption[] = [
@@ -96,12 +105,37 @@ const FORMAT_OPTIONS: FormatOption[] = [
   },
 ]
 
+const SEPARATOR_OPTIONS: SeparatorOption[] = [
+  {
+    id: 'none',
+    name: '无分隔符',
+    description: '仅用空行分隔，最简洁',
+    preview: '\n\n',
+  },
+  {
+    id: 'line',
+    name: '简单分割线',
+    description: '使用分割线符号分隔章节',
+    preview: '--- 或 ════════',
+  },
+  {
+    id: 'decorated',
+    name: '装饰性分隔符',
+    description: '带章节信息的精美分隔符',
+    preview: '★ 第N章「标题」结束 ★',
+  },
+]
+
 export function ExportDialog({ novelId, novelTitle }: ExportDialogProps) {
   const [open, setOpen] = useState(false)
   const [selectedFormat, setSelectedFormat] = useState<FormatId>('epub')
   const [includeTOC, setIncludeTOC] = useState(true)
   const [includeMeta, setIncludeMeta] = useState(true)
+  const [chapterSeparator, setChapterSeparator] = useState<SeparatorType>('line')
   const [isExporting, setIsExporting] = useState(false)
+
+  // 判断当前格式是否支持章节分隔符配置
+  const showSeparatorOption = selectedFormat === 'md' || selectedFormat === 'txt'
 
   // 导出 mutation
   const exportMutation = useMutation({
@@ -111,15 +145,23 @@ export function ExportDialog({ novelId, novelTitle }: ExportDialogProps) {
       const token = getToken()
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (token) headers['Authorization'] = `Bearer ${token}`
+
+      const requestBody: Record<string, unknown> = {
+        novelId,
+        format: selectedFormat,
+        includeTOC,
+        includeMeta,
+      }
+
+      // 仅在支持分隔符的格式中添加该参数
+      if (showSeparatorOption) {
+        requestBody.chapterSeparator = chapterSeparator
+      }
+
       const response = await fetch('/api/export', {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          novelId,
-          format: selectedFormat,
-          includeTOC,
-          includeMeta,
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (!response.ok) {
@@ -265,6 +307,51 @@ export function ExportDialog({ novelId, novelTitle }: ExportDialogProps) {
             </div>
           </div>
 
+          {/* 章节分隔符选项 - 仅在 MD/TXT 格式时显示 */}
+          {showSeparatorOption && (
+            <div className="space-y-3">
+              <Label className="flex items-center gap-2">
+                <SeparatorHorizontal className="h-4 w-4" />
+                章节分隔符样式
+              </Label>
+
+              <div className="space-y-2 pl-1">
+                {SEPARATOR_OPTIONS.map((option) => {
+                  const isSelected = chapterSeparator === option.id
+
+                  return (
+                    <button
+                      key={option.id}
+                      onClick={() => setChapterSeparator(option.id)}
+                      className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all text-left ${
+                        isSelected
+                          ? 'border-primary bg-primary/5 shadow-sm'
+                          : 'border-transparent bg-muted/30 hover:border-border hover:bg-muted/50'
+                      }`}
+                    >
+                      <div className={`flex-1`}>
+                        <div className="flex items-center gap-2">
+                          {isSelected && (
+                            <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0" />
+                          )}
+                          <span className={`text-sm font-medium ${isSelected ? '' : 'text-muted-foreground'}`}>
+                            {option.name}
+                          </span>
+                        </div>
+                        <p className={`text-xs mt-0.5 ${isSelected ? 'text-foreground/70' : 'text-muted-foreground'}`}>
+                          {option.description}
+                        </p>
+                      </div>
+                      <code className="text-xs bg-background px-2 py-1 rounded border text-muted-foreground">
+                        {option.preview}
+                      </code>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {/* 操作按钮 */}
           <div className="flex justify-end gap-3 pt-2 border-t">
             <Button variant="outline" onClick={() => setOpen(false)}>
@@ -298,6 +385,9 @@ export function ExportDialog({ novelId, novelTitle }: ExportDialogProps) {
               <li>ZIP 打包包含所有格式，方便归档备份</li>
               <li>实体树数据包包含完整小说数据（设定/角色/伏笔/规则/章节等），适合备份和迁移</li>
               <li>导出的文件将自动下载到您的设备</li>
+              {showSeparatorOption && (
+                <li>章节分隔符仅对 Markdown 和纯文本格式生效，可自定义章节间的分隔样式</li>
+              )}
             </ul>
           </div>
         </div>

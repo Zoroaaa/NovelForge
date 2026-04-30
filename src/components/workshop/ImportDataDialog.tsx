@@ -70,6 +70,122 @@ const MODULE_OPTIONS: { value: ImportTargetModule; label: string; icon: string; 
   { value: 'chapter', label: '章节', icon: '📄', description: '小说章节内容' },
 ]
 
+const MODULE_FIELD_HINTS: Record<ImportTargetModule, string> = {
+  chapter: `可用字段：
+• title (必填): 章节标题
+• content: 正文内容
+• summary: 章节摘要
+• volumeTitle: 所属卷标题【智能匹配✨】
+
+示例：
+{
+  "title": "第一章：觉醒",
+  "content": "正文内容...",
+  "volumeTitle": "第一卷"
+}`,
+
+  character: `可用字段：
+• name (必填): 角色姓名
+• role: 角色定位 (protagonist/supporting/antagonist/minor)
+• description: 综合描述（简要）
+• aliases: 别名列表
+• powerLevel: 战斗力等级
+• relationships: 角色关系列表【存入attributes✨】
+• attributes: 详细属性对象【包含appearance/personality/backgroundStory等✨】
+
+示例：
+{
+  "name": "张三",
+  "role": "protagonist",
+  "description": "青云宗弟子",
+  "relationships": ["苏婉儿(恋人)", "赵长老(师父)"],
+  "attributes": {
+    "appearance": "身高180cm，相貌英俊",
+    "personality": "性格坚毅，重情重义",
+    "backgroundStory": "出身平凡村落"
+  }
+}`,
+
+  volume: `可用字段：
+• title (必填): 卷标题
+• summary: 卷概要
+• blueprint: 详细蓝图
+• eventLine: 事件线数组
+• notes: 备注数组
+• chapterCount: 预计章节数
+• targetWordCount: 目标字数【新✨】
+• targetChapterCount: 目标章节数【新✨】
+• foreshadowingSetup: 伏笔埋设计划数组【新✨】
+• foreshadowingResolve: 伏笔回收计划数组【新✨】
+
+示例：
+{
+  "title": "第一卷：觉醒之路",
+  "targetWordCount": 300000,
+  "targetChapterCount": 30,
+  "foreshadowingSetup": ["神秘玉佩", "血海深仇"]
+}`,
+
+  setting: `可用字段：
+• name (必填): 设定名称
+• type: 设定类型 (worldview/power_system/faction/geography/item_skill/misc)
+• category: 分类【新✨】
+• content: 详细内容
+• importance: 重要程度
+
+示例：
+{
+  "type": "faction",
+  "category": "正道势力",
+  "name": "青云宗",
+  "content": "宗门详细设定..."
+}`,
+
+  rule: `可用字段：
+• title (必填): 规则标题
+• category: 规则类别 (style/pacing/character/plot/world/taboo/custom)
+• content: 规则内容
+• priority: 优先级 (1-5)
+
+示例：
+{
+  "category": "style",
+  "title": "第三人称叙事",
+  "content": "全篇使用第三人称...",
+  "priority": 1
+}`,
+
+  foreshadowing: `可用字段：
+• title (必填): 伏笔标题
+• description: 详细描述
+• status: 状态 (open/resolved/abandoned/resolve_planned)
+• importance: 重要程度
+• volumeTitle: 所属卷标题【智能匹配✨】
+• chapterTitle: 埋设章节标题【智能匹配✨】
+• resolvedChapterTitle: 回收章节标题【智能匹配✨】
+
+示例：
+{
+  "title": "神秘玉佩",
+  "description": "主角童年获得的玉佩...",
+  "volumeTitle": "第一卷",
+  "chapterTitle": "第一章",
+  "resolvedChapterTitle": "第二十章"
+}`,
+
+  master_outline: `可用字段：
+• title (必填): 总纲标题
+• summary: 摘要【新✨】
+• content: 完整内容
+
+示例：
+{
+  "title": "修仙之路总纲",
+  "summary": "本文讲述了一个少年...",
+  "content": "# 世界观\\n...\\n# 主线剧情\\n..."
+}`,
+}
+
 export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: ImportDataDialogProps) {
   const [activeTab, setActiveTab] = useState<'paste' | 'file'>('paste')
   const [pastedContent, setPastedContent] = useState('')
@@ -303,6 +419,75 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
     }
   }
 
+  const NEW_FIELDS_PER_MODULE: Record<ImportTargetModule, string[]> = {
+    chapter: ['volumeTitle'],
+    character: ['relationships', 'attributes'],
+    volume: ['targetWordCount', 'targetChapterCount', 'foreshadowingSetup', 'foreshadowingResolve'],
+    setting: ['category'],
+    foreshadowing: ['volumeTitle', 'chapterTitle', 'resolvedChapterTitle'],
+    rule: [],
+    master_outline: ['summary'],
+  }
+
+  const isNewField = (module: ImportTargetModule, fieldName: string): boolean => {
+    return NEW_FIELDS_PER_MODULE[module]?.includes(fieldName) || false
+  }
+
+  const renderFieldTable = (module: ImportTargetModule, data: Record<string, unknown>) => {
+    const entries = Object.entries(data).filter(([key]) => key !== 'raw')
+    if (entries.length === 0) return null
+
+    const newFieldCount = entries.filter(([key]) => isNewField(module, key)).length
+
+    return (
+      <div className="mt-3 border rounded-lg overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b">
+          <span className="text-xs font-medium">📋 字段详情 ({entries.length} 个字段)</span>
+          {newFieldCount > 0 && (
+            <Badge variant="default" className="bg-green-100 text-green-700 hover:bg-green-200 text-xs">
+              {newFieldCount} 个新增✨
+            </Badge>
+          )}
+        </div>
+        <div className="max-h-[150px] overflow-y-auto">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-muted/50">
+              <tr className="border-b">
+                <th className="text-left p-2 font-medium">字段</th>
+                <th className="text-left p-2 font-medium">值</th>
+                <th className="text-center p-2 font-medium w-20">状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map(([key, value]) => (
+                <tr key={key} className="border-b hover:bg-muted/30">
+                  <td className="p-2 font-mono font-medium">{key}</td>
+                  <td className="p-2 max-w-[220px] truncate" title={typeof value === 'object' ? JSON.stringify(value) : String(value)}>
+                    {typeof value === 'object' && value !== null
+                      ? `[${Array.isArray(value) ? '数组' : '对象'}]`
+                      : String(value)
+                    }
+                  </td>
+                  <td className="p-2 text-center">
+                    {isNewField(module, key) ? (
+                      <Badge variant="default" className="bg-green-100 text-green-700 text-xs px-1.5 py-0.5">
+                        新增
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-xs px-1.5 py-0.5">
+                        标准
+                      </Badge>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
@@ -377,7 +562,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
               <Textarea
                 value={pastedContent}
                 onChange={(e) => setPastedContent(e.target.value)}
-                placeholder={`粘贴你的数据内容...\n\n支持的格式：\n- JSON 格式的结构化数据\n- Markdown 格式的文档\n- 纯文本内容\n\n示例（角色JSON）：\n{\n  "name": "张三",\n  "role": "protagonist",\n  "description": "主角..."\n}`}
+                placeholder={`粘贴你的数据内容...\n\n支持的格式：\n- JSON 格式的结构化数据\n- Markdown 格式的文档\n- 纯文本内容\n\n${MODULE_FIELD_HINTS[targetModule]}`}
                 className="h-[180px] font-mono text-sm resize-none"
               />
             </TabsContent>
@@ -500,6 +685,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
                       <pre className="text-xs font-mono whitespace-pre-wrap break-all bg-muted/50 p-2 rounded overflow-x-auto max-h-[160px] overflow-y-auto">
                         {JSON.stringify(preview.data, null, 2)}
                       </pre>
+                      {preview.data && typeof preview.data === 'object' && !Array.isArray(preview.data) && renderFieldTable(preview.module, preview.data as Record<string, unknown>)}
                       {preview.module === 'volume' && preview.data && typeof preview.data === 'object' && 'targetWordCount' in (preview.data as Record<string, unknown>) && (
                         <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded text-xs">
                           <span className="text-blue-700 dark:text-blue-300 font-medium">📊 目标字数：</span>

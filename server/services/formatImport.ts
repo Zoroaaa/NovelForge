@@ -30,18 +30,20 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
 
 你的任务：
 1. 识别输入的格式
-2. 提取关键信息：总纲标题(title)、总纲内容(content)
+2. 提取关键信息：总纲标题(title)、总纲内容(content)、**摘要(summary)**
 3. 返回标准化的 JSON 格式：
 
 \`\`\`json
 {
   "title": "总纲标题",
+  "summary": "总纲的简要摘要（100-200字概括核心内容）",
   "content": "完整的总纲正文内容（Markdown 格式，涵盖世界观、核心设定、主线剧情等）"
 }
 \`\`\`
 
 注意事项：
 - content 应该是完整的总纲内容，支持 Markdown 格式
+- **summary 是新增字段，用于快速了解总纲核心内容**
 - 如果无法提取标题，使用 "总纲" 作为默认值
 - 只返回 JSON，不要有其他解释文字`,
 
@@ -51,7 +53,7 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
 3. JSON 格式的设定对象（可能包含 type, name, content 等字段）
 4. 世界观、境界体系、势力组织、地理环境、宝物功法等各类设定
 
-支持的设定类型：
+支持的设定类型（type）：
 - worldview: 世界观
 - power_system: 境界体系
 - faction: 势力组织
@@ -61,12 +63,13 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
 
 你的任务：
 1. 识别输入的内容属于哪种设定类型
-2. 提取关键信息：类型(type)、名称(name)、详细描述(content)、重要程度(importance)
+2. 提取关键信息：类型(type)、分类(category)、名称(name)、详细描述(content)、重要程度(importance)
 3. 返回标准化的 JSON 格式：
 
 \`\`\`json
 {
   "type": "根据内容推断的设定类型",
+  "category": "与 type 相同或更细的分类",
   "name": "设定项的名称",
   "content": "详细的设定描述内容（Markdown 格式）",
   "importance": "normal"
@@ -76,13 +79,14 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
 如果输入是多个设定项，解析成数组格式：
 \`\`\`json
 [
-  {"type": "faction", "name": "青云宗", "content": "...", "importance": "normal"},
-  {"type": "faction", "name": "魔煞门", "content": "...", "importance": "high"}
+  {"type": "faction", "category": "faction", "name": "青云宗", "content": "...", "importance": "normal"},
+  {"type": "faction", "category": "faction", "name": "魔煞门", "content": "...", "importance": "high"}
 ]
 \`\`\`
 
 注意事项：
 - type 必须是上述六种类型之一
+- category 通常与 type 相同，但可以更细粒度（如 type="faction", category="正道势力"）
 - importance 可以是 high（重要）、normal（普通）、low（次要）
 - 只返回 JSON，不要有其他解释文字`,
 
@@ -94,35 +98,30 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
 
 你的任务：
 1. 识别输入的格式
-2. 提取关键信息：姓名(name)、角色定位(role)、详细描述(description)、别名(aliases)、属性(attributes)、战斗力(powerLevel)
-3. 返回标准化的 JSON 格式：
+2. 提取关键信息并转换为标准 JSON 格式：
 
 \`\`\`json
 {
   "name": "角色姓名",
   "role": "protagonist | supporting | antagonist | minor",
-  "description": "详细的角色描述（外貌、性格、背景等）",
+  "description": "综合描述（简要版，2-3句话概括）",
   "aliases": ["别名1", "别名2"],
+  "powerLevel": "战斗力等级（如果是玄幻/修仙类）",
+  "relationships": ["关联角色A（关系描述）", "关联角色B（关系描述）"],
   "attributes": {
+    "appearance": "外貌描述（身高、体型、容貌特征等）",
+    "personality": "性格特点（行为模式、价值观、优缺点等）",
+    "backgroundStory": "背景故事（出身、经历、动机等）",
     "age": "年龄或外貌年龄",
     "gender": "性别",
-    "personality": "性格特点",
-    "background": "背景故事",
-    "relationships": ["与其他角色的关系描述"]
-  },
-  "powerLevel": "战斗力等级（如果是玄幻/修仙类）"
+    "occupation": "职业"
+  }
 }
 \`\`\`
 
-如果输入是多个角色，解析成数组格式：
-\`\`\`json
-[
-  {"name": "张三", "role": "protagonist", "description": "...", ...},
-  {"name": "李四", "role": "supporting", "description": "...", ...}
-]
-\`\`\`
-
-注意事项：
+重要说明：
+- appearance, personality, backgroundStory 等详细信息应存入 **attributes 对象内部**
+- relationships 存为字符串数组，每个元素描述一个关系
 - role 接受四个值：protagonist（主角）、supporting（配角）、antagonist（反派）、minor（次要角色）
 - 只返回 JSON，不要有其他解释文字`,
 
@@ -176,7 +175,7 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
 
 你的任务：
 1. 识别输入的格式
-2. 提取关键信息：卷标题(title)、卷概要(summary)、详细蓝图(blueprint)、事件线(eventLine)、备注(notes)、预计章节数(chapterCount)、目标字数(targetWordCount)
+2. 提取关键信息：卷标题(title)、卷概要(summary)、详细蓝图(blueprint)、事件线(eventLine)、备注(notes)、预计章节数(chapterCount)、**目标字数(targetWordCount)**
 3. 返回标准化的 JSON 格式：
 
 \`\`\`json
@@ -193,7 +192,7 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
 
 注意事项：
 - chapterCount 为可选参考字段（5-30之间），不强制存储
-- targetWordCount 为可选的目标字数（单位：字），根据章节数和平均每章3000-5000字推算
+- **targetWordCount 为目标字数（单位：字），根据章节数和平均每章3000-5000字推算，这是一个重要字段**
 - 如果是卷列表格式（如 "第一卷... 第二卷..."），请解析成数组
 - 只返回 JSON，不要有其他解释文字`,
 
@@ -206,71 +205,65 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
 你的任务：
 1. 识别输入的格式
 2. 提取关键信息：伏笔标题(title)、伏笔描述(description)、状态(status)、重要程度(importance)
-3. 返回标准化的 JSON 格式：
+3. **尽量提取以下关联信息**（如果内容中提到）：
+   - **volumeTitle**: 所属卷标题（使用卷标题，不是ID）
+   - **chapterTitle**: 埋设此伏笔的章节标题（使用章节标题，不是ID）
+   - **resolvedChapterTitle**: 回收此伏笔的章节标题（使用章节标题，不是ID）
+4. 返回标准化的 JSON 格式：
 
 \`\`\`json
 {
   "title": "伏笔的简短标题",
-  "description": "详细的伏笔描述，说明这是什么伏笔、如何埋下",
+  "description": "详细的伏笔描述，说明这是什么伏笔、如何埋下、暗示什么",
   "status": "open",
-  "importance": "normal"
+  "importance": "normal",
+  "volumeTitle": "所属卷标题（如果知道）",
+  "chapterTitle": "埋设此伏笔的章节标题（如果知道）",
+  "resolvedChapterTitle": "回收此伏笔的章节标题（如果知道）"
 }
 \`\`\`
 
 如果输入是多个伏笔，解析成数组格式：
 \`\`\`json
 [
-  {"title": "神秘玉佩", "description": "主角在童年时期获得的神秘玉佩...", "status": "open", "importance": "high"},
+  {"title": "神秘玉佩", "description": "主角在童年时期获得的神秘玉佩...", "status": "open", "importance": "high", "chapterTitle": "第一章：童年"},
   {"title": "血海深仇", "description": "反派与主角家族的血债...", "status": "open", "importance": "normal"}
 ]
 \`\`\`
 
 注意事项：
-- status 只能是 open（开放）、resolved（已回收）、abandoned（已放弃）三者之一
+- **volumeTitle, chapterTitle, resolvedChapterTitle 使用标题**（系统会自动匹配为ID），不要使用 ID 或编号
+- status 只能是 open（开放）、resolved（已回收）、abandoned（已放弃）、resolve_planned（计划回收）四者之一
 - importance 可以是 high（重要）、normal（普通）、low（次要）
+- 如果无法确定关联信息，可以省略这些字段
 - 只返回 JSON，不要有其他解释文字`,
 
   chapter: `你是一个小说章节格式化专家。用户的输入可能是：
 1. 纯文本章节内容
-2. Markdown 格式的章节
+2. Markdown 格式的章节文档
 3. JSON 格式的章节对象（可能包含 title, content, summary 等字段）
-4. 其他变体
+4. 包含章节内容的各类数据
 
 你的任务：
 1. 识别输入的格式
-2. 提取关键信息：标题(title)、内容(content)、章节摘要(summary，如果用户明确提供)
-3. 返回标准化的 JSON 格式：
+2. 提取关键信息：标题(title)、内容(content)、章节摘要(summary)
+3. **尽量提取以下关联信息**（如果内容中提到）：
+   - **volumeTitle**: 所属卷的标题（如果知道）
+4. 返回标准化的 JSON 格式：
 
-如果输入是章节内容：
-\`\`\`json
-{
-  "title": "从内容中提取的章节标题",
-  "content": "完整的章节正文内容",
-  "summary": null
-}
-\`\`\`
-
-如果输入已经包含结构化数据且用户提供了summary：
 \`\`\`json
 {
   "title": "章节标题",
   "content": "完整的章节正文内容",
-  "summary": "用户提供的章节摘要（如果有）"
-}
-\`\`\`
-
-如果输入已经包含结构化数据但未提供summary：
-\`\`\`json
-{
-  "title": "章节标题",
-  "content": "完整的章节正文内容"
+  "summary": "用户提供的章节摘要（如果有）",
+  "volumeTitle": "所属卷的标题（如果知道的话）"
 }
 \`\`\`
 
 注意事项：
 - content 应该是完整的正文，不包含元数据标记
 - summary 仅在用户明确提供时填写，不要自动生成或截取
-- 如果无法提取标题，使用 "未命名章节" 作为默认值
+- volumeTitle 如果无法确定，可以省略该字段
 - 只返回 JSON，不要有其他解释文字`,
 }
 
