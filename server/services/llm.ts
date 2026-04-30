@@ -448,6 +448,41 @@ export async function streamGenerate(
   }
 }
 
+export interface UsageStats {
+  prompt_tokens: number
+  completion_tokens: number
+}
+
+export interface LLMCallResult {
+  text: string
+  usage: UsageStats
+  modelId: string
+  durationMs: number
+}
+
+/**
+ * 增强版非流式生成 - 自动记录 usage + 耗时 + modelId
+ * @description 所有需要日志记录的 LLM 调用应使用此函数替代 generate()
+ */
+export async function generateWithMetrics(
+  config: LLMConfig,
+  messages: Message[],
+  options?: {
+    onToken?: (token: string) => void
+  }
+): Promise<LLMCallResult> {
+  const startTime = Date.now()
+  const result = await generate(config, messages, options)
+  const durationMs = Date.now() - startTime
+
+  return {
+    text: result.text,
+    usage: result.usage,
+    modelId: config.modelId,
+    durationMs,
+  }
+}
+
 /**
  * 非流式生成（用于摘要等场景）
  * @param {LLMConfig} config - LLM配置对象
@@ -462,7 +497,7 @@ export async function generate(
   options?: {
     onToken?: (token: string) => void
   }
-): Promise<{ text: string; usage: { prompt_tokens: number; completion_tokens: number } }> {
+): Promise<{ text: string; usage: UsageStats }> {
   const base = config.apiBase || getDefaultBase(config.provider)
   const mergedParams = { ...DEFAULT_PARAMS, ...config.params }
 

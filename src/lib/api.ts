@@ -653,6 +653,29 @@ export const api = {
       req<QualityScore>(`/api/quality/chapter/${chapterId}`),
     getNovelTrend: (novelId: string) =>
       req<QualityScore[]>(`/api/quality/novel/${novelId}`),
+    getSummary: (novelId: string, limit = 10) =>
+      req<{
+        chapters: Array<{
+          id: string
+          chapterNumber: number
+          title: string
+          lastCheckedAt: number | null
+          coherenceScore: number | null
+          characterScore: number | null
+          progressScore: number | null
+          overallScore: number | null
+          issueCount: number
+          issues: Array<{ severity: 'error' | 'warning'; category: string; message: string }>
+        }>
+        averages: {
+          coherence: number
+          character: number
+          progress: number
+          overall: number
+        }
+      }>(`/api/quality/summary?novelId=${novelId}&limit=${limit}`),
+    batchCheck: (body: { novelId: string; chapterIds: string[] }) =>
+      req<{ ok: boolean; checked: number; total: number; message: string }>('/api/quality/batch-check', { method: 'POST', body: j(body), timeout: 300000 }),
   },
 
   cover: {
@@ -679,6 +702,35 @@ export const api = {
       req<{ ok: boolean; message: string }>(`/api/graph/extract/${chapterId}`, { method: 'POST' }),
     extractNovel: (novelId: string) =>
       req<{ ok: boolean; message: string }>(`/api/graph/extract-novel/${novelId}`, { method: 'POST' }),
+  },
+
+  // AI 监控中心：成本分析
+  costAnalysis: {
+    getSummary: (novelId: string, period: 'day' | 'week' | 'month' = 'week') =>
+      req<{
+        totalTokens: number
+        totalCost: number
+        avgCostPerChapter: number
+        modelBreakdown: Array<{ modelId: string; tokens: number; cost: number; percentage: number }>
+        dailyTrend: Array<{ date: string; inputTokens: number; outputTokens: number; cost: number }>
+        stageBreakdown: Array<{ stage: string; tokens: number; count: number }>
+      }>(`/api/cost-analysis/summary?novelId=${novelId}&period=${period}`),
+    getDetails: (novelId: string, page = 1, limit = 20) =>
+      req<{
+        records: Array<{
+          id: string
+          chapterId: string
+          chapterNumber: number
+          stage: string
+          modelId: string
+          promptTokens: number
+          completionTokens: number
+          cost: number
+          createdAt: number
+        }>
+        total: number
+        page: number
+      }>(`/api/cost-analysis/details?novelId=${novelId}&page=${page}&limit=${limit}`),
   },
 }
 

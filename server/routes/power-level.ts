@@ -36,15 +36,17 @@ router.post('/detect', zValidator('json', DetectSchema), async (c) => {
   try {
     const result = await detectPowerLevelBreakthrough(c.env, chapterId, novelId)
 
+    const metrics = result.metrics
     await db.insert(generationLogs).values({
       novelId,
       chapterId,
       stage: 'power_level_detect',
-      modelId: 'analysis',
-      status: result.hasBreakthrough ? 'success' : 'success',
+      modelId: metrics?.modelId || 'analysis',
+      promptTokens: metrics?.usage.prompt_tokens,
+      completionTokens: metrics?.usage.completion_tokens,
+      durationMs: metrics?.durationMs || 0,
+      status: 'success',
       contextSnapshot: JSON.stringify(result),
-      durationMs: 0,
-      createdAt: Math.floor(Date.now() / 1000),
     })
 
     return c.json({
@@ -126,18 +128,20 @@ router.post('/batch-detect', zValidator('json', BatchDetectSchema), async (c) =>
         updatesCount: result.updates.length,
       })
 
+      const metrics = result.metrics
       await db.insert(generationLogs).values({
         novelId,
         chapterId: chapter.id,
         stage: 'power_level_detect',
-        modelId: 'analysis',
+        modelId: metrics?.modelId || 'analysis',
+        promptTokens: metrics?.usage.prompt_tokens,
+        completionTokens: metrics?.usage.completion_tokens,
+        durationMs: metrics?.durationMs || 0,
         status: 'success',
         contextSnapshot: JSON.stringify({
           hasBreakthrough: result.hasBreakthrough,
           updatesCount: result.updates.length,
         }),
-        durationMs: 0,
-        createdAt: Math.floor(Date.now() / 1000),
       }).catch(() => {})
     } catch (error) {
       results.push({
@@ -418,39 +422,34 @@ ${chapterTexts}
 - 如果数据库记录与你的判断一致，isConsistent 为 true
 - confidence 表示判断置信度：高（多次明确提及）/ 中（有暗示但不够明确）/ 低（信息不足）`
 
-  const base = detectionConfig.apiBase || (() => {
-    switch (detectionConfig.provider) {
-      case 'volcengine': return 'https://ark.cn-beijing.volces.com/api/v3'
-      case 'anthropic': return 'https://api.anthropic.com/v1'
-      case 'openai': return 'https://api.openai.com/v1'
-      default: return 'https://ark.cn-beijing.volces.com/api/v3'
-    }
-  })()
+  const { generateWithMetrics: genWithMetrics } = await import('../services/llm')
 
-  const resp = await fetch(`${base}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${detectionConfig.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: detectionConfig.modelId,
-      messages: [
-        { role: 'system', content: '你是一个JSON生成助手，只输出JSON，不要其他内容。' },
-        { role: 'user', content: validatePrompt },
-      ],
-      stream: false,
-      temperature: 0.2,
-      max_tokens: 1000,
-    }),
-  })
-
-  if (!resp.ok) {
-    throw new Error(`Validation API error: ${resp.status}`)
+  const validateConfig = {
+    ...detectionConfig,
+    params: { ...(detectionConfig.params || {}), temperature: 0.2, max_tokens: 1000 },
   }
 
-  const result = await resp.json() as any
-  const content = result.choices?.[0]?.message?.content || '{}'
+  let validateMetrics
+  let content: string
+
+  try {
+    validateMetrics = await genWithMetrics(validateConfig, [
+      { role: 'system', content: '你是一个JSON生成助手，只输出JSON，不要其他内容。' },
+      { role: 'user', content: validatePrompt },
+    ])
+    content = validateMetrics.text || '{}'
+  } catch (fetchError) {
+    await db.insert(generationLogs).values({
+      novelId,
+      chapterId: null,
+      stage: 'power_level_validate',
+      modelId: detectionConfig.modelId,
+      status: 'error',
+      errorMsg: (fetchError as Error).message,
+      createdAt: Math.floor(Date.now() / 1000),
+    }).catch(() => {})
+    throw fetchError
+  }
 
   let validated: Record<string, unknown> = {}
   try {
@@ -466,6 +465,25 @@ ${chapterTexts}
 
   const isConsistent = validated.isConsistent === true ||
     (!!dbPowerLevel && dbPowerLevel.current === assessedLevel.current && dbPowerLevel.system === assessedLevel.system)
+
+  if (validateMetrics) {
+    await db.insert(generationLogs).values({
+      novelId,
+      chapterId: null,
+      stage: 'power_level_validate',
+      modelId: validateMetrics.modelId,
+      promptTokens: validateMetrics.usage.prompt_tokens,
+      completionTokens: validateMetrics.usage.completion_tokens,
+      durationMs: validateMetrics.durationMs,
+      status: 'success',
+      contextSnapshot: JSON.stringify({
+        characterId,
+        characterName: charRow.name,
+        isConsistent,
+        analyzedChapters: recentChapters.length,
+      }),
+    }).catch(() => {})
+  }
 
   return c.json({
     ok: true,

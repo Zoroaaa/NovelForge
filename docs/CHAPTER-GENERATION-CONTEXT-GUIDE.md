@@ -1,8 +1,8 @@
 # NovelForge 章节生成上下文构建 — 完整执行指南
 
-> 版本: v4.3.2 | 模块: `server/services/contextBuilder.ts` + `server/routes/generate.ts`
-> 前端页面: [NovelWorkspacePage.tsx](file:///d:/开发项目/NovelForge/src/pages/NovelWorkspacePage.tsx)（小说工作台）
-> 创建日期: 2026-04-25 | 最后更新: 2026-04-29
+> 版本: v4.5.0 | 模块: `server/services/contextBuilder.ts` + `server/routes/generate.ts` + `server/services/agent/generation.ts`
+> 前端页面: [NovelWorkspacePage.tsx](file:///d:/user/NovelForge/src/pages/NovelWorkspacePage.tsx)（小说工作台）
+> 创建日期: 2026-04-25 | 最后更新: 2026-04-30
 
 ---
 
@@ -23,7 +23,15 @@
 | **动态适配** | 根据章节类型（战斗/修炼/情感）动态匹配世界设定 |
 | **高优兜底** | 高重要性伏笔 DB 直查，不依赖 RAG score |
 | **节奏把控** | v4.1 新增创作进度统计，帮助 AI 均衡节奏 |
+| **VECTORIZE 兜底** | ⭐v4.4 新增：Vectorize 不可用时 DB 直查角色/伏笔/设定/规则 |
+| **伏笔时序窗口** | ⭐v4.4 新增：回收计划伏笔按 ±10 章窗口感知注入 |
+| **eventLine JSON** | ⭐v4.4 新增：支持 JSON 数组格式，O(1) 索引访问零歧义 |
 | **上下文预览** | 支持调试诊断，查看任意章节的完整上下文 |
+| **自动修复写库** | ⭐v4.5 新增：连贯性/角色/卷进度修复结果自动写入数据库，不再丢失 |
+| **持久弹窗提示** | ⭐v4.5 新增：修复过程显示持久弹窗（不自动关闭），用户可清晰感知修复状态 |
+| **草稿预览模式** | ⭐v4.5 新增：支持跳过后处理（摘要/伏笔/评分），快速迭代多版本对比 |
+| **SSE 时序优化** | ⭐v4.5 新增：`[DONE]` 事件移至连贯性检查完成后发送，避免前端状态混乱 |
+| **超时统一配置** | ⭐v4.5 新增：全局统一 300 秒超时（路由层 + ReAct 循环），消除竞态窗口 |
 
 ### 1.3 上下文构建十槽体系
 
@@ -93,19 +101,31 @@ buildChapterContext(env, novelId, chapterId)
 │   ├── [DB] 最近 20 章 summaries（摘要链）
 │   └── [DB] 创作节奏把控（novels.wordCount + volumes.wordCount）⭐v4.1新增
 │
-├── Step 2: 组装查询向量（聚焦当前章节语义，≤800字）
+├── Step 2: 组装查询向量（聚焦当前章节语义，≤800字）⭐v4.4 增强
 │   └─ embedText(AI, queryText) → queryVector
 │      queryText 由以下部分组成：
 │      1. currentChapter.title（章节标题）
 │      2. extractCurrentChapterEvent() 提取的上章/本章/下章事件
 │      3. prevContent?.slice(0, 300)（上一章正文前300字）
-│      4. lastSummary?.slice(-300)（备用：最近摘要末300字）
+│      4. prevContent?.slice(-400)（⭐v4.4 新增：上章末尾400字，最强语义锚）
+│      5. lastSummary?.slice(-300)（备用：最近摘要末300字）
 │
-│      extractCurrentChapterEvent() 支持两种 eventLine 格式：
+│      extractCurrentChapterEvent() 支持三种 eventLine 格式 ⭐v4.4 增强：
+│      - JSON 数组格式（⭐首选路径）：`["第1章：...","第2章：..."]`，按索引 O(1) 访问
 │      - 换行分隔：每行以"第X章"开头（逐行匹配）
 │      - 连续文本：以"第N章："开头的段落（整段截取，以下一章开头为终止边界）
 │
-├── Step 3: Dynamic 层（3 次 RAG 并发 + 多次 DB 补查）
+├── Step 3: Dynamic 层（3 次 RAG 并发 + 多次 DB 补查）⭐v4.4 增强
+│   │
+│   ├── [VECTORIZE 可用时] 3 次 RAG 并发（原有逻辑不变）
+│   │
+│   └── [VECTORIZE 不可用时] ⭐v4.4 新增 DB 兜底分支
+│       ├── 角色：DB 直查 role IN ('supporting','antagonist') 按 updatedAt 取 8 条
+│       ├── 伏笔：buildForeshadowingHybrid(db, [], openIds, ..., sortOrder)
+│       │   └─ 走路径A（高优 open 伏笔 DB 直查）+ 路径C（回收计划窗口注入）
+│       ├── 设定：buildSettingsSlotV2(db, [], typeHint, budget)
+│       │   └─ 走 high importance DB 补充路径
+│       └── 类型规则：fetchAllActiveRuleIds + fetchChapterTypeRules（纯 DB 过滤）
 │   │
 │   ├── RAG #1: searchSimilar(sourceType='character', topK=15)
 │   │   └─→ 取 sourceId 列表 → DB IN 查完整卡片 → 组装 name+role+desc+attr+powerLevel
@@ -159,6 +179,11 @@ buildChapterContext(env, novelId, chapterId)
 | `POST` | `/api/generate/next-chapter` | 生成下一章标题和摘要 |
 | `POST` | `/api/generate/coherence-check` | 章节连贯性检查 |
 | `POST` | `/api/generate/consistency-check` | 角色一致性检查 |
+| `POST` | `/api/generate/volume-progress-check` | 卷进度检查 |
+| `POST` | `/api/generate/repair-chapter` | 手动触发章节修复（连贯性/角色/卷进度） |
+| `POST` | `/api/batch/novels/:id/start` | 启动批量生成任务 |
+| `GET` | `/api/batch/novels/:id/active` | 获取活跃的批量任务 |
+| `GET` | `/api/batch/novels/:id/history` | ⭐v4.5 新增：查询批量任务历史记录 |
 
 ### 3.2 生成章节
 
@@ -172,12 +197,20 @@ POST /api/generate/chapter
   "targetWords": 3000,
   "options": {
     "enableRAG": true,
-    "enableAutoSummary": true
+    "enableAutoSummary": true,
+    "draftMode": false
   }
 }
 ```
 
-**响应**：SSE 流式响应
+**options 参数说明**：
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `enableRAG` | boolean | true | 是否启用 RAG 检索增强（上下文构建） |
+| `enableAutoSummary` | boolean | true | 是否自动生成章节摘要 |
+| **`draftMode`** | **boolean** | **false** | **⭐v4.5 新增：草稿模式，true 时跳过后处理（摘要/伏笔提取/质量评分），章节状态标记为 draft** |
+
+**响应**：SSE 流式响应 ⭐v4.5 更新时序
 
 ```
 data: {"content": "AI 生成的第一段文字"}
@@ -186,7 +219,11 @@ data: {"content": "AI 生成的第二段文字"}
 
 data: {"type": "tool_call", "name": "tool_name", "args": {...}, "result": "..."}
 
-data: {"type": "done", "wordCount": 3200, "summary": "章节摘要..."}
+data: {"type": "coherence_check", "score": 65, "issues": [...]}  ← 连贯性检查结果
+
+data: {"type": "coherence_fix", "repairedContent": "..."}  ← 自动修复内容（score < 70 时）
+
+data: {"type": "done", "wordCount": 3200, "summary": "章节摘要..."}  ← ⭐v4.5: 现在在修复完成后发送
 
 data: [DONE]
 ```
@@ -362,46 +399,76 @@ export interface BudgetTier {
 
 ---
 
-## 三、queryText 构建详解 ⭐ v4.3 新增
+## 三、queryText 构建详解 ⭐ v4.3 新增 / v4.4 增强
 
-**文件位置**: [contextBuilder.ts:209-218](file:///d:/开发项目/NovelForge/server/services/contextBuilder.ts#L209-L218)
+**文件位置**: [contextBuilder.ts:209-228](file:///d:/user/NovelForge/server/services/contextBuilder.ts#L209-L228)
 
 ### 3.1 什么是 queryText
 
 `queryText` 是用于生成 RAG 查询向量的文本，聚焦当前章节的语义信息，提升检索精度。
 
-### 3.2 构建流程
+### 3.2 构建流程 ⭐v4.4 变更
 
 ```typescript
-const currentChapterEvent = extractCurrentChapterEvent(volumeInfo.eventLine, chapterIndexInVolume)
-const queryTextParts = [currentChapter.title, currentChapterEvent, prevContent?.slice(0, 300)]
+// v4.4: 先提取本章事件（用于类型推断和向量构建）
+const { prevEvent, currentEvent, nextThreeChapters } = extractCurrentChapterEvent(volumeInfo.eventLine, chapterIndexInVolume)
 
-if (!currentChapterEvent && recentSummaries.length > 0) {
+// v4.4: 类型推断使用精确的本章事件（而非整卷 eventLine）
+const chapterTypeHint = inferChapterType(currentEvent || volumeInfo.eventLine, currentChapter.title)
+
+const queryTextParts = [currentChapter.title, prevEvent, currentEvent, nextThreeChapters]
+
+if (!currentEvent && recentSummaries.length > 0) {
   const lastSummary = recentSummaries[recentSummaries.length - 1]
   queryTextParts.push(lastSummary.slice(-300))
+}
+
+// ⭐v4.4 新增：无条件追加上章末尾400字（最强语义锚）
+if (prevContent) {
+  queryTextParts.push(prevContent.slice(-400))
 }
 
 const queryText = queryTextParts.filter(Boolean).join('\n').slice(0, 800)
 ```
 
-### 3.3 组成结构
+### 3.3 组成结构 ⭐v4.4 增强
 
 | 组成部分 | 来源 | 作用 | 字数限制 |
 |---------|------|------|---------|
 | `currentChapter.title` | 章节标题 | 明确当前章节主题 | - |
-| `currentChapterEvent` | 从 eventLine 提取的三段结构 | 明确本章/上章/下章事件 | - |
+| `prevEvent` / `currentEvent` / `nextThreeChapters` | 从 eventLine 提取的三段结构 | 明确本章/上章/下章事件 | - |
 | `prevContent.slice(0, 300)` | 上一章正文前300字 | 衔接上文风格和情节 | ≤300字 |
+| **`prevContent.slice(-400)`** | **⭐v4.4 新增：上章末尾正文400字** | **最强语义锚——场景/角色/法器** | **≤400字** |
 | `lastSummary.slice(-300)` | 备用：最近摘要末300字 | 如果 eventLine 为空则用摘要补充 | ≤300字 |
 
 最终 `queryText` 上限 **800 字**（`slice(0, 800)`）。
 
-### 3.4 extractCurrentChapterEvent 提取逻辑
+### 3.4 extractCurrentChapterEvent 提取逻辑 ⭐v4.4 重写
 
-**文件位置**: [contextBuilder.ts:972-1030](file:///d:/开发项目/NovelForge/server/services/contextBuilder.ts#L972-L1030)
+**文件位置**: [contextBuilder.ts:1121-1160](file:///d:/user/NovelForge/server/services/contextBuilder.ts#L1121-L1160)
 
-该函数支持两种 eventLine 格式：
+该函数支持三种 eventLine 格式：
 
-#### 格式一：换行分隔（每行以"第X章"开头）
+#### 格式一（⭐首选）：JSON 数组格式
+
+```typescript
+// 示例 eventLine：
+// ["第42章：林岩离山\n林岩告别师门...", "第43章：血煞谷探秘\n主角前往血煞谷...", "第44章：斩杀血魔\n主角与血煞老魔激战"]
+
+// 处理逻辑：
+const parsed = JSON.parse(eventLine.trim())
+const arr = Array.isArray(parsed) ? parsed.map(item => typeof item === 'string' ? item : String(item)) : []
+const idx = chapterIndexInVolume - 1  // 转为 0-based
+
+// 输出（O(1) 索引访问，零歧义）：
+// 【上章事件】arr[idx-1] 的内容
+// 【本章任务】arr[idx] + "← 核心，必须完成"
+// 【下章预告】arr[idx+1..idx+3] + "← 仅供结尾钩子参考，本章不得提前完成"
+```
+
+**优势**：无正则匹配风险，索引精确定位，数组长度即章节数。
+
+#### 格式二：换行分隔（每行以"第X章"开头）
 
 ```typescript
 // 示例 eventLine：
@@ -409,8 +476,6 @@ const queryText = queryTextParts.filter(Boolean).join('\n').slice(0, 800)
 // 林岩告别师门...
 // 第43章：血煞谷探秘
 // 主角前往血煞谷...
-// 第44章：斩杀血魔
-// 主角与血煞老魔激战
 
 // 处理逻辑：
 const lines = eventLine.split('\n').filter(l => l.trim())
@@ -422,39 +487,27 @@ const findChapterLine = (chapterNum) => lines.find(l => l.match(new RegExp(`第$
 // 【下章预告】第44章：斩杀血魔  ← 仅供结尾钩子参考，本章不得提前完成
 ```
 
-#### 格式二：连续文本（以"第N章："开头的段落）
+#### 格式三：连续文本（以"第N章："开头的段落）
 
 ```typescript
 // 示例 eventLine（无换行）：
 // 第42章：[后山] 苏玄早有准备...第43章：[血煞谷] 王虎仗着筑基期修为...第44章：[血煞谷] 苏玄斩杀王虎...
 
-// 处理逻辑：
+// 处理逻辑（与 v4.3 相同）
 // 1. 以"第43章："开头确定本章起点
 // 2. 以"第44章："开头确定本章终点
 // 3. 上章内容 = 上章开头到本章开头之间的文本
-
-// 输出：
-// 【上章事件】第42章：[后山] 苏玄早有准备...  ← 上章到本章之间的全部内容
-// 【本章任务】第43章：[血煞谷] 王虎仗着筑基期修为...  ← 核心，必须完成
-// 【下章预告】第44章：[血煞谷] 苏玄斩杀王虎...  ← 仅供结尾钩子参考，本章不得提前完成
 ```
 
-### 3.5 queryText 用途
+### 3.5 inferChapterType 精准化 ⭐v4.4 变更
 
-`queryText` 用于生成**向量查询**：
+**文件位置**: [contextBuilder.ts:215](file:///d:/user/NovelForge/server/services/contextBuilder.ts#L215)
 
-```typescript
-if (queryText && env.VECTORIZE) {
-  const queryVector = await embedText(env.AI, queryText)  // 转成向量
-  // 用这个向量去检索相关的 character、foreshadowing、setting
-}
-```
+**改前**：传入整卷 `eventLine`（可能包含几十章的战斗/修炼/情感标签），几乎每章都命中多个类型。
 
-### 3.6 设计理由
+**改后**：优先使用 `currentEvent`（精确的本章事件单条），fallback 到整卷 `eventLine`。
 
-- **聚焦检索**：用整卷 eventLine + 整章正文检索会导致噪声太大，聚焦当前章节语义能提升召回质量
-- **800字上限**：确保向量检索的语义足够集中
-- **上章/下章参考**：让 AI 知道情节连贯性，上章发生了什么、下章要做什么
+效果：战斗章节不再命中"修炼""情感"等无关类型，`fetchChapterTypeRules` 返回规则数量大幅收敛。
 
 ---
 
@@ -577,34 +630,43 @@ if (queryText && env.VECTORIZE) {
 
 ---
 
-### 4.7 Slot-9: 近期剧情摘要链 (`fetchRecentSummaries`)
+### 4.7 Slot-9: 近期剧情摘要链 (`fetchRecentSummaries`) ⭐ v4.3 重构 / v4.4 增强
 
-**文件位置**: [contextBuilder.ts:666-687](file:///d:/开发项目/NovelForge/server/services/contextBuilder.ts#L666-L687)
+**文件位置**: [contextBuilder.ts:859-909](file:///d:/user/NovelForge/server/services/contextBuilder.ts#L859-L909)
 
 **v4 变更**: 默认从 5 章扩展到 **20 章**，上限 30 章。
+**v4.4 增强**: 新增 `volumeId` 约束，优先同卷摘要，不足时从前卷尾部补齐。
 
 **执行步骤**:
-1. DB 查询: `chapters WHERE sortOrder < currentSortOrder AND summary IS NOT NULL AND summary != ''`
-2. 按 sortOrder DESC 取 N 条
-3. 反转（时间正序）→ `[第N章 {title}] {summary}`
+1. **有 volumeId 时（⭐v4.4 新增）**：
+   - 先查同卷摘要：`WHERE novelId=? AND volumeId=? AND sortOrder < currentSortOrder`
+   - 同卷不足 `chainLength` 条时，从前卷尾部补齐
+   - 所有结果保持时间正序（旧→新）
+2. **无 volumeId 时**：走原有逻辑（向后兼容）
+3. 按 sortOrder DESC 取 N 条，反转后输出 → `[第N章 {title}] {summary}`
 
 **无向量** — 摘要链需要严格的时间顺序和完整性，DB ORDER BY 即可。
 
 ---
 
-### 4.8 Slot-5: 出场角色卡 (`buildCharacterSlotFromDB`) ⭐ 核心改动
+### 4.8 Slot-5: 出场角色卡 (`buildCharacterSlotFromDB`) ⭐ 核心改动 / v4.4 动态阈值
 
-**文件位置**: [contextBuilder.ts:314-376](file:///d:/开发项目/NovelForge/server/services/contextBuilder.ts#L314-L376)
+**文件位置**: [contextBuilder.ts:432-456](file:///d:/user/NovelForge/server/services/contextBuilder.ts#L432-L456)
 
 **这是 v4 最大架构变化** — 从"RAG 返回 chunk 碎片"改为"RAG 找 ID → DB 查完整卡片"。
+**v4.4 增强**: 固定阈值 0.45 改为动态阈值（0.45 → 0.35），解决小规模角色集零结果问题。
 
 **执行流程**:
 ```
 输入: ragResults (来自 searchSimilar(sourceType='character', topK=15))
   │
-  ├─ 1. 过滤: score >= 0.38（阈值较低，因为后续要取完整数据）
+  ├─ 1. 首次过滤: score >= 0.45（⭐v4.4: SCORE_THRESHOLD_PRIMARY）
   ├─ 2. 排序: 按 score 降序
   ├─ 3. 截断: 取前 6 个 sourceId
+  │
+  ├─ ⭐v4.4 动态降阈值:
+  │   └─ 若首次过滤结果 < 2 条且原始候选 ≥ 2 条
+  │       → 降低到 score >= 0.35（SCORE_THRESHOLD_FALLBACK）重试
   │
   ├─ 4. DB 批量查询（一次 IN 查询）:
   │     SELECT id, name, role, description, attributes, powerLevel, aliases
@@ -687,21 +749,22 @@ if (queryText && env.VECTORIZE) {
 
 ---
 
-### 4.10 Slot-7: 待回收伏笔 (`buildForeshadowingHybrid`) ⭐ 双路合并
+### 4.10 Slot-7: 待回收伏笔 (`buildForeshadowingHybrid`) ⭐ 双路合并 + v4.4 路径C
 
-**文件位置**: [contextBuilder.ts:383-435](file:///d:/开发项目/NovelForge/server/services/contextBuilder.ts#L383-L435)
+**文件位置**: [contextBuilder.ts:514-601](file:///d:/user/NovelForge/server/services/contextBuilder.ts#L514-L601)
 
 **v4 变更**: 增加 DB 兜底路径，防止高重要性伏笔被 RAG score 漏掉。
+**v4.4 变更**: 新增路径C — 回收计划伏笔按 ±10 章时序窗口感知注入。
 
 **执行流程**:
 ```
-输入: ragResults + openIds(Set) + novelId
+输入: ragResults + openIds(Set) + novelId + budgetTokens + currentSortOrder?(⭐v4.4新增)
   │
   ├─ 路径A: DB 直查高重要性伏笔（无条件注入）
   │   └─ SELECT * FROM foreshadowing
   │       WHERE novelId=? AND status='open' AND importance='high'
-  │       LIMIT 10
-  │   → 输出格式: 【title】(高重要性)\n{description}
+  │       LIMIT 15
+  │   → 输出格式: 【title】(高重要性·待回收)\n{description}
   │
   ├─ 路径B: RAG 过滤普通伏笔
   │   └─ ragResults 中过滤:
@@ -710,13 +773,28 @@ if (queryText && env.VECTORIZE) {
   │       └─ score > 0.42
   │   → 输出格式: metadata.content（原始描述文本）
   │
-  └─ 合并排序: 路径A 优先（priority=0），路径B 按 score 排（priority=1）
+  ├─ 路径C: ⭐v4.4 新增 — 回收计划时序窗口感知注入
+  │   └─ 条件: currentSortOrder 已传入
+  │   ├─ 查询 status='resolve_planned' 的伏笔记录
+  │   ├─ 将 chapterId 解析为 sortOrder（查 chapters 表）
+  │   └─ 窗口过滤: targetSort ∈ [currentSortOrder - 1, currentSortOrder + 10]
+  │       → 仅当目标回收章节在 ±10 章范围内才注入
+  │   → 输出格式: 【title】(回收计划·第N章)\n{description}\n⚠️ 此伏笔计划在第 N 章回收，本章可提前铺垫但不得终结
+  │   → 按 targetChapter 升序排列（最近的排前面）
+  │
+  └─ 合并排序: 路径A 优先（priority=0），路径C 其次（priority=1.5），路径B 最后（priority=1）
       → 整体受 budgetTokens 截断
 ```
 
-**设计理由**: 高重要性伏笔对剧情连贯性至关重要，不能因为 AI embed 的 score 波动而漏掉。DB 兜底确保零遗漏。
+**伏笔三态生命周期** ⭐v4.4 新增：
 
-**v4.1 变更**: 普通伏笔阈值从 0.55 调整为 0.42。
+| status | 含义 | 注入时机 | 注入条件 |
+|--------|------|---------|---------|
+| `open` | 已埋入/待回收 | 路径A/B | 始终注入 |
+| `resolve_planned` | 回收计划（工坊规划） | **路径C** | 目标章节在 ±10 章窗口内 |
+| `resolved` | 已回收 | 未来扩展 | - |
+
+**设计理由**: 高重要性伏笔对剧情连贯性至关重要（路径A）；回收计划伏笔需要提前让 AI 知道即将要回收什么（路径C），但太早注入会剧透（窗口控制）。
 
 ---
 
@@ -748,7 +826,7 @@ if (queryText && env.VECTORIZE) {
 
 ## 五、assemblePromptContext 输出格式
 
-**文件位置**: [contextBuilder.ts:871-933](file:///d:/开发项目/NovelForge/server/services/contextBuilder.ts#L871-L933)
+**文件位置**: [contextBuilder.ts:1210-1265](file:///d:/user/NovelForge/server/services/contextBuilder.ts#L1210-L1265)
 
 最终输出结构:
 
@@ -762,7 +840,7 @@ if (queryText && env.VECTORIZE) {
 {blueprint}
 
 【事件线】
-{eventLine}
+{eventLine}  ⭐v4.4: 若原始值为 JSON 数组格式，自动 join('\n') 展示为换行文本
 
 ## 创作节奏把控 ⭐ v4.1 新增
 - 小说进度：已写 {novelWordCount} / {novelTargetWordCount} 字
@@ -952,18 +1030,23 @@ L2 硬顶兜底（embedding.ts 内部）:
 
 ## 九、工作流程示例
 
-### 9.1 标准章节生成流程
+### 9.1 标准章节生成流程（含自动修复）⭐v4.5 更新
 
 ```
 步骤 1：打开小说工作台
    └─ 进入 NovelWorkspacePage
    └─ 选择目标小说和章节
 
-步骤 2：点击生成按钮
+步骤 2：配置生成选项（可选）
+   ├─ 选择生成模式：generate / continue / rewrite
+   ├─ 设置目标字数（默认 3000 字）
+   └─ ⭐v4.5 新增：勾选"草稿模式"（跳过后处理）
+
+步骤 3：点击生成按钮
    └─ 前端调用 api.streamGenerate(chapterId, novelId, options)
    └─ POST /api/generate/chapter (SSE 流式)
 
-步骤 3：后端构建上下文
+步骤 4：后端构建上下文
    └─ buildChapterContext(env, novelId, chapterId)
    └─ Step 1: 8 个 Core 层 DB 查询（Promise.all 并发）
    └─ Step 2: 生成查询向量 embedText()
@@ -971,15 +1054,106 @@ L2 硬顶兜底（embedding.ts 内部）:
    └─ Step 4: 预算检查与调整
    └─ Step 5: 返回 ContextBundle
 
-步骤 4：AI 流式生成
+步骤 5：AI 流式生成
    └─ assemblePromptContext(bundle) 组装完整 prompt
    └─ AI 模型流式输出章节内容
    └─ 前端实时渲染 SSE 数据
 
-步骤 5：生成完成
-   └─ 自动保存章节内容到数据库
-   └─ 自动生成章节摘要（enableAutoSummary=true）
-   └─ 更新小说/卷字数统计
+步骤 6：生成完成 + 自动检查与修复 ⭐v4.5 核心
+   ├─ 自动保存章节内容到数据库
+   ├─ 自动触发连贯性检查（checkChapterCoherence）
+   │   ├─ score ≥ 70 → 无问题，直接完成
+   │   └─ score < 70 → ⚠️ 自动修复流程启动
+   │       ├─ 调用 repairChapterByIssues() 生成修复版本
+   │       ├─ ✅ 修复结果自动写入数据库（不再丢失）
+   │       ├─ 推送 coherence_fix 事件给前端
+   │       └─ 前端显示持久弹窗："正在自动修复..."
+   ├─ [DONE] 事件在修复完成后发送（⭐v4.5 时序优化）
+   └─ 非草稿模式时：
+       ├─ 入队后处理任务（post_process_chapter）
+       ├─ 自动生成章节摘要
+       ├─ 提取伏笔、质量评分等
+       └─ 更新小说/卷字数统计
+```
+
+**⭐v4.5 自动修复机制详解**：
+
+| 触发条件 | 修复类型 | 写库行为 | 用户提示 |
+|---------|---------|---------|---------|
+| 连贯性评分 < 70 | `repairChapterByIssues()` | ✅ 自动写入 `chapters.content` | 持久弹窗："⚠️ 正在自动修复..." |
+| 角色一致性失败 | `repairChapterByCharacterIssues()` | ✅ 自动写入 `chapters.content` | 手动触发时显示 |
+| 卷进度异常 | `repairChapterByVolumeIssues()` | ✅ 自动写入 `chapters.content` | 手动触发时显示 |
+
+**重要说明**：
+- 所有修复函数现在都会 **自动将修复内容写入数据库**
+- 用户无需手动"接受修复"，修复结果已持久化
+- 前端弹窗提示为 **持久显示**（不自动关闭），用户可清晰感知状态
+- 修复完成后显示成功弹窗："✅ 自动修复完成"
+
+### 9.2 草稿模式生成流程 ⭐v4.5 新增
+
+```
+步骤 1-4：同标准流程
+
+步骤 5：配置草稿模式
+   └─ 勾选"草稿模式"复选框（options.draftMode = true）
+
+步骤 6：AI 生成（跳过后处理）
+   ├─ AI 流式输出章节内容
+   ├─ 内容写入数据库，status = 'draft'（而非 'generated'）
+   ├─ ❌ 不入队 post_process_chapter 任务
+   ├─ ❌ 不自动生成摘要
+   ├─ ❌ 不提取伏笔
+   └─ ❌ 不进行质量评分
+
+步骤 7：用户确认后手动处理后处理
+   └─ 用户查看草稿内容
+   └─ 确认满意后手动触发后处理
+   └─ 或删除草稿重新生成
+```
+
+**适用场景**：
+- 快速生成多个版本对比
+- 测试不同 prompt 效果
+- 节省 API token（跳过耗时的后处理 LLM 调用）
+- 迭代实验性内容
+
+### 9.3 批量生成流程
+
+```
+步骤 1：打开批量生成面板
+   └─ 进入 BatchGeneratePanel
+   └─ 选择目标小说和卷
+
+步骤 2：配置批量参数
+   ├─ 设置目标章节数（如 20 章）
+   ├─ 选择起始章节（默认从下一章开始）
+   └─ 点击"开始批量生成"
+
+步骤 3：后端创建批量任务
+   └─ POST /api/batch/novels/:id/start
+   └─ 创建 batchGenerationTasks 记录（status = 'running'）
+
+步骤 4：队列串行执行
+   └─ 投递 batch_generate_chapter 消息到 TASK_QUEUE
+   └─ 每个 Worker 处理一章：
+       ├─ 构建上下文（同单章流程）
+       ├─ AI 生成章节内容
+       ├─ 写入数据库
+       └─ 发送 batch_chapter_done 事件
+   └─ 进度实时更新到 batchGenerationTasks
+
+步骤 5：监控进度
+   └─ GET /api/batch/novels/:id/active
+   └─ 返回当前任务状态：
+       ├─ completedCount: 已完成章数
+       ├─ failedCount: 失败章数
+       ├─ totalCount: 总目标章数
+       └─ status: running / paused / done
+
+步骤 6：查询历史记录 ⭐v4.5 新增
+   └─ GET /api/batch/novels/:id/history?limit=10
+   └─ 返回历史批量任务列表（支持 status 过滤）
 ```
 
 ### 9.2 上下文诊断流程
@@ -1019,6 +1193,7 @@ debug: {
   totalTokenEstimate: number      // 总 token 估算
   slotBreakdown: Record<string, number>  // 各槽 token 消耗明细
   ragQueriesCount: number          // RAG 查询次数（实际执行 3 次：character/foreshadowing/setting）
+  ragFallbackUsed: boolean          // ⭐v4.4 新增：是否使用了 VECTORIZE 不可用时的 DB 兜底
   buildTimeMs: number             // 构建耗时
   budgetTier: BudgetTier          // 使用的预算配置
   chapterTypeHint: string         // 推断的章节类型关键词
@@ -1063,25 +1238,27 @@ CREATE INDEX idx_novel_settings_importance
 
 ---
 
-## 十二、v3 → v4 → v4.1 → v4.2 → v4.3 → v4.3.2 迁移对照
+## 十二、v3 → v4 → v4.1 → v4.2 → v4.3 → v4.3.2 → v4.4 迁移对照
 
-| 维度 | v3 | v4 | v4.1 | v4.2 | v4.3 | v4.3.2 | 变化原因 |
-|------|----|----|------|------|------|---------|---------|
-| 总纲 | 可能空的 summary | content 全文（≤12k） | **不变** | **不变** | **不变** | **不变** | 256k 够用 |
-| 上一章 | context 摘要 | context 摘要 | **正文完整内容（≤8k）** | **不变** | **不变** | **不变** | 摘要信息不足 |
-| 角色 | RAG 返回 500字碎片 | RAG 返回 ID → DB 完整卡片 | **阈值 0.50→0.38, MAX 8→6** | **阈值 0.38→0.45, 排除主角** | **不变** | **不变** | 优化检索+避免重复 |
-| 设定 | RAG 返回全文切块 | RAG 返回 summary（≤400字） | **阈值全面下调 0.55-0.72→0.42-0.48** | **Slot预算精细化** | **不变** | **优化** | 适应更大预算 |
-| 伏笔 | 仅 RAG 过滤 | 高优 DB 兜底 + RAG | **阈值 0.55→0.42** | **按创建时间排序，高优限制10→15** | **不变** | **不变** | 优先召回近期插入 |
-| 规则 | priority≤2 前5条 | 全部 isActive 规则 | **不变** | **新增fetchAllActiveRuleIds，Slot-8自动排除已注入规则** | **不变** | **不变** | 避免重复注入 |
-| 摘要链 | 默认 5 章 | 默认 20 章 | **不变** | **不变** | **不变** | **不变** | 连贯性 |
-| **创作节奏** | 无 | 无 | **新增 Slot-10** | **不变** | **不变** | **不变** | 帮助 AI 均衡节奏 |
-| 预算 | total=14k | total=55k | **total=128k** | **不变** | **不变** | **不变** | 利用窗口 |
-| RAG查询 | 整卷eventLine+整章正文 | 整卷eventLine+整章正文 | **不变** | **不变** | **聚焦当前章节语义，≤800字** | **优化查询文本构建** | 提升检索精度 |
-| RAG 次数 | 3 次 | **3 次** | **不变** | **不变** | **不变** | **不变** | character/setting/foreshadowing 均保留 |
-| 向量类型 | 6 种 | **3 种** | **不变** | **不变** | **不变** | **不变** | 聚焦上下文构建 |
-| 单任务最大 chunks | 12+（超时） | **≤1** | **不变** | **不变** | **不变** | **不变** | 安全 |
-| Slot过滤 | 无 | 无 | 无 | **新增slotFilter选项** | **不变** | **不变** | 按需组合不同Slot |
-| **调试信息** | 无 | 无 | 无 | 无 | **新增queryText+ragRawResults** | **增强调试信息** | 诊断RAG召回质量 |
+| 维度 | v3 | v4 | v4.1 | v4.2 | v4.3 | v4.3.2 | **v4.4** | 变化原因 |
+|------|----|----|------|------|------|---------|---------|---------|
+| 总纲 | 可能空的 summary | content 全文（≤12k） | **不变** | **不变** | **不变** | **不变** | **不变** | 256k 够用 |
+| 上一章 | context 摘要 | context 摘要 | **正文完整内容（≤8k）** | **不变** | **不变** | **不变** | **不变** | 摘要信息不足 |
+| 角色 | RAG 返回 500字碎片 | RAG 返回 ID → DB 完整卡片 | **阈值 0.50→0.38, MAX 8→6** | **阈值 0.38→0.45, 排除主角** | **不变** | **不变** | **⭐动态阈值 0.45→0.35** | 小规模角色集零结果 |
+| 设定 | RAG 返回全文切块 | RAG 返回 summary（≤400字） | **阈值全面下调 0.55-0.72→0.42-0.48** | **Slot预算精细化** | **不变** | **优化** | **不变** | 适应更大预算 |
+| 伏笔 | 仅 RAG 过滤 | 高优 DB 兜底 + RAG | **阈值 0.55→0.42** | **按创建时间排序，高优限制10→15** | **不变** | **不变** | **⭐路径C：回收计划±10章窗口注入** | 时序感知伏笔调度 |
+| 规则 | priority≤2 前5条 | 全部 isActive 规则 | **不变** | **新增fetchAllActiveRuleIds，Slot-8自动排除已注入规则** | **不变** | **不变** | **不变** | 避免重复注入 |
+| 摘要链 | 默认 5 章 | 默认 20 章 | **不变** | **不变** | **不变** | **不变** | **⭐volumeId 约束，优先同卷** | 跨卷摘要不连贯 |
+| **创作节奏** | 无 | 无 | **新增 Slot-10** | **不变** | **不变** | **不变** | **不变** | 帮助 AI 均衡节奏 |
+| 预算 | total=14k | total=55k | **total=128k** | **不变** | **不变** | **不变** | **不变** | 利用窗口 |
+| RAG查询 | 整卷eventLine+整章正文 | 整卷eventLine+整章正文 | **不变** | **不变** | **聚焦当前章节语义，≤800字** | **优化查询文本构建** | **⭐+上章末尾400字** | 最强语义锚 |
+| RAG 次数 | 3 次 | **3 次** | **不变** | **不变** | **不变** | **不变** | **⭐VECTORIZE不可用时DB兜底(0次)** | 可靠性 |
+| 向量类型 | 6 种 | **3 种** | **不变** | **不变** | **不变** | **不变** | **不变** | 聚焦上下文构建 |
+| 单任务最大 chunks | 12+（超时） | **≤1** | **不变** | **不变** | **不变** | **不变** | **不变** | 安全 |
+| Slot过滤 | 无 | 无 | 无 | **新增slotFilter选项** | **不变** | **不变** | **⭐续写/重写补全上下文槽** | AI 知道更多上下文 |
+| eventLine格式 | 纯文本 | 纯文本 | **不变** | **不变** | **纯文本正则匹配** | **不变** | **⭐JSON数组格式首选** | O(1)索引零歧义 |
+| inferChapterType | - | - | - | - | **整卷eventLine** | **不变** | **⭐currentEvent精确推断** | 类型判断收敛 |
+| **调试信息** | 无 | 无 | 无 | 无 | **新增queryText+ragRawResults** | **增强调试信息** | **⭐+ragFallbackUsed** | VECTORIZE兜底监控 |
 
 ---
 
@@ -1172,16 +1349,28 @@ POST /api/generate/preview-context
 
 | 文件 | 说明 |
 |------|------|
-| [contextBuilder.ts](file:///d:/开发项目/NovelForge/server/services/contextBuilder.ts) | 核心上下文构建逻辑 |
-| [generation.ts](file:///d:/开发项目/NovelForge/server/services/agent/generation.ts) | 章节生成服务 |
-| [generate.ts](file:///d:/开发项目/NovelForge/server/routes/generate.ts) | API 路由定义 |
-| [embedding.ts](file:///d:/开发项目/NovelForge/server/services/embedding.ts) | 向量嵌入服务 |
-| [schema.ts](file:///d:/开发项目/NovelForge/server/db/schema.ts) | 数据库 Schema 定义 |
-| [NovelWorkspacePage.tsx](file:///d:/开发项目/NovelForge/src/pages/NovelWorkspacePage.tsx) | 前端小说工作台页面 |
-| [api.ts](file:///d:/开发项目/NovelForge/src/lib/api.ts) | 前端 API 调用封装 |
+| [contextBuilder.ts](file:///d:/user/NovelForge/server/services/contextBuilder.ts) | 核心上下文构建逻辑 |
+| [generation.ts (service)](file:///d:/user/NovelForge/server/services/agent/generation.ts) | 章节生成服务（含草稿模式） |
+| [generate.ts (route)](file:///d:/user/NovelForge/server/routes/generate.ts) | API 路由定义（SSE 流式 + 自动修复） |
+| [coherence.ts](file:///d:/user/NovelForge/server/services/agent/coherence.ts) | 连贯性检查与修复（自动写库） |
+| [consistency.ts](file:///d:/user/NovelForge/server/services/agent/consistency.ts) | 角色一致性检查与修复（自动写库） |
+| [volumeProgress.ts](file:///d:/user/NovelForge/server/services/agent/volumeProgress.ts) | 卷进度检查与修复（自动写库） |
+| [constants.ts](file:///d:/user/NovelForge/server/services/agent/constants.ts) | 全局常量配置（超时统一 300s） |
+| [batchGenerate.ts](file:///d:/user/NovelForge/server/services/agent/batchGenerate.ts) | 批量生成服务 |
+| [batch.ts (route)](file:///d:/user/NovelForge/server/routes/batch.ts) | 批量生成路由（含历史查询 API） |
+| [queue-handler.ts](file:///d:/user/NovelForge/server/queue-handler.ts) | 队列处理器（批量任务执行） |
+| [embedding.ts](file:///d:/user/NovelForge/server/services/embedding.ts) | 向量嵌入服务 |
+| [schema.ts](file:///d:/user/NovelForge/server/db/schema.ts) | 数据库 Schema 定义 |
+| [types.ts](file:///d:/user/NovelForge/server/services/agent/types.ts) | 类型定义（GenerationOptions 含 draftMode） |
+| [NovelWorkspacePage.tsx](file:///d:/user/NovelForge/src/pages/NovelWorkspacePage.tsx) | 前端小说工作台页面 |
+| [GeneratePanel.tsx](file:///d:/user/NovelForge/src/components/generate/GeneratePanel.tsx) | 前端单章生成面板（含草稿模式开关） |
+| [BatchGeneratePanel.tsx](file:///d:/user/NovelForge/src/components/generation/BatchGeneratePanel.tsx) | 前端批量生成面板 |
+| [useGenerate.ts](file:///d:/user/NovelForge/src/hooks/useGenerate.ts) | 前端生成 Hook（含持久弹窗逻辑） |
+| [api.ts](file:///d:/user/NovelForge/src/lib/api.ts) | 前端 API 调用封装 |
 
 ---
 
-> 文档版本：v4.3.2
-> 最后更新：2026-04-29
+> 文档版本：v4.5.0
+> 最后更新：2026-04-30
 > 维护者：NovelForge 开发团队
+> ⭐v4.5 主要更新：自动修复写库、持久弹窗提示、草稿模式、SSE 时序优化、批量历史查询

@@ -1,8 +1,8 @@
 # NovelForge 创作工坊 — 完整执行指南
 
-> 版本: 1.3.0 | 模块: `server/services/workshop/` (v1.11.0 模块化)
-> 前端页面: [WorkshopPage.tsx](file:///d:/开发项目/NovelForge/src/pages/WorkshopPage.tsx)
-> 创建日期: 2026-04-25 | 更新日期: 2026-04-29
+> 版本: v4.4.0 | 模块: `server/services/workshop/` 全目录 + `src/pages/WorkshopPage.tsx`
+> 前端页面: [WorkshopPage.tsx](file:///d:/user/NovelForge/src/pages/WorkshopPage.tsx)
+> 创建日期: 2026-04-28 | 最后更新: 2026-04-30
 
 ---
 
@@ -212,18 +212,23 @@ POST /api/workshop/session/:id/re-extract
 
 **说明**：当 AI 回复格式有误或需要重新解析时，触发此接口从消息历史中重新提取数据。
 
-### 3.5 提交会话
+**⭐v4.4 增强 — 数组字段 upsert 语义**：
+- `worldSettings` / `characters` / `volumes` 数组字段改为 **upsert 合并**（按唯一键：title / name / title）
+- 早期轮次的数据不会被后续轮次覆盖，只修改同键值字段
+- 非数组字段仍保持"后覆盖前"行为
+
+### 3.5 提交会话 ⭐ v4.4 增强
 
 **请求**
 ```json
 POST /api/workshop/session/:id/commit
 ```
 
-**响应**
+**响应** ⭐v4.4 变更
 ```json
 {
   "ok": true,
-  "novelId": "新建小说的ID",
+  "novelId": "新建小说的ID",        // ← v4.4: 同步执行时返回，超时降级时为 undefined
   "createdItems": {
     "novel": {...},
     "outline": {...},
@@ -232,9 +237,22 @@ POST /api/workshop/session/:id/commit
     "volumes": [...],
     "writingRules": [...]
   },
-  "message": "创作数据已成功提交到数据库！"
+  "timedOut": false,               // ⭐v4.4 新增：是否因超时降级到队列模式
+  "vectorizing": true              // ⭐v4.4 新增：向量化队列中有待处理任务
 }
 ```
+
+**⭐v4.4 执行模式变更**：
+
+| 模式 | 行为 | 返回值 |
+|------|------|--------|
+| **同步执行**（<30s） | 直接调用 `commitWorkshopSessionCore` | `novelId` 有值, `timedOut=false` |
+| **超时降级**（≥30s） | 入队异步处理 | `novelId=undefined`, `timedOut=true` |
+
+**前端行为**（[WorkshopPage.tsx](file:///d:/user/NovelForge/src/pages/WorkshopPage.tsx#L219-L233)）：
+- `novelId && !timedOut` → Toast "提交成功！正在跳转..." → 800ms 后跳转 `/novel/{id}`
+- `timedOut` → Toast "⏳ 提交量大，后台处理中（约1-2分钟），请在小说列表查看"
+- `vectorizing` → 延迟 1.5s Toast "📡 正在建立语义索引（约 30 秒）"
 
 **说明**：提交后会创建完整的小说项目，包括：
 - `novels` 表记录
@@ -243,7 +261,7 @@ POST /api/workshop/session/:id/commit
 - `characters` 表记录（如有角色）
 - `volumes` 表记录（如有卷纲）
 - `writingRules` 表记录（如有创作规则）
-- `foreshadowing` 表记录（从卷纲的伏笔规划中提取）
+- `foreshadowing` 表记录（从卷纲的伏笔规划中提取）⭐v4.4：三态区分（open / resolve_planned）
 - `entityIndex` 实体索引更新
 
 ---
@@ -471,11 +489,13 @@ eventLine 条数 = targetChapterCount**
 }
 ```
 
-**eventLine 格式要求**：
-- 格式：`"第N章：[场景标签] 事件描述（起因→结果）"`
+**eventLine 格式要求** ⭐v4.4 增强：
+- **存储格式**：JSON 数组 `["第1章：...","第2章：..."]`（⭐v4.4 统一标准）
+- 展示格式：`"第N章：[场景标签] 事件描述（起因→结果）"`
 - 场景标签：用方括号标注主要场景，如 `[宗门大殿]` `[荒野]` `[秘境内部]`
 - 事件描述：必须包含起因和结果，约30-50字
 - **条数必须等于 targetChapterCount**
+- **⭐v4.4**：生成侧 `extractCurrentChapterEvent` 支持按索引 O(1) 访问，零歧义
 
 **blueprint 格式（结构化）**：
 ```
@@ -612,7 +632,7 @@ eventLine 条数 = targetChapterCount**
    └─ 自动跳转到小说工作区
 ```
 
-### 7.2 继续已有小说创作
+### 7.2 继续已有小说创作 ⭐v4.4 增强
 
 ```
 步骤 1：从小说工作区进入
@@ -622,9 +642,11 @@ eventLine 条数 = targetChapterCount**
 步骤 2：自动加载会话
    └─ 前端解析 URL 参数
    └─ 自动加载对应会话的内容
+   └─ ⭐v4.4：eventLine 字段兼容 JSON 数组和纯文本两种格式
 
 步骤 3：继续对话
    └─ 基于已有数据继续创作
+   └─ ⭐v4.4：跨阶段修改不再被跳过（阶段门控已移除 worldSettings/characters/volumes）
 ```
 
 ### 7.3 导入已有数据
@@ -744,7 +766,10 @@ while (true) {
 
 - **生成中断**：即使 AI 回复中断，已生成的部分内容也会保存
 - **JSON 截断**：当 AI 输出因长度限制被截断时，`extract.ts` 提供了兜底提取逻辑
-- **卷纲截断检测**：如果检测到卷纲输出疑似被截断，会在回复末尾添加警告提示
+- **卷纲截断检测** ⭐v4.4 增强：多维度检测（末尾 ``` + JSON 解析 + 章节数一致性校验）
+  - 无 ``` 且 JSON 解析失败 → 报"输出可能被截断"
+  - JSON 解析成功但 `eventLine.length !== targetChapterCount` → 报"章节数不一致"
+  - 都正常 → 无提示
 - **标题生成失败**：不影响主流程，仅记录警告日志
 
 ---
@@ -814,8 +839,8 @@ while (true) {
 | 文件 | 说明 |
 |------|------|
 | [index.ts](file:///d:/开发项目/NovelForge/server/services/workshop/index.ts) | 统一导出入口，处理消息的核心逻辑 |
-| [commit.ts](file:///d:/开发项目/NovelForge/server/services/workshop/commit.ts) | commit 逻辑增强，包含总纲生成和伏笔提取 |
-| [extract.ts](file:///d:/开发项目/NovelForge/server/services/workshop/extract.ts) | 数据提取服务，含 JSON 容错和兜底提取 |
+| [commit.ts](file:///d:/user/NovelForge/server/services/workshop/commit.ts) | commit 逻辑：⭐v4.4 同步执行+超时降级、伏笔三态+chapterId、阶段门控移除 |
+| [extract.ts](file:///d:/user/NovelForge/server/services/workshop/extract.ts) | 数据提取服务，含 JSON 容错、兜底提取、⭐v4.4 数组 upsert 合并 |
 | [helpers.ts](file:///d:/开发项目/NovelForge/server/services/workshop/helpers.ts) | 辅助函数，总纲内容构建 |
 | [prompt.ts](file:///d:/开发项目/NovelForge/server/services/workshop/prompt.ts) | 分阶段 Prompt，含详细格式模板 |
 | [session.ts](file:///d:/开发项目/NovelForge/server/services/workshop/session.ts) | 会话管理，加载小说上下文 |

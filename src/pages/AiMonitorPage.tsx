@@ -1,8 +1,8 @@
 /**
  * @file AiMonitorPage.tsx
- * @description AI监控中心页面 - 向量索引管理、生成日志、上下文诊断、手动操作
- * @version 2.0.0
- * @modified 2026-04-22 - 向量索引重建改为 Queue 后台执行，前端仅触发并轮询进度
+ * @description AI监控中心页面 - 向量索引管理、生成日志、上下文诊断、成本分析、质量监控、手动操作
+ * @version 3.0.0
+ * @modified 2026-04-30 - 新增成本分析（Token消耗追踪）和质量监控面板（章节质量评分）
  */
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -23,6 +23,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { GenerationLogs } from '@/components/generation/GenerationLogs'
+import { CostAnalysis } from '@/components/monitor/CostAnalysis'
+import { QualityDashboard } from '@/components/monitor/QualityDashboard'
 import {
   Activity,
   Database,
@@ -37,6 +39,8 @@ import {
   BookOpen,
   Layers,
   Eye,
+  DollarSign,
+  Award,
 } from 'lucide-react'
 
 interface VectorStats {
@@ -66,7 +70,6 @@ export default function AiMonitorPage() {
   const [isSearching, setIsSearching] = useState(false)
   const [isReindexing, setIsReindexing] = useState(false)
   const [isIndexingMissing, setIsIndexingMissing] = useState(false)
-  const [contextNovelId, setContextNovelId] = useState<string>('')
   const [contextChapterId, setContextChapterId] = useState<string>('')
   const [contextResult, setContextResult] = useState<any>(null)
   const [isLoadingContext, setIsLoadingContext] = useState(false)
@@ -83,6 +86,14 @@ export default function AiMonitorPage() {
     queryFn: () => api.vectorize.getStats(selectedNovelId),
     enabled: !!selectedNovelId,
   })
+
+  const { data: chaptersData } = useQuery({
+    queryKey: ['chapters', selectedNovelId],
+    queryFn: () => api.chapters.list(selectedNovelId),
+    enabled: !!selectedNovelId,
+  })
+
+  const chapters = chaptersData
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return
@@ -223,7 +234,7 @@ export default function AiMonitorPage() {
 
         {selectedNovelId && (
           <Tabs defaultValue="vectors" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-6">
               <TabsTrigger value="vectors" className="flex items-center gap-2">
                 <Database className="w-4 h-4" />
                 向量索引
@@ -239,6 +250,14 @@ export default function AiMonitorPage() {
               <TabsTrigger value="operations" className="flex items-center gap-2">
                 <Activity className="w-4 h-4" />
                 手动操作
+              </TabsTrigger>
+              <TabsTrigger value="cost" className="flex items-center gap-2">
+                <DollarSign className="w-4 h-4" />
+                成本分析
+              </TabsTrigger>
+              <TabsTrigger value="quality" className="flex items-center gap-2">
+                <Award className="w-4 h-4" />
+                质量监控
               </TabsTrigger>
             </TabsList>
 
@@ -397,7 +416,7 @@ export default function AiMonitorPage() {
             </TabsContent>
 
             <TabsContent value="logs">
-              <GenerationLogs />
+              <GenerationLogs novelId={selectedNovelId} />
             </TabsContent>
 
             <TabsContent value="context" className="space-y-6">
@@ -410,42 +429,34 @@ export default function AiMonitorPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>选择小说</Label>
-                        <Select value={contextNovelId} onValueChange={setContextNovelId}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="请选择小说" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {novels?.map((novel: any) => (
-                              <SelectItem key={novel.id} value={novel.id}>
-                                {novel.title}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                    <div className="space-y-2">
+                      <Label>当前小说：{novels?.find((n: any) => n.id === selectedNovelId)?.title || selectedNovelId}</Label>
+                      <div className="text-xs text-muted-foreground mb-3">选择章节查看生成时会注入的上下文信息</div>
 
-                      <div className="space-y-2">
-                        <Label>选择章节</Label>
-                        <Input
-                          placeholder="输入章节ID"
-                          value={contextChapterId}
-                          onChange={(e) => setContextChapterId(e.target.value)}
-                        />
-                      </div>
+                      <Label>选择章节</Label>
+                      <Select value={contextChapterId} onValueChange={setContextChapterId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="请选择章节" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {chapters?.map((chapter: any) => (
+                            <SelectItem key={chapter.id} value={chapter.id}>
+                              第{chapter.chapterNumber}章 - {chapter.title || '未命名章节'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <Button
                       onClick={async () => {
-                        if (!contextNovelId || !contextChapterId) {
-                          toast.error('请选择小说和章节')
+                        if (!selectedNovelId || !contextChapterId) {
+                          toast.error('请选择章节')
                           return
                         }
                         setIsLoadingContext(true)
                         try {
-                          const result = await api.generate.previewContext(contextNovelId, contextChapterId)
+                          const result = await api.generate.previewContext(selectedNovelId, contextChapterId)
                           setContextResult(result)
                           toast.success(`上下文构建成功，共 ${result.summary?.totalLayers || 0} 层`)
                         } catch {
@@ -455,7 +466,7 @@ export default function AiMonitorPage() {
                           setIsLoadingContext(false)
                         }
                       }}
-                      disabled={!contextNovelId || !contextChapterId || isLoadingContext}
+                      disabled={!selectedNovelId || !contextChapterId || isLoadingContext}
                     >
                       {isLoadingContext ? (
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -607,6 +618,14 @@ export default function AiMonitorPage() {
                   </CardContent>
                 </Card>
               </div>
+            </TabsContent>
+
+            <TabsContent value="cost">
+              <CostAnalysis novelId={selectedNovelId} />
+            </TabsContent>
+
+            <TabsContent value="quality">
+              <QualityDashboard novelId={selectedNovelId} />
             </TabsContent>
           </Tabs>
         )}

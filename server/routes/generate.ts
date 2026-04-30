@@ -265,19 +265,20 @@ router.post('/summary', zValidator('json', z.object({
   const { chapterId, novelId } = c.req.valid('json')
 
   try {
-    await triggerAutoSummary(c.env, chapterId, novelId, {
+    const result = await triggerAutoSummary(c.env, chapterId, novelId, {
       prompt_tokens: 0,
       completion_tokens: 0,
     })
 
+    const metrics = result.metrics
     await logGeneration(c.env, {
       novelId,
       chapterId,
       stage: 'auto_summary',
-      modelId: 'N/A',
-      promptTokens: 0,
-      completionTokens: 0,
-      durationMs: 0,
+      modelId: metrics?.modelId || 'N/A',
+      promptTokens: metrics?.usage.prompt_tokens || 0,
+      completionTokens: metrics?.usage.completion_tokens || 0,
+      durationMs: metrics?.durationMs || 0,
       status: 'success',
       contextSnapshot: JSON.stringify({ enabled: true, manual: true }),
     })

@@ -6,8 +6,9 @@ import { drizzle } from 'drizzle-orm/d1'
 import { chapters, masterOutline, volumes, novelSettings } from '../../db/schema'
 import { eq, desc, sql } from 'drizzle-orm'
 import type { Env } from '../../lib/types'
-import { resolveConfig, generate } from '../llm'
+import { resolveConfig, generateWithMetrics } from '../llm'
 import type { AppDb } from '../contextBuilder'
+import type { LLMCallResult } from '../llm'
 import {
   ERROR_MESSAGES,
   LOG_STYLES,
@@ -28,7 +29,12 @@ interface SummaryCallOptions {
   maxTokens?: number
 }
 
-async function callSummaryLLM(opts: SummaryCallOptions): Promise<string> {
+interface SummaryLLMResult {
+  text: string
+  metrics: LLMCallResult
+}
+
+async function callSummaryLLM(opts: SummaryCallOptions): Promise<SummaryLLMResult> {
   const { db, novelId, stage, systemPrompt, userPrompt, maxTokens = 500 } = opts
 
   let config
@@ -39,19 +45,18 @@ async function callSummaryLLM(opts: SummaryCallOptions): Promise<string> {
     throw new Error(ERROR_MESSAGES.MODEL_NOT_CONFIGED('摘要生成'))
   }
 
-  // 覆盖 max_tokens，其余参数沿用 config.params
   const overrideConfig = {
     ...config,
     params: { ...(config.params || {}), max_tokens: maxTokens },
   }
 
-  const { text } = await generate(overrideConfig, [
+  const metrics = await generateWithMetrics(overrideConfig, [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt },
   ])
 
-  if (!text?.trim()) throw new Error(ERROR_MESSAGES.EMPTY_RESULT)
-  return text.trim()
+  if (!metrics.text?.trim()) throw new Error(ERROR_MESSAGES.EMPTY_RESULT)
+  return { text: metrics.text.trim(), metrics }
 }
 
 // ============================================================
@@ -63,7 +68,7 @@ export async function triggerAutoSummary(
   chapterId: string,
   novelId: string,
   generationUsage: { prompt_tokens: number; completion_tokens: number }
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string; metrics?: LLMCallResult }> {
   try {
     const result = await generateChapterSummary(env, chapterId, novelId, {
       source: 'auto',
@@ -72,8 +77,10 @@ export async function triggerAutoSummary(
     if (result.ok) {
       LOG_STYLES.SUCCESS(`章节 ${chapterId} 摘要生成成功: ${result.summary?.slice(0, 100)}`)
     }
+    return result
   } catch (error) {
     LOG_STYLES.WARN(`${ERROR_MESSAGES.SUMMARY_FAILED}: ${error}`)
+    return { ok: false, error: (error as Error).message }
   }
 }
 
@@ -101,7 +108,7 @@ async function generateChapterSummary(
     source: 'auto' | 'manual'
     usage?: { prompt_tokens: number; completion_tokens: number }
   }
-): Promise<{ ok: boolean; summary?: string; error?: string }> {
+): Promise<{ ok: boolean; summary?: string; error?: string; metrics?: LLMCallResult }> {
   const db = drizzle(env.DB)
 
   const chapter = await db
@@ -113,7 +120,7 @@ async function generateChapterSummary(
   if (!chapter) return { ok: false, error: 'Chapter not found' }
   if (!chapter?.content) return { ok: false, error: ERROR_MESSAGES.CHAPTER_CONTENT_EMPTY }
 
-  const summaryText = await callSummaryLLM({
+  const result = await callSummaryLLM({
     db,
     novelId,
     stage: 'summary_gen',
@@ -136,6 +143,8 @@ ${chapter.content}
     maxTokens: 1000,
   })
 
+  const summaryText = result.text
+
   const updateData: Record<string, unknown> = {
     summary: summaryText,
     summaryAt: Math.floor(Date.now() / 1000),
@@ -147,17 +156,15 @@ ${chapter.content}
     console.warn(`[summarizer] 摘要结构不完整，标记为 malformed: ${summaryText.slice(0, 100)}`)
   }
 
-  if (opts.source === 'auto' && opts.usage) {
-    updateData.promptTokens = opts.usage.prompt_tokens
-    updateData.completionTokens = opts.usage.completion_tokens
-  }
+  updateData.promptTokens = result.metrics.usage.prompt_tokens
+  updateData.completionTokens = result.metrics.usage.completion_tokens
 
   await db
     .update(chapters)
     .set(updateData)
     .where(eq(chapters.id, chapterId))
 
-  return { ok: true, summary: summaryText }
+  return { ok: true, summary: summaryText, metrics: result.metrics }
 }
 
 // ============================================================
@@ -167,7 +174,7 @@ ${chapter.content}
 export async function generateMasterOutlineSummary(
   env: Env,
   novelId: string
-): Promise<{ ok: boolean; summary?: string; error?: string }> {
+): Promise<{ ok: boolean; summary?: string; error?: string; metrics?: LLMCallResult }> {
   try {
     const db = drizzle(env.DB)
 
@@ -182,7 +189,7 @@ export async function generateMasterOutlineSummary(
       return { ok: false, error: `${ERROR_MESSAGES.EMPTY_RESULT}: 总纲内容为空` }
     }
 
-    const summaryText = await callSummaryLLM({
+    const result = await callSummaryLLM({
       db,
       novelId,
       stage: 'summary_gen',
@@ -207,10 +214,10 @@ ${outline.content}
 
     await db
       .update(masterOutline)
-      .set({ summary: summaryText, updatedAt: sql`(unixepoch())` })
+      .set({ summary: result.text, updatedAt: sql`(unixepoch())` })
       .where(eq(masterOutline.id, outline.id))
 
-    return { ok: true, summary: summaryText }
+    return { ok: true, summary: result.text, metrics: result.metrics }
   } catch (error) {
     LOG_STYLES.WARN(`总纲摘要生成失败: ${error}`)
     return { ok: false, error: (error as Error).message }
@@ -225,7 +232,7 @@ export async function generateVolumeSummary(
   env: Env,
   volumeId: string,
   novelId: string
-): Promise<{ ok: boolean; summary?: string; error?: string }> {
+): Promise<{ ok: boolean; summary?: string; error?: string; metrics?: LLMCallResult }> {
   try {
     const db = drizzle(env.DB)
 
@@ -257,7 +264,7 @@ export async function generateVolumeSummary(
         })()
       : ''
 
-    const summaryText = await callSummaryLLM({
+    const result = await callSummaryLLM({
       db,
       novelId,
       stage: 'summary_gen',
@@ -284,10 +291,10 @@ ${eventLineSummary || '（无事件线）'}
 
     await db
       .update(volumes)
-      .set({ summary: summaryText, updatedAt: sql`(unixepoch())` })
+      .set({ summary: result.text, updatedAt: sql`(unixepoch())` })
       .where(eq(volumes.id, volumeId))
 
-    return { ok: true, summary: summaryText }
+    return { ok: true, summary: result.text, metrics: result.metrics }
   } catch (error) {
     LOG_STYLES.WARN(`卷摘要生成失败: ${error}`)
     return { ok: false, error: (error as Error).message }
@@ -301,7 +308,7 @@ ${eventLineSummary || '（无事件线）'}
 export async function generateSettingSummary(
   env: Env,
   settingId: string
-): Promise<{ ok: boolean; summary?: string; error?: string }> {
+): Promise<{ ok: boolean; summary?: string; error?: string; metrics?: LLMCallResult }> {
   const db = drizzle(env.DB) as AppDb
 
   const row = await db
@@ -329,7 +336,7 @@ export async function generateSettingSummary(
       misc: `摘要保留对AI写章节时有直接参考价值的内容，省略背景故事和描述性文字。`,
     }
 
-    const summaryText = await callSummaryLLM({
+    const result = await callSummaryLLM({
       db,
       novelId: row.novelId,
       stage: 'summary_gen',
@@ -355,11 +362,11 @@ ${typeSpecificHint[row.type] || '保留核心概念和关键规则，省略描�
 
     await db
       .update(novelSettings)
-      .set({ summary: summaryText, updatedAt: sql`(unixepoch())` })
+      .set({ summary: result.text, updatedAt: sql`(unixepoch())` })
       .where(eq(novelSettings.id, settingId))
 
-    LOG_STYLES.SUCCESS(`设定 ${row.name} 摘要已生成 (${summaryText.length} 字符)`)
-    return { ok: true, summary: summaryText }
+    LOG_STYLES.SUCCESS(`设定 ${row.name} 摘要已生成 (${result.text.length} 字符)`)
+    return { ok: true, summary: result.text, metrics: result.metrics }
   } catch (error) {
     LOG_STYLES.ERROR(`[generateSettingSummary] 失败: ${error}`)
     return { ok: false, error: (error as Error).message }

@@ -8,7 +8,8 @@ import { drizzle } from 'drizzle-orm/d1'
 import { characters, chapters } from '../db/schema'
 import { eq, and } from 'drizzle-orm'
 import type { Env } from '../lib/types'
-import { resolveConfig } from './llm'
+import { resolveConfig, generateWithMetrics } from './llm'
+import type { LLMCallResult } from './llm'
 import { enqueue } from '../lib/queue'
 
 export interface PowerLevelData {
@@ -33,6 +34,7 @@ export interface PowerLevelDetectionResult {
     newPowerLevel: PowerLevelData
     breakthroughNote?: string
   }>
+  metrics?: LLMCallResult
 }
 
 /**
@@ -117,8 +119,8 @@ export async function detectPowerLevelBreakthrough(
 【主角当前境界信息】：
 ${characterPowerInfo}
 
-【正文内容】（前3000字）：
-${chapter.content.slice(0, 3000)}
+【正文内容】（前8000字）：
+${chapter.content.slice(0, 8000)}
 
 请以JSON格式输出检测结果（不要输出其他内容）：
 {
@@ -143,51 +145,26 @@ ${chapter.content.slice(0, 3000)}
 注意：只报告明确的境界突破，模糊的暗示不算。`
 
     // 调用 LLM 进行检测
-    const base = detectionConfig.apiBase || getDefaultBase(detectionConfig.provider)
-    const resp = await fetch(`${base}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${detectionConfig.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: detectionConfig.modelId,
-        messages: [
-          { role: 'system', content: '你是一个JSON生成助手，只输出JSON，不要其他内容。' },
-          { role: 'user', content: detectionPrompt },
-        ],
-        stream: false,
-        temperature: detectionConfig.params?.temperature ?? 0.3,
-        max_tokens: detectionConfig.params?.max_tokens ?? 2000,
-      }),
-    })
-
-    if (!resp.ok) {
-      throw new Error(`Power level detection API error: ${resp.status}`)
+    const overrideConfig = {
+      ...detectionConfig,
+      params: { ...(detectionConfig.params || {}), temperature: 0.3, max_tokens: 2000 },
     }
 
-    const result = await resp.json() as any
-    const content = result.choices?.[0]?.message?.content || '{}'
+    const detectionMetrics = await generateWithMetrics(overrideConfig, [
+      { role: 'system', content: '你是一个JSON生成助手，只输出JSON，不要其他内容。' },
+      { role: 'user', content: detectionPrompt },
+    ])
 
     let parsed: { hasBreakthrough: boolean; updates: Array<any> } = { hasBreakthrough: false, updates: [] }
-    const MAX_RETRY = 1
-    for (let attempt = 0; attempt <= MAX_RETRY; attempt++) {
-      try {
-        parsed = JSON.parse(content)
-        break
-      } catch (parseError) {
-        if (attempt < MAX_RETRY) {
-          console.warn(`[PowerLevel] JSON parse failed (attempt ${attempt + 1}/${MAX_RETRY + 1}), retrying...`)
-          await new Promise(r => setTimeout(r, 500))
-          continue
-        }
-        console.warn('[PowerLevel] JSON parse failed after retries, raw content:', content.slice(0, 500))
-        return { hasBreakthrough: false, updates: [] }
-      }
+    try {
+      parsed = JSON.parse(detectionMetrics.text)
+    } catch (parseError) {
+      console.warn('[PowerLevel] JSON parse failed, raw content:', detectionMetrics.text.slice(0, 500))
+      return { hasBreakthrough: false, updates: [], metrics: detectionMetrics }
     }
 
     if (!parsed.hasBreakthrough || !parsed.updates || parsed.updates.length === 0) {
-      return { hasBreakthrough: false, updates: [] }
+      return { hasBreakthrough: false, updates: [], metrics: detectionMetrics }
     }
 
     // 处理检测结果并更新数据库
@@ -283,22 +260,11 @@ ${chapter.content.slice(0, 3000)}
     }
 
     console.log(`⚡ Power level detection complete: ${finalUpdates.length} breakthroughs detected`)
-    return { hasBreakthrough: finalUpdates.length > 0, updates: finalUpdates }
+    return { hasBreakthrough: finalUpdates.length > 0, updates: finalUpdates, metrics: detectionMetrics }
   } catch (error) {
     console.error('Power level detection failed:', error)
     return { hasBreakthrough: false, updates: [] }
   }
 }
 
-function getDefaultBase(provider: string): string {
-  switch (provider) {
-    case 'volcengine':
-      return 'https://ark.cn-beijing.volces.com/api/v3'
-    case 'anthropic':
-      return 'https://api.anthropic.com/v1'
-    case 'openai':
-      return 'https://api.openai.com/v1'
-    default:
-      return 'https://ark.cn-beijing.volces.com/api/v3'
-  }
-}
+

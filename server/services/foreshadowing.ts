@@ -7,7 +7,8 @@ import { drizzle } from 'drizzle-orm/d1'
 import { foreshadowing, foreshadowingProgress, chapters } from '../db/schema'
 import { eq, and, isNull, desc, sql, count } from 'drizzle-orm'
 import type { Env } from '../lib/types'
-import { resolveConfig } from './llm'
+import { resolveConfig, generateWithMetrics } from './llm'
+import type { LLMCallResult } from './llm'
 import { enqueue } from '../lib/queue'
 import { embedText, searchSimilarMulti, ACTIVE_SOURCE_TYPES } from './embedding'
 import { JSON_OUTPUT_PROMPT } from './agent/constants'
@@ -24,6 +25,7 @@ export interface ForeshadowingExtractResult {
     progressType: 'hint' | 'advance' | 'partial_reveal'
     summary: string
   }>
+  metrics?: LLMCallResult
 }
 
 export interface ForeshadowingHealthReport {
@@ -180,38 +182,24 @@ ${existingForeshadowingText}
 
 如果本章确实没有相关内容，对应数组为空[]。`
 
-    const base = extractConfig.apiBase || getDefaultBase(extractConfig.provider)
-    const resp = await fetch(`${base}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${extractConfig.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: extractConfig.modelId,
-        messages: [
-          { role: 'system', content: JSON_OUTPUT_PROMPT },
-          { role: 'user', content: extractPrompt },
-        ],
-        stream: false,
-        temperature: extractConfig.params?.temperature ?? 0.3,
-        max_tokens: extractConfig.params?.max_tokens ?? 8000,
-      }),
-    })
-
-    if (!resp.ok) {
-      throw new Error(`Foreshadowing extraction API error: ${resp.status}`)
+    const extractLLMConfig = {
+      ...extractConfig,
+      params: { ...(extractConfig.params || {}), temperature: extractConfig.params?.temperature ?? 0.3, max_tokens: extractConfig.params?.max_tokens ?? 8000 },
     }
 
-    const result = await resp.json() as any
-    const content = result.choices?.[0]?.message?.content || '{}'
+    const extractMetrics = await generateWithMetrics(extractLLMConfig, [
+      { role: 'system', content: JSON_OUTPUT_PROMPT },
+      { role: 'user', content: extractPrompt },
+    ])
+
+    const content = extractMetrics.text || '{}'
 
     let parsed: any
     try {
       parsed = JSON.parse(content)
     } catch (parseError) {
       console.warn('Failed to parse foreshadowing extraction result:', parseError)
-      return { newForeshadowing: [], resolvedForeshadowingIds: [], progresses: [] }
+      return { newForeshadowing: [], resolvedForeshadowingIds: [], progresses: [], metrics: extractMetrics }
     }
 
     parsed.newForeshadowing = (parsed.newForeshadowing || []).filter((f: any) =>
@@ -295,7 +283,7 @@ ${existingForeshadowingText}
     }
 
     console.log(`📝 Foreshadowing extraction complete: ${parsed.newForeshadowing.length} new, ${parsed.resolvedForeshadowingIds.length} resolved, ${parsed.progresses.length} progressed`)
-    return parsed
+    return { ...parsed, metrics: extractMetrics }
   } catch (error) {
     console.error('Foreshadowing extraction failed:', error)
     return { newForeshadowing: [], resolvedForeshadowingIds: [], progresses: [] }

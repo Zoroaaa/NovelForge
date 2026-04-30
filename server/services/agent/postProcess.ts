@@ -46,17 +46,18 @@ async function step1AutoSummary(
   if (!enableAutoSummary) return
 
   try {
-    await triggerAutoSummary(env, chapterId, novelId, usage)
+    const result = await triggerAutoSummary(env, chapterId, novelId, usage)
     console.log(`✅ [PostProcess] 自动摘要完成 for chapter ${chapterId}`)
 
+    const metrics = result.metrics
     await logGeneration(env, {
       novelId,
       chapterId,
       stage: 'auto_summary',
-      modelId: 'N/A',
-      promptTokens: usage.prompt_tokens,
-      completionTokens: usage.completion_tokens,
-      durationMs: 0,
+      modelId: metrics?.modelId || 'N/A',
+      promptTokens: metrics?.usage.prompt_tokens || 0,
+      completionTokens: metrics?.usage.completion_tokens || 0,
+      durationMs: metrics?.durationMs || 0,
       status: 'success',
       contextSnapshot: JSON.stringify({ enabled: true }),
     })
@@ -81,18 +82,21 @@ async function step2Foreshadowing(env: Env, chapterId: string, novelId: string):
     const foreshadowingResult = await extractForeshadowingFromChapter(env, chapterId, novelId)
     console.log(`📝 [PostProcess] 伏笔提取: ${foreshadowingResult.newForeshadowing.length} 个新伏笔, ${foreshadowingResult.resolvedForeshadowingIds.length} 个已解决`)
 
+    const metrics = foreshadowingResult.metrics
     await logGeneration(env, {
       novelId,
       chapterId,
       stage: 'foreshadowing_extraction',
-      modelId: 'N/A',
+      modelId: metrics?.modelId || 'N/A',
+      promptTokens: metrics?.usage.prompt_tokens,
+      completionTokens: metrics?.usage.completion_tokens,
+      durationMs: metrics?.durationMs || 0,
+      status: 'success',
       contextSnapshot: JSON.stringify({
         newCount: foreshadowingResult.newForeshadowing.length,
         resolvedCount: foreshadowingResult.resolvedForeshadowingIds.length,
         progressedCount: foreshadowingResult.progresses?.length || 0,
       }),
-      durationMs: 0,
-      status: 'success',
     })
   } catch (foreshadowError) {
     console.warn('[PostProcess] 伏笔提取失败（非致命）:', foreshadowError)
@@ -115,11 +119,16 @@ async function step3PowerLevel(env: Env, chapterId: string, novelId: string): Pr
     const powerLevelResult = await detectPowerLevelBreakthrough(env, chapterId, novelId)
     console.log(`⚡ [PostProcess] 境界检测: 检测到 ${powerLevelResult.updates.length} 个突破`)
 
+    const metrics = powerLevelResult.metrics
     await logGeneration(env, {
       novelId,
       chapterId,
       stage: 'power_level_detection',
-      modelId: 'N/A',
+      modelId: metrics?.modelId || 'N/A',
+      promptTokens: metrics?.usage.prompt_tokens,
+      completionTokens: metrics?.usage.completion_tokens,
+      durationMs: metrics?.durationMs || 0,
+      status: 'success',
       contextSnapshot: JSON.stringify({
         hasBreakthrough: powerLevelResult.hasBreakthrough,
         updatesCount: powerLevelResult.updates.length,
@@ -129,8 +138,6 @@ async function step3PowerLevel(env: Env, chapterId: string, novelId: string): Pr
           to: u.newPowerLevel.current,
         })),
       }),
-      durationMs: 0,
-      status: 'success',
     })
   } catch (powerLevelError) {
     console.warn('[PostProcess] 境界检测失败（非致命）:', powerLevelError)
