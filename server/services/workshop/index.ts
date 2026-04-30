@@ -11,7 +11,7 @@ import type { WorkshopExtractedData } from './types'
 import { createWorkshopSession, getWorkshopSession, updateSession, loadNovelContextData, WorkshopMessage } from './session'
 import { buildSystemPrompt } from './prompt'
 import { extractStructuredData, mergeArrayField, safeParseJSON } from './extract'
-import { commitWorkshopSession, commitWorkshopSessionCore } from './commit'
+import { commitWorkshopSession, commitWorkshopSessionCore, workshopPostCommit } from './commit'
 
 const { workshopSessions } = schema
 
@@ -281,6 +281,7 @@ export {
   getWorkshopSession,
   commitWorkshopSession,
   commitWorkshopSessionCore,
+  workshopPostCommit,
   loadNovelContextData,
   WorkshopMessage,
   WorkshopExtractedData,

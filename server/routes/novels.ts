@@ -12,7 +12,7 @@ import { novels as t, chapters, characters, novelSettings, masterOutline, volume
 import { eq, isNull, desc, and, sql } from 'drizzle-orm'
 import type { Env } from '../lib/types'
 import { deindexContent, deindexNovel } from '../services/embedding'
-import { generateGenreSystemPrompt } from '../services/workshop/commit'
+import { generateGenreSystemPrompt } from '../services/workshop/generateGenreSystemPrompt'
 
 const router = new Hono<{ Bindings: Env }>()
 

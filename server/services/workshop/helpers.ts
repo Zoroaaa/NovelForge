@@ -90,7 +90,7 @@ export async function buildOutlineContentWithAI(
   })
 }
 
-function buildOutlineContent(data: WorkshopExtractedData): string {
+export function buildOutlineContent(data: WorkshopExtractedData): string {
   const parts: string[] = []
 
   if (data.description) parts.push(`## 简介\n${data.description}`)

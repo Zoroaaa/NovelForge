@@ -71,6 +71,15 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
       break
     }
 
+    case 'workshop_post_commit': {
+      const { sessionId, novelId } = msg.payload
+      console.log(`[Queue] 开始处理 workshop_post_commit for session ${sessionId}, novel ${novelId}`)
+      const { workshopPostCommit } = await import('./services/workshop')
+      await workshopPostCommit(env, sessionId, novelId)
+      console.log(`[Queue] workshop_post_commit 完成`)
+      break
+    }
+
     case 'generate_chapter': {
       const { chapterId, novelId, mode, existingContent, targetWords, issuesContext, enableRAG, enableAutoSummary } = msg.payload
 
@@ -613,6 +622,8 @@ function getNovelId(msg: QueueMessage): string {
       return msg.payload.novelId
     case 'commit_workshop':
       return ''
+    case 'workshop_post_commit':
+      return msg.payload.novelId
     case 'generate_chapter':
       return msg.payload.novelId
     case 'batch_generate_chapter':

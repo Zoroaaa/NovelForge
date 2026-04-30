@@ -105,6 +105,13 @@ export type QueueMessage =
         novelId: string
       }
     }
+  | {
+      type: 'workshop_post_commit'
+      payload: {
+        sessionId: string
+        novelId: string
+      }
+    }
 
 export async function enqueue(
   env: Env,

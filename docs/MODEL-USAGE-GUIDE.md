@@ -126,13 +126,13 @@ NovelForge 共支持 **5 种模型用途**：
 **相关API路由**：
 
 - `POST /workshop/message` - 创作工坊对话
-- `POST /workshop/session/:id/commit` - ⭐v4.4: 提交会话（同步执行+30s超时降级）
+- `POST /workshop/session/:id/commit` - 提交会话（统一入队异步处理）
 
 **配置遗漏影响**：⚠️ 会 fallback 到 `chapter_gen` 配置
 
 **注意**：`workshop` 用途**仅支持全局配置**，不可以在小说工作台中设置。
 
-**⭐v4.4 变更**：commit 操作改为同步执行（限时 30s），超时后降级到异步队列。同步成功时返回 `novelId` 供前端直接跳转。
+**说明**：commit 操作统一入队异步处理。
 
 ---
 

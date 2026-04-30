@@ -1,15 +1,14 @@
 /**
  * @file workshop/commit.ts
- * @description 创作工坊 - 提交逻辑
+ * @description 创作工坊 - 提交逻辑（异步化版本）
  */
 import { drizzle } from 'drizzle-orm/d1'
-import { eq, and, isNull, sql, inArray, asc } from 'drizzle-orm'
+import { eq, and, isNull, sql, asc } from 'drizzle-orm'
 import type { Env } from '../../lib/types'
 import * as schema from '../../db/schema'
 import { enqueue } from '../../lib/queue'
 import type { WorkshopExtractedData } from './types'
-import { buildOutlineContentWithAI } from './helpers'
-import { resolveConfig, generate } from '../llm'
+import { buildOutlineContent } from './helpers'
 
 const {
   workshopSessions,
@@ -27,30 +26,15 @@ const {
 export async function commitWorkshopSession(
   env: Env,
   sessionId: string
-): Promise<{ ok: boolean; novelId?: string; createdItems: any; timedOut?: boolean; vectorizing?: boolean }> {
-  const TIMEOUT_MS = 30000
-
-  try {
-    const result = await Promise.race([
-      commitWorkshopSessionCore(env, sessionId),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('TIMEOUT')), TIMEOUT_MS)
-      )
-    ])
-    return result
-  } catch (e) {
-    if ((e as Error).message === 'TIMEOUT') {
-      await enqueue(env, { type: 'commit_workshop', payload: { sessionId } })
-      return { ok: true, novelId: undefined, createdItems: {}, timedOut: true }
-    }
-    throw e
-  }
+): Promise<{ ok: boolean; novelId?: string; createdItems: any; queued?: boolean }> {
+  await enqueue(env, { type: 'commit_workshop', payload: { sessionId } })
+  return { ok: true, novelId: undefined, createdItems: {}, queued: true }
 }
 
 export async function commitWorkshopSessionCore(
   env: Env,
   sessionId: string
-): Promise<{ ok: boolean; novelId?: string; createdItems: any; vectorizing?: boolean }> {
+): Promise<{ ok: boolean; novelId?: string; createdItems: any }> {
   const db = drizzle(env.DB)
 
   const session = await db
@@ -61,6 +45,10 @@ export async function commitWorkshopSessionCore(
 
   if (!session) {
     throw new Error('Session not found')
+  }
+
+  if (session.status === 'committed') {
+    return { ok: true, novelId: session.novelId ?? undefined, createdItems: {} }
   }
 
   const data: WorkshopExtractedData = JSON.parse(session.extractedData || '{}')
@@ -100,17 +88,8 @@ export async function commitWorkshopSessionCore(
     await db.update(novels).set(updateData).where(eq(novels.id, novelId)).run()
   }
 
-  if (isNewNovel && data.genre) {
-    try {
-      const genrePrompt = await generateGenreSystemPrompt(env, novelId, data)
-      await db.update(novels).set({ systemPrompt: genrePrompt }).where(eq(novels.id, novelId)).run()
-    } catch (e) {
-      console.warn('[commit] 生成genre专属systemPrompt失败，使用默认:', e)
-    }
-  }
-
   if (data.title && (isNewNovel || stage === 'concept')) {
-    const outlineContent = await buildOutlineContentWithAI(env, data)
+    const outlineContent = buildOutlineContent(data)
     await db.delete(masterOutline).where(eq(masterOutline.novelId, novelId)).run()
     const [outline] = await db.insert(masterOutline).values({
       novelId,
@@ -163,17 +142,8 @@ export async function commitWorkshopSessionCore(
       }
 
       const novelSetting = createdSettings[createdSettings.length - 1]
-      try {
-        const { generateSettingSummary } = await import('../agent/summarizer')
-        await generateSettingSummary(env, novelSetting.id)
-      } catch (err) {
-        console.warn('[workshop] 设定摘要生成失败:', err)
-      }
 
       try {
-        const updatedSetting = await db.select().from(novelSettings).where(eq(novelSettings.id, novelSetting.id)).get()
-        const indexContent = updatedSetting?.summary || novelSetting.content.slice(0, 500)
-
         await enqueue(env, {
           type: 'index_content',
           payload: {
@@ -181,7 +151,7 @@ export async function commitWorkshopSessionCore(
             sourceId: novelSetting.id,
             novelId: novelSetting.novelId,
             title: novelSetting.name,
-            content: indexContent,
+            content: novelSetting.content.slice(0, 500),
             extraMetadata: {
               settingType: novelSetting.type,
               importance: novelSetting.importance,
@@ -189,7 +159,7 @@ export async function commitWorkshopSessionCore(
           },
         })
       } catch (err) {
-        console.warn(`[workshop] 设定向量化失败 ${novelSetting.name}:`, err)
+        console.warn(`[workshop] 设定向量化入队失败 ${novelSetting.name}:`, err)
       }
     }
     createdItems.worldSettings = createdSettings
@@ -310,7 +280,7 @@ export async function commitWorkshopSessionCore(
           },
         })
       } catch (err) {
-        console.warn(`[workshop] 角色向量化失败 ${character.name}:`, err)
+        console.warn(`[workshop] 角色向量化入队失败 ${character.name}:`, err)
       }
     }
     createdItems.characters = createdCharacters
@@ -390,13 +360,6 @@ export async function commitWorkshopSessionCore(
       }
       createdVolumes.push(volume)
 
-      try {
-        const { generateVolumeSummary } = await import('../agent/summarizer')
-        await generateVolumeSummary(env, volume.id, novelId)
-      } catch (err) {
-        console.warn('[workshop] 卷摘要生成失败:', err)
-      }
-
       const volumeChapters = volume.id
         ? await db.select({ id: chapters.id, sortOrder: chapters.sortOrder, title: chapters.title })
             .from(chapters)
@@ -472,11 +435,126 @@ export async function commitWorkshopSessionCore(
 
   await rebuildEntityIndex(db, novelId, data, createdItems)
 
+  await enqueue(env, {
+    type: 'workshop_post_commit',
+    payload: { sessionId, novelId },
+  })
+
   await db.update(workshopSessions)
     .set({ status: 'committed', novelId })
     .where(eq(workshopSessions.id, sessionId))
 
-  return { ok: true, novelId, createdItems, vectorizing: true }
+  return { ok: true, novelId, createdItems }
+}
+
+export async function workshopPostCommit(
+  env: Env,
+  sessionId: string,
+  novelId: string
+): Promise<void> {
+  const db = drizzle(env.DB)
+
+  const session = await db
+    .select()
+    .from(workshopSessions)
+    .where(eq(workshopSessions.id, sessionId))
+    .get()
+
+  if (!session) {
+    console.warn('[workshop_post_commit] Session not found:', sessionId)
+    return
+  }
+
+  const data: WorkshopExtractedData = JSON.parse(session.extractedData || '{}')
+
+  if (session.status !== 'committed') {
+    console.warn('[workshop_post_commit] Session not committed yet:', sessionId)
+    return
+  }
+
+  if (data.genre) {
+    try {
+      const { generateGenreSystemPrompt } = await import('./generateGenreSystemPrompt')
+      const genrePrompt = await generateGenreSystemPrompt(env, novelId, data)
+      await db.update(novels).set({ systemPrompt: genrePrompt }).where(eq(novels.id, novelId)).run()
+      console.log(`[workshop_post_commit] genre systemPrompt generated for novel ${novelId}`)
+    } catch (e) {
+      console.warn('[workshop_post_commit] 生成genre专属systemPrompt失败:', e)
+    }
+  }
+
+  if (data.title) {
+    try {
+      const { buildOutlineContentWithAI } = await import('./helpers')
+      const aiOutlineContent = await buildOutlineContentWithAI(env, data)
+      await db.update(masterOutline)
+        .set({ content: aiOutlineContent, wordCount: aiOutlineContent.length })
+        .where(eq(masterOutline.novelId, novelId))
+        .run()
+      console.log(`[workshop_post_commit] AI 总纲生成完成 for novel ${novelId}`)
+    } catch (e) {
+      console.warn(`[workshop_post_commit] AI 总纲生成失败:`, e)
+    }
+  }
+
+  if (data.worldSettings?.length) {
+    const existingSettings = await db
+      .select()
+      .from(novelSettings)
+      .where(and(eq(novelSettings.novelId, novelId), isNull(novelSettings.deletedAt)))
+      .all()
+    const settingMap = new Map(
+      existingSettings.map((s: typeof existingSettings[number]) => [`${s.type}:${s.name}`, s])
+    )
+
+    for (const setting of data.worldSettings) {
+      const key = `${setting.type}:${setting.title}`
+      const existing = settingMap.get(key)
+      if (!existing) continue
+
+      try {
+        const { generateSettingSummary } = await import('../agent/summarizer')
+        await generateSettingSummary(env, existing.id)
+        console.log(`[workshop_post_commit] setting summary generated: ${setting.title}`)
+      } catch (e) {
+        console.warn(`[workshop_post_commit] 设定摘要生成失败 ${setting.title}:`, e)
+      }
+    }
+  }
+
+  if (data.volumes?.length) {
+    const existingVolumes = await db
+      .select()
+      .from(volumes)
+      .where(and(eq(volumes.novelId, novelId), isNull(volumes.deletedAt)))
+      .all()
+    const volumeMap = new Map(existingVolumes.map((v: typeof existingVolumes[number]) => [v.title, v]))
+
+    for (const vol of data.volumes) {
+      const existing = volumeMap.get(vol.title)
+      if (!existing) continue
+
+      try {
+        const { generateVolumeSummary } = await import('../agent/summarizer')
+        await generateVolumeSummary(env, existing.id, novelId)
+        console.log(`[workshop_post_commit] volume summary generated: ${vol.title}`)
+      } catch (e) {
+        console.warn(`[workshop_post_commit] 卷摘要生成失败 ${vol.title}:`, e)
+      }
+    }
+  }
+
+  if (data.title && data.worldSettings) {
+    try {
+      const { generateMasterOutlineSummary } = await import('../agent/summarizer')
+      await generateMasterOutlineSummary(env, novelId)
+      console.log(`[workshop_post_commit] 总纲摘要生成完成 for novel ${novelId}`)
+    } catch (e) {
+      console.warn(`[workshop_post_commit] 总纲摘要生成失败:`, e)
+    }
+  }
+
+  console.log(`[workshop_post_commit] 完成 for novel ${novelId}`)
 }
 
 export async function rebuildEntityIndex(
@@ -557,81 +635,4 @@ export async function rebuildEntityIndex(
       }).onConflictDoNothing().run()
     }
   }
-}
-
-export async function generateGenreSystemPrompt(env: Env, novelId: string, data: WorkshopExtractedData, extraContext?: string): Promise<string> {
-  const db = drizzle(env.DB)
-  let llmConfig
-  try {
-    llmConfig = await resolveConfig(db, 'summary_gen', novelId)
-  } catch {
-    try {
-      llmConfig = await resolveConfig(db, 'chapter_gen', novelId)
-    } catch {
-      throw new Error('未配置摘要或章节生成模型，请先在模型配置中添加')
-    }
-  }
-
-  const contextParts: string[] = []
-
-  try {
-    const protagonist = await db.select({ name: schema.characters.name, powerLevel: schema.characters.powerLevel, description: schema.characters.description })
-      .from(schema.characters)
-      .where(and(
-        eq(schema.characters.novelId, novelId),
-        eq(schema.characters.role, 'protagonist'),
-        sql`${schema.characters.deletedAt} IS NULL`
-      ))
-      .limit(1)
-      .get()
-    if (protagonist) {
-      contextParts.push(`主角：${protagonist.name}${protagonist.powerLevel ? '，当前境界：' + protagonist.powerLevel : ''}${protagonist.description ? '，简介：' + protagonist.description.slice(0, 200) : ''}`)
-    }
-  } catch {}
-
-  try {
-    const settings = await db.select({ name: schema.novelSettings.name, type: schema.novelSettings.type, category: schema.novelSettings.category, content: schema.novelSettings.content, summary: schema.novelSettings.summary })
-      .from(schema.novelSettings)
-      .where(and(
-        eq(schema.novelSettings.novelId, novelId),
-        inArray(schema.novelSettings.category, ['worldview', 'power_system']),
-        sql`${schema.novelSettings.deletedAt} IS NULL`
-      ))
-      .limit(10)
-      .all()
-    for (const s of settings) {
-      contextParts.push(`设定【${s.category}】${s.name}：${s.summary || s.content?.slice(0, 300) || ''}`)
-    }
-  } catch {}
-
-  if (data.genre) contextParts.push(`题材类型：${data.genre}`)
-  if (data.coreAppeal?.length) contextParts.push(`核心卖点：${data.coreAppeal.join('；')}`)
-  if (data.description) contextParts.push(`故事简介：${data.description.slice(0, 300)}`)
-  if (data.writingRules?.length) contextParts.push(`写作规则：${data.writingRules.map(r => r.content || r).join('；')}`)
-  if (extraContext) contextParts.push(extraContext)
-
-  const result = await generate(llmConfig, [
-    {
-      role: 'system',
-      content: `你是一位资深网文编辑，擅长为不同题材的小说定制写作风格指导。请根据给定的小说信息，生成一段专属的写作系统提示词（system prompt）。
-
-要求：
-1. 按以下类别结构输出，每个类别用【】标签标注：
-   【题材定位】一句话概括题材类型和核心路子
-   【基础信息】世界名、主角、境界体系（从设定中提取，没有则省略）
-   【写作技巧】该题材特有的写法要点
-   【节奏控制】爽点安排、悬念设置、突破节奏等
-   【注意事项】禁止项、特殊规则等
-2. 总字数400-600字
-3. 直接输出提示词内容，不要加标题或解释
-4. 不要包含硬性约束（角色一致性、设定一致性等），这些由系统自动注入
-5. 不要包含工具使用规范，这些由系统自动注入`,
-    },
-    {
-      role: 'user',
-      content: contextParts.join('\n'),
-    },
-  ])
-
-  return result.text.trim()
 }

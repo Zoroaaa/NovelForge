@@ -217,52 +217,64 @@ POST /api/workshop/session/:id/re-extract
 - 早期轮次的数据不会被后续轮次覆盖，只修改同键值字段
 - 非数组字段仍保持"后覆盖前"行为
 
-### 3.5 提交会话 ⭐ v4.4 增强
+### 3.5 提交会话（异步队列模式）
 
 **请求**
 ```json
 POST /api/workshop/session/:id/commit
 ```
 
-**响应** ⭐v4.4 变更
+**响应**
 ```json
 {
   "ok": true,
-  "novelId": "新建小说的ID",        // ← v4.4: 同步执行时返回，超时降级时为 undefined
-  "createdItems": {
-    "novel": {...},
-    "outline": {...},
-    "worldSettings": [...],
-    "characters": [...],
-    "volumes": [...],
-    "writingRules": [...]
-  },
-  "timedOut": false,               // ⭐v4.4 新增：是否因超时降级到队列模式
-  "vectorizing": true              // ⭐v4.4 新增：向量化队列中有待处理任务
+  "queued": true,
+  "message": "创作数据已成功提交到数据库！"
 }
 ```
 
-**⭐v4.4 执行模式变更**：
+**前端行为**：Toast "✅ 提交已加入队列，请稍后在小说列表查看"
 
-| 模式 | 行为 | 返回值 |
-|------|------|--------|
-| **同步执行**（<30s） | 直接调用 `commitWorkshopSessionCore` | `novelId` 有值, `timedOut=false` |
-| **超时降级**（≥30s） | 入队异步处理 | `novelId=undefined`, `timedOut=true` |
+**⭐执行架构 — 两阶段队列**：
 
-**前端行为**（[WorkshopPage.tsx](file:///d:/user/NovelForge/src/pages/WorkshopPage.tsx#L219-L233)）：
-- `novelId && !timedOut` → Toast "提交成功！正在跳转..." → 800ms 后跳转 `/novel/{id}`
-- `timedOut` → Toast "⏳ 提交量大，后台处理中（约1-2分钟），请在小说列表查看"
-- `vectorizing` → 延迟 1.5s Toast "📡 正在建立语义索引（约 30 秒）"
+| 阶段 | 队列消息 | 说明 |
+|------|----------|------|
+| 第一阶段 | `commit_workshop` | 纯 DB 写入，快速完成，无 AI 调用 |
+| 第二阶段 | `workshop_post_commit` | AI 摘要生成，异步处理 |
+
+**第一阶段 `commit_workshop` 处理内容**：
+- `novels` 表记录创建
+- `masterOutline` 表记录（**模板生成**，非 AI）
+- `novelSettings` 表记录 + 向量化入队
+- `characters` 表记录 + 向量化入队
+- `writingRules` 表记录
+- `volumes` 表记录（含 foreshadowing 伏笔记录）
+- `entityIndex` 实体索引
+- 设置 `workshopSessions.status = 'committed'`
+- 入队 `workshop_post_commit`
+
+**第二阶段 `workshop_post_commit` 处理内容**（按顺序）：
+1. 生成 genre 专属 `systemPrompt`（AI）
+2. AI 流式生成总纲内容（覆盖模板版本）
+3. 生成设定摘要（AI，每个设定）
+4. 生成卷摘要（AI，每卷）
+5. 生成总纲摘要（AI，基于 AI 生成后的总纲内容）
+
+**防重机制**：
+- `commit_workshop` 执行前检查 `session.status === 'committed'`，已提交则跳过
+- `workshop_post_commit` 执行前检查 `session.status !== 'committed'`，未提交则跳过
+- 所有写入操作均为 upsert，不会创建重复记录
 
 **说明**：提交后会创建完整的小说项目，包括：
 - `novels` 表记录
-- `masterOutline` 表记录（由 AI 生成总纲内容）
-- `novelSettings` 表记录（如有世界设定）
-- `characters` 表记录（如有角色）
+- `masterOutline` 表记录（**模板版本**，AI 版本由 `workshop_post_commit` 异步生成覆盖）
+- `novelSettings` 表记录 + 向量化（如有世界设定）
+- `characters` 表记录 + 向量化（如有角色）
 - `volumes` 表记录（如有卷纲）
 - `writingRules` 表记录（如有创作规则）
-- `foreshadowing` 表记录（从卷纲的伏笔规划中提取）⭐v4.4：三态区分（open / resolve_planned）
-- `entityIndex` 实体索引更新
+- `foreshadowing` 表记录（从卷纲的伏笔规划中提取）：三态区分（open / resolve_planned）
+- `entityIndex` 实体索引
+- `workshopSessions.status` 标记为 `'committed'`
 
 ---
 
@@ -628,8 +640,9 @@ eventLine 条数 = targetChapterCount**
 步骤 6：提交创建
    └─ 点击"提交创建小说"
    └─ 确认对话框显示将创建的内容
-   └─ 确认后，数据写入数据库
-   └─ 自动跳转到小说工作区
+   └─ 确认后，数据写入数据库，提交加入队列
+   └─ Toast 提示"✅ 提交已加入队列，请稍后在小说列表查看"
+   └─ AI 总纲/摘要由队列异步生成，可在小说工作区稍后查看
 ```
 
 ### 7.2 继续已有小说创作 ⭐v4.4 增强
@@ -761,6 +774,7 @@ while (true) {
 - **消息历史**：每次对话后保存到 `workshopSessions.messages`
 - **提取数据**：每次 AI 回复后保存到 `workshopSessions.extractedData`
 - **提交后**：从会话提取数据写入正式表（novels, characters 等）
+- **提交后 AI 处理**：通过两阶段队列（`commit_workshop` → `workshop_post_commit`）异步生成总纲及各类摘要
 
 ### 9.5 错误恢复与容错
 
@@ -832,16 +846,17 @@ while (true) {
 
 ---
 
-## 十二、文件索引 (v1.11.0)
+## 十二、文件索引
 
 ### 后端服务模块 (server/services/workshop/)
 
 | 文件 | 说明 |
 |------|------|
-| [index.ts](file:///d:/开发项目/NovelForge/server/services/workshop/index.ts) | 统一导出入口，处理消息的核心逻辑 |
-| [commit.ts](file:///d:/user/NovelForge/server/services/workshop/commit.ts) | commit 逻辑：⭐v4.4 同步执行+超时降级、伏笔三态+chapterId、阶段门控移除 |
-| [extract.ts](file:///d:/user/NovelForge/server/services/workshop/extract.ts) | 数据提取服务，含 JSON 容错、兜底提取、⭐v4.4 数组 upsert 合并 |
-| [helpers.ts](file:///d:/开发项目/NovelForge/server/services/workshop/helpers.ts) | 辅助函数，总纲内容构建 |
+| [index.ts](file:///d:/开发项目/NovelForge/server/services/workshop/index.ts) | 统一导出入口 |
+| [commit.ts](file:///d:/user/NovelForge/server/services/workshop/commit.ts) | commit 逻辑 + workshopPostCommit AI 后处理（两阶段队列） |
+| [generateGenreSystemPrompt.ts](file:///d:/user/NovelForge/server/services/workshop/generateGenreSystemPrompt.ts) | AI 生成小说 genre 专属 systemPrompt |
+| [extract.ts](file:///d:/user/NovelForge/server/services/workshop/extract.ts) | 数据提取服务，含 JSON 容错、兜底提取、数组 upsert 合并 |
+| [helpers.ts](file:///d:/开发项目/NovelForge/server/services/workshop/helpers.ts) | 辅助函数：总纲模板构建 + AI 流式生成总纲 |
 | [prompt.ts](file:///d:/开发项目/NovelForge/server/services/workshop/prompt.ts) | 分阶段 Prompt，含详细格式模板 |
 | [session.ts](file:///d:/开发项目/NovelForge/server/services/workshop/session.ts) | 会话管理，加载小说上下文 |
 | [types.ts](file:///d:/开发项目/NovelForge/server/services/workshop/types.ts) | 类型定义 |
