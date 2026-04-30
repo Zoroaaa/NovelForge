@@ -19,7 +19,7 @@ import {
   embedText,
   fetchContentForIndexing,
 } from '../services/embedding'
-import { vectorIndex, novelSettings, characters as charactersTable, masterOutline, foreshadowing } from '../db/schema'
+import { vectorIndex, novelSettings, characters as charactersTable, masterOutline, foreshadowing, novels } from '../db/schema'
 import { enqueue, enqueueBatch, QueueMessage } from '../lib/queue'
 
 const router = new Hono<{ Bindings: Env }>()
@@ -520,3 +520,60 @@ router.post(
 )
 
 export { router as vectorize }
+
+router.delete('/orphan-indexes', async (c) => {
+  if (!c.env.VECTORIZE) {
+    return c.json({ error: 'Vectorize binding not configured' }, 503)
+  }
+
+  const db = drizzle(c.env.DB)
+
+  const allNovelIds = await db
+    .select({ id: novels.id })
+    .from(novels)
+    .all()
+
+  const validNovelIds = new Set(allNovelIds.map(n => n.id))
+
+  const orphanedVectors = await db
+    .select({ id: vectorIndex.id, novelId: vectorIndex.novelId, sourceType: vectorIndex.sourceType, sourceId: vectorIndex.sourceId })
+    .from(vectorIndex)
+    .all()
+
+  const orphansToDelete = orphanedVectors.filter(v => !validNovelIds.has(v.novelId))
+
+  if (orphansToDelete.length === 0) {
+    return c.json({ ok: true, deleted: 0, message: '没有发现残留索引' })
+  }
+
+  let deletedCount = 0
+  for (const v of orphansToDelete) {
+    await c.env.VECTORIZE.deleteByIds([v.id]).catch(() => {})
+    await db.delete(vectorIndex).where(eq(vectorIndex.id, v.id)).run()
+    deletedCount++
+  }
+
+  return c.json({ ok: true, deleted: deletedCount, message: `已清空 ${deletedCount} 条残留索引` })
+})
+
+router.post('/clear-all', async (c) => {
+  if (!c.env.VECTORIZE) {
+    return c.json({ error: 'Vectorize binding not configured' }, 503)
+  }
+
+  const db = drizzle(c.env.DB)
+
+  const allVectors = await db.select({ id: vectorIndex.id }).from(vectorIndex).all()
+
+  if (allVectors.length === 0) {
+    return c.json({ ok: true, deleted: 0, message: '没有索引记录' })
+  }
+
+  for (const v of allVectors) {
+    await c.env.VECTORIZE.deleteByIds([v.id]).catch(() => {})
+  }
+
+  await db.delete(vectorIndex).run()
+
+  return c.json({ ok: true, deleted: allVectors.length, message: `已清空全部 ${allVectors.length} 条索引记录` })
+})

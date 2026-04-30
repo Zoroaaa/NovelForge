@@ -70,6 +70,8 @@ export default function AiMonitorPage() {
   const [isSearching, setIsSearching] = useState(false)
   const [isReindexing, setIsReindexing] = useState(false)
   const [isIndexingMissing, setIsIndexingMissing] = useState(false)
+  const [isClearingOrphans, setIsClearingOrphans] = useState(false)
+  const [isClearingAll, setIsClearingAll] = useState(false)
   const [contextChapterId, setContextChapterId] = useState<string>('')
   const [contextResult, setContextResult] = useState<any>(null)
   const [isLoadingContext, setIsLoadingContext] = useState(false)
@@ -175,6 +177,33 @@ export default function AiMonitorPage() {
       queryClient.invalidateQueries({ queryKey: ['vector-stats'] })
     } catch {
       toast.error('实体树重建失败')
+    }
+  }
+
+  const handleClearOrphanIndexes = async () => {
+    if (!confirm('确定要清空残留索引吗？这将删除所有已不存在的小说的向量索引残留。')) return
+    setIsClearingOrphans(true)
+    try {
+      const result = await api.vectorize.clearOrphanIndexes()
+      toast.success(result.message, { duration: 5000 })
+    } catch (e: any) {
+      toast.error(`清空残留索引失败：${e.message || '未知错误'}`, { duration: 8000 })
+    } finally {
+      setIsClearingOrphans(false)
+    }
+  }
+
+  const handleClearAllIndexes = async () => {
+    if (!confirm('确定要清空全部索引吗？清空后所有小说的向量索引将被删除，需要手动重建！')) return
+    setIsClearingAll(true)
+    try {
+      const result = await api.vectorize.clearAllIndexes()
+      toast.success(result.message, { duration: 5000 })
+      queryClient.invalidateQueries({ queryKey: ['vector-stats'] })
+    } catch (e: any) {
+      toast.error(`清空全部索引失败：${e.message || '未知错误'}`, { duration: 8000 })
+    } finally {
+      setIsClearingAll(false)
     }
   }
 
@@ -615,6 +644,51 @@ export default function AiMonitorPage() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <ServiceStatusCheck novelId={selectedNovelId} />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5" />
+                      索引维护
+                    </CardTitle>
+                    <CardDescription>清理残留索引数据</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <Button
+                      variant="destructive"
+                      className="w-full"
+                      onClick={handleClearOrphanIndexes}
+                      disabled={isClearingOrphans}
+                    >
+                      {isClearingOrphans ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <AlertTriangle className="w-4 h-4 mr-2" />
+                      )}
+                      清空残留索引
+                    </Button>
+                    <p className="text-sm text-muted-foreground text-center">
+                      删除已不存在的小说的向量索引残留
+                    </p>
+
+                    <Button
+                      variant="destructive"
+                      className="w-full"
+                      onClick={handleClearAllIndexes}
+                      disabled={isClearingAll}
+                    >
+                      {isClearingAll ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <AlertTriangle className="w-4 h-4 mr-2" />
+                      )}
+                      清空全部索引
+                    </Button>
+                    <p className="text-sm text-muted-foreground text-center">
+                      清空后需手动重建每个小说的向量索引
+                    </p>
                   </CardContent>
                 </Card>
               </div>

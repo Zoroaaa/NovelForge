@@ -356,6 +356,10 @@ export const api = {
       req<{ ok: boolean; message: string; novelId: string; stats: { settings: number; characters: number; foreshadowing: number } }>('/api/vectorize/index-missing', { method: 'POST', body: j(body) }),
     getStatus: () =>
       req<{ status: string; message: string; embeddingModel?: string; dimensions?: number }>('/api/vectorize/status'),
+    clearOrphanIndexes: () =>
+      req<{ ok: boolean; deleted: number; message: string }>('/api/vectorize/orphan-indexes', { method: 'DELETE' }),
+    clearAllIndexes: () =>
+      req<{ ok: boolean; deleted: number; message: string }>('/api/vectorize/clear-all', { method: 'POST' }),
   },
 
   // 模型配置管理
