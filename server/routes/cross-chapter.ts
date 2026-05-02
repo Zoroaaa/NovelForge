@@ -13,7 +13,11 @@ import {
   characterGrowthLog,
   characterRelationships,
   chapterStructuredData,
+  chapters,
 } from '../db/schema'
+import { extractEntitiesFromChapter, persistExtractedEntities } from '../services/agent/entityExtract'
+import { trackCharacterGrowth } from '../services/agent/characterGrowth'
+import { detectEntityConflicts } from '../services/agent/entityConflict'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -259,6 +263,71 @@ router.get('/stats', async (c) => {
     growthRecordCount: growthCount,
     relationshipCount,
   })
+})
+
+// ── 手动触发章节实体提取 ───────────────────────────────────────────
+
+router.post('/extract-entities', async (c) => {
+  const body = await c.req.json()
+  const { chapterId, novelId } = body
+
+  if (!chapterId || !novelId) {
+    return c.json({ error: 'chapterId and novelId are required' }, 400)
+  }
+
+  const db = drizzle(c.env.DB)
+
+  const chapter = await db
+    .select({ id: chapters.id })
+    .from(chapters)
+    .where(eq(chapters.id, chapterId))
+    .limit(1)
+
+  if (chapter.length === 0) {
+    return c.json({ error: 'Chapter not found' }, 404)
+  }
+
+  try {
+    const extractResult = await extractEntitiesFromChapter(c.env, chapterId, novelId)
+    const { entityCount, stateChangeCount } = await persistExtractedEntities(c.env, chapterId, novelId, extractResult)
+
+    let growthCount = 0
+    let relationshipCount = 0
+    let conflictCount = 0
+
+    try {
+      const growthResult = await trackCharacterGrowth(c.env, chapterId, novelId, extractResult)
+      growthCount = growthResult.growthCount
+      relationshipCount = growthResult.relationshipCount
+    } catch (growthError) {
+      console.warn('[CrossChapter] Step 8 (character growth) failed:', growthError)
+    }
+
+    try {
+      const conflictResult = await detectEntityConflicts(c.env, chapterId, novelId)
+      conflictCount = conflictResult.conflictCount
+    } catch (conflictError) {
+      console.warn('[CrossChapter] Step 9 (entity conflict) failed:', conflictError)
+    }
+
+    return c.json({
+      success: true,
+      entityCount,
+      stateChangeCount,
+      growthCount,
+      relationshipCount,
+      conflictCount,
+      extractedEntities: extractResult.entities.length,
+      characterGrowths: extractResult.characterGrowths.length,
+      knowledgeReveals: extractResult.knowledgeReveals.length,
+    })
+  } catch (error) {
+    console.error('[CrossChapter] Manual entity extraction failed:', error)
+    return c.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }, 500)
+  }
 })
 
 export { router as crossChapterRouter }

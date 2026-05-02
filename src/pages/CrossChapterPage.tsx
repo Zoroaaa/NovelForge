@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import {
   ArrowLeft, AlertTriangle,
   Database, TrendingUp, Network, Trash2, CheckCircle2,
+  RefreshCw, Loader2,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -18,6 +19,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 
 const ENTITY_TYPE_LABELS: Record<string, string> = {
   character: '角色', artifact: '法宝', technique: '功法',
@@ -41,10 +45,17 @@ export default function CrossChapterPage() {
   const [activeTab, setActiveTab] = useState('entities')
   const [entityTypeFilter, setEntityTypeFilter] = useState<string>('')
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
+  const [selectedChapterId, setSelectedChapterId] = useState<string>('')
 
   const { data: stats } = useQuery({
     queryKey: ['crossChapterStats', novelId],
     queryFn: () => api.crossChapter.getStats(novelId!),
+    enabled: !!novelId,
+  })
+
+  const { data: chapters = [] } = useQuery({
+    queryKey: ['chapters', novelId],
+    queryFn: () => api.chapters.list(novelId!),
     enabled: !!novelId,
   })
 
@@ -96,6 +107,28 @@ export default function CrossChapterPage() {
     onError: (error: Error) => toast.error(`操作失败: ${error.message}`),
   })
 
+  const extractEntitiesMutation = useMutation({
+    mutationFn: ({ chapterId, novelId }: { chapterId: string; novelId: string }) =>
+      api.crossChapter.extractEntities(chapterId, novelId),
+    onSuccess: (result) => {
+      if (result.success) {
+        toast.success(
+          `提取完成：新增 ${result.entityCount} 个实体，` +
+          `${result.stateChangeCount} 条状态记录，` +
+          `${result.growthCount} 条成长记录，` +
+          `${result.conflictCount} 个碰撞检测`
+        )
+        queryClient.invalidateQueries({ queryKey: ['inlineEntities', novelId] })
+        queryClient.invalidateQueries({ queryKey: ['crossChapterStats', novelId] })
+        queryClient.invalidateQueries({ queryKey: ['characterGrowth', novelId] })
+        queryClient.invalidateQueries({ queryKey: ['entityConflicts', novelId] })
+      } else {
+        toast.error(`提取失败: ${result.error}`)
+      }
+    },
+    onError: (error: Error) => toast.error(`提取失败: ${error.message}`),
+  })
+
   const headerActions = (
     <div className="flex items-center gap-3">
       <Link to={`/novels/${novelId}`}>
@@ -136,6 +169,9 @@ export default function CrossChapterPage() {
               </TabsTrigger>
               <TabsTrigger value="relationships">
                 <Network className="h-4 w-4 mr-1" /> 关系网络
+              </TabsTrigger>
+              <TabsTrigger value="extract">
+                <RefreshCw className="h-4 w-4 mr-1" /> 手动提取
               </TabsTrigger>
             </TabsList>
 
@@ -296,6 +332,84 @@ export default function CrossChapterPage() {
                   ))}
                 </div>
               )}
+            </TabsContent>
+
+            <TabsContent value="extract" className="space-y-4">
+              <div className="border rounded-lg p-6 space-y-4">
+                <div>
+                  <h3 className="text-lg font-medium mb-2">手动提取章节实体</h3>
+                  <p className="text-sm text-muted-foreground">
+                    当自动提取因网络问题失败时，可使用此功能手动选择章节进行实体提取。
+                    该功能会调用 LLM 分析章节内容，提取新出现的实体和状态变化。
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="w-64 space-y-2">
+                    <label className="text-sm font-medium">选择章节</label>
+                    <Select value={selectedChapterId} onValueChange={setSelectedChapterId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="请选择章节..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {chapters.length === 0 ? (
+                          <SelectItem value="empty" disabled>暂无可用章节</SelectItem>
+                        ) : (
+                          chapters
+                            .filter(ch => ch.status === 'generated' || ch.status === 'draft')
+                            .sort((a, b) => a.sortOrder - b.sortOrder)
+                            .map(ch => (
+                              <SelectItem key={ch.id} value={ch.id}>
+                                第{ch.sortOrder}章 - {ch.title || '未命名'}
+                              </SelectItem>
+                            ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="pt-6">
+                    <Button
+                      onClick={() => {
+                        if (selectedChapterId && novelId) {
+                          extractEntitiesMutation.mutate({ chapterId: selectedChapterId, novelId })
+                        }
+                      }}
+                      disabled={!selectedChapterId || extractEntitiesMutation.isPending}
+                    >
+                      {extractEntitiesMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          提取中...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          开始提取
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {extractEntitiesMutation.isError && (
+                  <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+                    <p className="text-sm text-destructive">
+                      提取失败：请检查网络连接和 analysis 模型配置
+                    </p>
+                  </div>
+                )}
+
+                <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                  <h4 className="text-sm font-medium">常见问题</h4>
+                  <ul className="text-xs text-muted-foreground space-y-1">
+                    <li>• 524 错误通常是由于 LLM API 响应超时导致</li>
+                    <li>• 请检查 "analysis" 模型的 API 配置是否正确</li>
+                    <li>• 建议使用响应更快的模型服务</li>
+                    <li>• 已生成章节的内容越多，提取耗时可能越长</li>
+                  </ul>
+                </div>
+              </div>
             </TabsContent>
           </Tabs>
       </div>

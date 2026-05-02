@@ -791,6 +791,19 @@ export const api = {
         inlineEntityCount: number; pendingConflictCount: number
         growthRecordCount: number; relationshipCount: number
       }>(`/api/cross-chapter/stats?novelId=${novelId}`),
+    extractEntities: (chapterId: string, novelId: string) =>
+      req<{
+        success: boolean
+        entityCount: number
+        stateChangeCount: number
+        growthCount: number
+        relationshipCount: number
+        conflictCount: number
+        extractedEntities: number
+        characterGrowths: number
+        knowledgeReveals: number
+        error?: string
+      }>('/api/cross-chapter/extract-entities', { method: 'POST', body: j({ chapterId, novelId }), timeout: 180000 }),
   },
 }
 
