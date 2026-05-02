@@ -398,9 +398,9 @@ router.post('/validate', zValidator('json', ValidateSchema), async (c) => {
     `【第${i + 1}章】《${ch.title}》\n${(ch.content || '').slice(0, 2000)}`
   ).join('\n\n---\n\n')
 
-  const validatePrompt = `你是一个小说境界分析专家。请根据以下最近 ${recentChapters.length} 章的内容，判断角色"${charRow.name}"的**当前实际境界**。
+  const validatePrompt = `你是一个小说实力/成长体系分析专家。请根据以下最近 ${recentChapters.length} 章的内容，判断角色"${charRow.name}"的**当前实际实力等级**。
 
-【角色数据库记录的境界】：
+【角色数据库记录的实力】：
 ${dbPowerLevel ? `体系：${dbPowerLevel.system}，当前：${dbPowerLevel.current}` : '无记录'}
 
 【最近章节内容】：
@@ -408,17 +408,17 @@ ${chapterTexts}
 
 请以JSON格式输出（只输出JSON，不要其他内容）：
 {
-  "assessedSystem": "判断出的境界体系名称",
-  "assessedCurrent": "判断出的当前实际境界",
+  "assessedSystem": "判断出的力量/成长体系名称（使用小说中出现的原始名称）",
+  "assessedCurrent": "判断出的当前实际等级（使用小说中出现的原始名称）",
   "isConsistent": true/false,
   "confidence": "high/medium/low",
   "reasoning": "50字以内的判断依据",
-  "suggestion": "如果不一致，给出建议更新的境界值（与assessedCurrent相同即可）"
+  "suggestion": "如果不一致，给出建议更新的等级值（与assessedCurrent相同即可）"
 }
 
 判断标准：
 - 综合所有章节的描述来判断角色当前实力水平
-- 如果最新章节明确提到了新的境界变化，以最新的为准
+- 如果最新章节明确提到了新的实力变化，以最新的为准
 - 如果数据库记录与你的判断一致，isConsistent 为 true
 - confidence 表示判断置信度：高（多次明确提及）/ 中（有暗示但不够明确）/ 低（信息不足）`
 

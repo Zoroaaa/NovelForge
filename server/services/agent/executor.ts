@@ -52,7 +52,7 @@ export async function executeAgentTool(
 
       return JSON.stringify(
         rows.reverse().map(r => ({
-          chapter: `第${r.sortOrder + 1}章 ${r.title}`,
+          chapter: r.title,
           summary: r.summary,
         })),
         null, 2

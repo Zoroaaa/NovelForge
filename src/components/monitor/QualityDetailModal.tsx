@@ -57,12 +57,7 @@ export function QualityDetailModal({ chapter, onClose }: QualityDetailModalProps
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
-            <span>第{chapter.chapterNumber}章 质量诊断报告</span>
-            {chapter.title && (
-              <Badge variant="outline" className="font-normal">
-                {chapter.title}
-              </Badge>
-            )}
+            <span className="truncate">{chapter.title || '未命名章节'} 质量诊断报告</span>
           </DialogTitle>
         </DialogHeader>
 

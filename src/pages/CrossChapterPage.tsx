@@ -59,6 +59,11 @@ export default function CrossChapterPage() {
     enabled: !!novelId,
   })
 
+  const chaptersMap = chapters.reduce((acc, ch) => {
+    acc[ch.sortOrder] = ch.title || '未命名'
+    return acc
+  }, {} as Record<number, string>)
+
   const { data: entities = [], isLoading: entitiesLoading } = useQuery({
     queryKey: ['inlineEntities', novelId, entityTypeFilter],
     queryFn: () => api.crossChapter.getInlineEntities(novelId!, {
@@ -220,8 +225,8 @@ export default function CrossChapterPage() {
                         <p className="text-xs text-muted-foreground">别名：{entity.aliases}</p>
                       )}
                       <p className="text-xs text-muted-foreground">
-                        首次出现：第{entity.firstChapterOrder}章
-                        {entity.lastChapterOrder && ` · 最后出现：第${entity.lastChapterOrder}章`}
+                        首次出现：{chaptersMap[entity.firstChapterOrder] || `第${entity.firstChapterOrder}章`}
+                        {entity.lastChapterOrder && ` · 最后出现：${chaptersMap[entity.lastChapterOrder] || `第${entity.lastChapterOrder}章`}`}
                       </p>
                     </div>
                   ))}
@@ -293,7 +298,7 @@ export default function CrossChapterPage() {
                         <Badge variant="outline">
                           {GROWTH_DIMENSION_LABELS[record.growthDimension] || record.growthDimension}
                         </Badge>
-                        <span className="text-xs text-muted-foreground">第{record.chapterOrder}章</span>
+                        <span className="text-xs text-muted-foreground">{chaptersMap[record.chapterOrder] || `第${record.chapterOrder}章`}</span>
                       </div>
                       <div className="text-sm">
                         {record.prevState && <span className="text-muted-foreground">{record.prevState} → </span>}
@@ -360,7 +365,7 @@ export default function CrossChapterPage() {
                             .sort((a, b) => a.sortOrder - b.sortOrder)
                             .map(ch => (
                               <SelectItem key={ch.id} value={ch.id}>
-                                第{ch.sortOrder}章 - {ch.title || '未命名'}
+                                {ch.title || '未命名'}
                               </SelectItem>
                             ))
                         )}

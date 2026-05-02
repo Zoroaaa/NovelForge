@@ -51,11 +51,11 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
 1. 纯文本描述的设定内容
 2. Markdown 格式的设定文档
 3. JSON 格式的设定对象（可能包含 type, name, content 等字段）
-4. 世界观、境界体系、势力组织、地理环境、宝物功法等各类设定
+4. 世界观、力量/成长体系、势力组织、地理环境、技能/道具等各类设定
 
 支持的设定类型（type）：
 - worldview: 世界观
-- power_system: 境界体系
+- power_system: 力量/成长体系
 - faction: 势力组织
 - geography: 地理环境
 - item_skill: 宝物功法
@@ -106,7 +106,7 @@ const MODULE_PROMPTS: Record<ImportTargetModule, string> = {
   "role": "protagonist | supporting | antagonist | minor",
   "description": "综合描述（简要版，2-3句话概括）",
   "aliases": ["别名1", "别名2"],
-  "powerLevel": "战斗力等级（如果是玄幻/修仙类）",
+  "powerLevel": "实力/成长等级（使用本小说设定中已定义的等级名称，若未设定可留空）",
   "relationships": ["关联角色A（关系描述）", "关联角色B（关系描述）"],
   "attributes": {
     "appearance": "外貌描述（身高、体型、容貌特征等）",

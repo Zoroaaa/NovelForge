@@ -58,11 +58,7 @@ function ChapterListItem({
       className={`w-full flex items-center justify-between p-4 border rounded-lg transition-all ${getOverallColor()}`}
     >
       <div className="flex items-center gap-4 min-w-0 flex-1">
-        <div className="font-semibold text-base whitespace-nowrap">
-          第{chapter.chapterNumber}章
-        </div>
-
-        <div className="text-sm text-muted-foreground truncate max-w-[150px]">
+        <div className="font-semibold text-base whitespace-nowrap truncate">
           {chapter.title || '未命名章节'}
         </div>
 

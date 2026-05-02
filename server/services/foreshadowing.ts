@@ -123,7 +123,7 @@ export async function extractForeshadowingFromChapter(
       extractConfig = await resolveConfig(db, 'analysis', novelId)
       extractConfig.apiKey = extractConfig.apiKey || ''
     } catch (error) {
-      throw new Error(`❌ 未配置"智能分析"模型！请在全局配置中设置 analysis 阶段的模型（用于伏笔提取、境界检测等分析任务）`)
+      throw new Error(`❌ 未配置"智能分析"模型！请在全局配置中设置 analysis 阶段的模型（用于伏笔提取、实力检测等分析任务）`)
     }
 
     const openCount = existingOpen.length

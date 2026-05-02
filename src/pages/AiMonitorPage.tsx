@@ -443,7 +443,7 @@ export default function AiMonitorPage() {
                         <SelectContent>
                           {chapters?.map((chapter: any) => (
                             <SelectItem key={chapter.id} value={chapter.id}>
-                              第{chapter.chapterNumber}章 - {chapter.title || '未命名章节'}
+                              {chapter.title || '未命名章节'}
                             </SelectItem>
                           ))}
                         </SelectContent>

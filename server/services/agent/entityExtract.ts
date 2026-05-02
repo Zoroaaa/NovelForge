@@ -76,7 +76,7 @@ const EXTRACT_SYSTEM_PROMPT = `${JSON_OUTPUT_PROMPT}
       "name": "实体名称",
       "description": "一句话描述（来自原文）",
       "aliases": "别名（可选）",
-      "stateType": "如果实体有初始状态则填写（如境界等级）",
+      "stateType": "如果实体有初始状态则填写（如实力等级、品阶等，使用本小说设定的名称）",
       "initState": "初始状态描述",
       "isGrowable": true/false
     }

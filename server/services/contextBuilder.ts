@@ -924,7 +924,7 @@ async function fetchRecentSummaries(
       rows = rows.reverse()
     }
 
-    return rows.map((r: any) => `[第${r.sortOrder + 1}章 ${r.title}] ${r.summary}`)
+    return rows.map((r: any) => `[${r.title}] ${r.summary}`)
   } catch (error) {
     console.error('[contextBuilder] fetchRecentSummaries failed:', error)
     return []
@@ -1463,7 +1463,7 @@ export function assemblePromptContext(bundle: ContextBundle, options?: AssembleO
   if (shouldInclude('worldSettings')) {
     const settingParts: string[] = []
     if (s.worldRules.length > 0) settingParts.push(`【世界法则】\n${s.worldRules.join('\n')}`)
-    if (s.powerSystem.length > 0) settingParts.push(`【境界体系】\n${s.powerSystem.join('\n')}`)
+    if (s.powerSystem.length > 0) settingParts.push(`【力量/成长体系】\n${s.powerSystem.join('\n')}`)
     if (s.geography.length > 0) settingParts.push(`【场景地理】\n${s.geography.join('\n')}`)
     if (s.factions.length > 0) settingParts.push(`【相关势力】\n${s.factions.join('\n')}`)
     if (s.artifacts.length > 0) settingParts.push(`【相关法宝】\n${s.artifacts.join('\n')}`)

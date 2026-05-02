@@ -189,6 +189,13 @@ async function finishPostProcess(
   taskId?: string,
   volumeId?: string,
 ): Promise<void> {
+  // 后处理完成，将 post_processing 改回终态 generated
+  const db = drizzle(env.DB)
+  await db.update(chapters)
+    .set({ status: 'generated' })
+    .where(eq(chapters.id, chapterId))
+    .run()
+
   if (!env.TASK_QUEUE) return
 
   if (taskId && volumeId) {

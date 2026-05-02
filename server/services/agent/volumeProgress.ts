@@ -205,7 +205,7 @@ export async function checkVolumeProgress(
   if (chaptersWithSummary.length >= 1 && (hasBlueprint || hasEventLine)) {
     const recentChapters = chaptersWithSummary.slice(-5)
     const summariesText = recentChapters
-      .map(ch => `【第${ch.sortOrder + 1}章 "${ch.title}" 摘要】\n${ch.summary}`)
+      .map(ch => `【${ch.title} 摘要】\n${ch.summary}`)
       .join('\n\n')
 
     const eventLineContext = hasEventLine
@@ -219,7 +219,7 @@ export async function checkVolumeProgress(
     const rhythmPrompt = `你是小说节奏健康诊断专家。请对比各章节摘要与卷纲的吻合度，识别节奏偏离问题。
 
 【诊断维度】（每个章节摘要包含以下四维度）：
-- 角色状态变化：角色境界突破、能力获得、属性变化
+- 角色状态变化：角色实力提升/突破、能力获得、重要属性变化
 - 关键事件：主线剧情的起因、过程、结果
 - 道具/功法：新出现或使用的道具、功法、丹药
 - 章末状态：主角位置、处境、下一步方向
