@@ -67,7 +67,7 @@ export default function CrossChapterPage() {
   const { data: entities = [], isLoading: entitiesLoading } = useQuery({
     queryKey: ['inlineEntities', novelId, entityTypeFilter],
     queryFn: () => api.crossChapter.getInlineEntities(novelId!, {
-      entityType: entityTypeFilter || undefined,
+      ...(entityTypeFilter !== '' && { entityType: entityTypeFilter }),
     }),
     enabled: !!novelId && activeTab === 'entities',
   })
@@ -226,7 +226,7 @@ export default function CrossChapterPage() {
                       )}
                       <p className="text-xs text-muted-foreground">
                         首次出现：{chaptersMap[entity.firstChapterOrder] || `第${entity.firstChapterOrder}章`}
-                        {entity.lastChapterOrder && ` · 最后出现：${chaptersMap[entity.lastChapterOrder] || `第${entity.lastChapterOrder}章`}`}
+                        {entity.lastChapterOrder !== null && entity.lastChapterOrder !== undefined && ` · 最后出现：${chaptersMap[entity.lastChapterOrder] || `第${entity.lastChapterOrder}章`}`}
                       </p>
                     </div>
                   ))}
