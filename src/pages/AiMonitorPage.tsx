@@ -186,9 +186,31 @@ export default function AiMonitorPage() {
     setIsClearingAll(true)
     try {
       const result = await api.vectorize.clearAllIndexes()
-      toast.success(result.message, { duration: 5000 })
+
+      let detailMessage = result.message || '清空完成'
+      if (result.deletedFromBinding !== undefined) {
+        detailMessage += `\n✅ Binding 删除: ${result.deletedFromBinding} 条`
+      }
+      if (result.deletedFromREST !== undefined && result.deletedFromREST > 0) {
+        detailMessage += `\n✅ REST API 删除: ${result.deletedFromREST} 条`
+      }
+      if (result.localRecordsCleared !== undefined) {
+        detailMessage += `\n📝 本地记录清除: ${result.localRecordsCleared} 条`
+      }
+      if (result.durationMs !== undefined) {
+        detailMessage += `\n⏱️ 耗时: ${(result.durationMs / 1000).toFixed(2)} 秒`
+      }
+      if (result.errors && result.errors.length > 0) {
+        detailMessage += `\n⚠️ 遇到 ${result.errors.length} 个问题:\n${result.errors.join('\n')}`
+        toast.warning(detailMessage, { duration: 10000 })
+      } else {
+        toast.success(detailMessage, { duration: 5000 })
+      }
+
+      console.log('[clear-all] 详细结果:', JSON.stringify(result, null, 2))
       queryClient.invalidateQueries({ queryKey: ['vector-stats'] })
     } catch (e: any) {
+      console.error('[clear-all] 清空失败:', e)
       toast.error(`清空全部索引失败：${e.message || '未知错误'}`, { duration: 8000 })
     } finally {
       setIsClearingAll(false)

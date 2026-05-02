@@ -15,7 +15,7 @@ interface NovelStore {
   /** 当前活动章节ID */
   activeChapterId: string | null
   /** 侧边栏当前标签页 */
-  sidebarTab: 'outline' | 'chapters' | 'characters' | 'settings' | 'rules' | 'volumes' | 'foreshadowing' | 'power-level' | 'entity-tree' | 'graph' | 'trash'
+  sidebarTab: 'outline' | 'chapters' | 'characters' | 'settings' | 'rules' | 'volumes' | 'foreshadowing' | 'power-level' | 'entity-tree' | 'graph' | 'cross-chapter' | 'trash'
   /** 设置当前活动小说 */
   setActiveNovel: (id: string) => void
   /** 设置当前活动章节 */

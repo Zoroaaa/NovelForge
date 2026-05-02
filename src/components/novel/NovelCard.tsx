@@ -33,6 +33,7 @@ import {
   Layers,
   Wand2,
   Loader2,
+  Shield,
 } from 'lucide-react'
 import type { Novel } from '@/lib/types'
 
@@ -309,6 +310,10 @@ export function NovelCard({ novel, onEdit, onDelete, onStatusChange, onWorkshopO
           <DropdownMenuItem onClick={() => navigate(`/novels/${novel.id}`)}>
             <BookOpen className="mr-2 h-4 w-4" />
             进入工作台
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate(`/novels/${novel.id}/cross-chapter`)}>
+            <Shield className="mr-2 h-4 h-4" />
+            跨章一致性
           </DropdownMenuItem>
           {onWorkshopOpen && (
             <>

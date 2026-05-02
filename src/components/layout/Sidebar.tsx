@@ -27,6 +27,7 @@ import {
   TreePine,
   Trash2,
   Network,
+  Shield,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState, useMemo } from 'react'
@@ -74,6 +75,7 @@ const TAB_GROUPS: TabGroup[] = [
     items: [
       { value: 'entity-tree', label: '实体树', icon: TreePine },
       { value: 'graph', label: '图谱', icon: Network },
+      { value: 'cross-chapter', label: '跨章一致性', icon: Shield },
       { value: 'trash', label: '回收站', icon: Trash2 },
     ] as const,
   },
@@ -122,6 +124,9 @@ export function Sidebar({ novelId, onChapterSelect }: SidebarProps) {
         return <EntityTreePanel novelId={novelId} onChapterSelect={onChapterSelect} />
       case 'graph':
         navigate(`/novels/${novelId}/graph`)
+        return null
+      case 'cross-chapter':
+        navigate(`/novels/${novelId}/cross-chapter`)
         return null
       case 'trash':
         return <TrashPanel novelId={novelId} />
