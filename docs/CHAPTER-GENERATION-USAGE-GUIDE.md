@@ -1,8 +1,8 @@
 # NovelForge 章节生成 — 完整使用指南
 
-> 版本: v1.1.0 | 模块: 前端 `GeneratePanel.tsx` + 后端 `routes/generate.ts` + `routes/batch.ts`
-> 相关文档: [章节上下文构建指南](./CHAPTER-GENERATION-CONTEXT-GUIDE.md) | [导入数据指南](./IMPORT-DATA-GUIDE.md)
-> 创建日期: 2026-04-30 | 最后更新: 2026-04-30
+> 版本: v1.2.0 | 模块: 前端 `GeneratePanel.tsx` + 后端 `routes/generate.ts` + `routes/batch.ts` + `routes/cross-chapter.ts`
+> 相关文档: [章节上下文构建指南](./CHAPTER-GENERATION-CONTEXT-GUIDE.md) | [跨章一致性指南](./CROSS-CHAPTER-CONSISTENCY-GUIDE.md) | [导入数据指南](./IMPORT-DATA-GUIDE.md)
+> 创建日期: 2026-04-30 | 最后更新: 2026-05-02
 
 ---
 
@@ -16,13 +16,14 @@
 
 | 能力 | 说明 |
 |------|------|
-| **智能上下文构建** | 自动组装 10 槽位上下文（~100-128k tokens），确保生成内容连贯 |
+| **智能上下文构建** | 自动组装 12 槽位上下文（~100-151k tokens），确保生成内容连贯 |
 | **SSE 流式输出** | 实时显示 AI 生成过程，用户体验流畅 |
 | **自动质量检查** | 生成后自动进行连贯性检查，评分 < 70 时自动修复 |
 | **自动修复写库** | ⭐v4.5：修复结果自动保存到数据库，不再丢失 |
 | **草稿预览模式** | ⭐v4.5：跳过后处理，快速迭代多版本对比 |
 | **批量生成** | 支持一次启动多章生成任务，后台队列串行执行 |
 | **历史记录查询** | ⭐v4.5：可查看所有批量任务的执行历史 |
+| **跨章一致性防御** | ⭐v2.1：三层防御体系（上下文注入+生成约束+后处理固化），12 槽位含内联实体与角色关系网络 |
 
 ### 1.3 两种生成模式对比
 
@@ -924,6 +925,12 @@ history.tasks.forEach((task, index) => {
 ├─ 使用角色一致性检查验证关键章节
 ├─ 检查伏笔回收情况
 └─ 根据检查结果微调后续生成
+
+阶段 5：跨章一致性管理 ⭐v2.1 新增
+├─ 定期查看"跨章一致性"管理页面（内联实体/实体碰撞/角色成长/关系网络）
+├─ 处理实体碰撞（确认/忽略/手动修正）
+├─ 检查角色成长轨迹是否合理
+└─ 维护角色关系网络快照
 ```
 
 ### 6.2 参数推荐配置
@@ -955,10 +962,19 @@ history.tasks.forEach((task, index) => {
 | [generation.ts (service)](file:///d:/user/NovelForge/server/services/agent/generation.ts) | 章节生成服务（含草稿模式） |
 | [batchGenerate.ts](file:///d:/user/NovelForge/server/services/agent/batchGenerate.ts) | 批量生成服务（任务管理） |
 | [coherence.ts](file:///d:/user/NovelForge/server/services/agent/coherence.ts) | 连贯性检查与自动修复 |
+| [postProcess.ts](file:///d:/user/NovelForge/server/services/agent/postProcess.ts) | ⭐v2.1 后处理管线（10 步链式队列） |
+| [entityExtract.ts](file:///d:/user/NovelForge/server/services/agent/entityExtract.ts) | ⭐v2.1 LLM 实体提取（Step 7） |
+| [characterGrowth.ts](file:///d:/user/NovelForge/server/services/agent/characterGrowth.ts) | ⭐v2.1 角色成长追踪（Step 8） |
+| [entityConflict.ts](file:///d:/user/NovelForge/server/services/agent/entityConflict.ts) | ⭐v2.1 实体碰撞检测（Step 9） |
+| [messages.ts](file:///d:/user/NovelForge/server/services/agent/messages.ts) | ⭐v2.1 硬性约束 A-I（含 F-I 跨章约束） |
+| [tools.ts](file:///d:/user/NovelForge/server/services/agent/tools.ts) | ⭐v2.1 ReAct 工具集（8 个，含 3 个跨章工具） |
 | [constants.ts](file:///d:/user/NovelForge/server/services/agent/constants.ts) | 全局常量（超时 300s） |
+| **跨章一致性** | |
+| [cross-chapter.ts (route)](file:///d:/user/NovelForge/server/routes/cross-chapter.ts) | ⭐v2.1 跨章一致性 API（10 个端点） |
+| [CrossChapterPage.tsx](file:///d:/user/NovelForge/src/pages/CrossChapterPage.tsx) | ⭐v2.1 跨章一致性管理页（4 个 Tab） |
 | **基础设施** | |
-| [queue-handler.ts](file:///d:/user/NovelForge/server/queue-handler.ts) | 队列处理器（批量任务执行） |
-| [contextBuilder.ts](file:///d:/user/NovelForge/server/services/contextBuilder.ts) | 上下文构建引擎（10 槽体系） |
+| [queue-handler.ts](file:///d:/user/NovelForge/server/queue-handler.ts) | 队列处理器（批量任务 + 后处理管线） |
+| [contextBuilder.ts](file:///d:/user/NovelForge/server/services/contextBuilder.ts) | 上下文构建引擎（12 槽体系，含 Slot-10 内联实体 + Slot-11 关系网络） |
 | [types.ts](file:///d:/user/NovelForge/server/services/agent/types.ts) | 类型定义（GenerationOptions） |
 
 ---
@@ -967,6 +983,7 @@ history.tasks.forEach((task, index) => {
 
 | 版本 | 日期 | 主要更新 |
 |------|------|---------|
+| **v1.2.0** | 2026-05-02 | ⭐v2.1 更新：新增跨章一致性三层防御体系说明、12 槽位上下文、后处理管线链式拆分、文件索引扩展 |
 | **v1.1.0** | 2026-04-30 | ⭐v2.4.0 更新：完善草稿模式说明、添加修复模式详细流程 |
 | **v1.0.0** | 2026-04-30 | 初始版本，涵盖单章+批量生成全流程 |
 
@@ -974,14 +991,15 @@ history.tasks.forEach((task, index) => {
 
 ## 九、相关文档
 
-- [章节上下文构建指南](./CHAPTER-GENERATION-CONTEXT-GUIDE.md) - 上下文构建十槽体系详解
+- [章节上下文构建指南](./CHAPTER-GENERATION-CONTEXT-GUIDE.md) - 上下文构建十二槽体系详解
+- [跨章一致性指南](./CROSS-CHAPTER-CONSISTENCY-GUIDE.md) - ⭐v2.1 三层防御体系、内联实体、角色成长、碰撞检测
 - [创作工坊执行指南](./WORKSHOP-EXECUTION-GUIDE.md) - 对话式创作流程
 - [模型使用指南](./MODEL-USAGE-GUIDE.md) - 模型配置与管理
 - [API 文档](./API.md) - 完整 API 参考
 
 ---
 
-> 文档版本：v1.0.0
-> 最后更新：2026-04-30
+> 文档版本：v1.2.0
+> 最后更新：2026-05-02
 > 维护者：NovelForge 开发团队
-> 基于 v4.5 代码库编写（含自动修复写库、草稿模式、SSE 时序优化、批量历史查询等功能）
+> 基于 v2.1 代码库编写（含跨章一致性防御、12 槽位上下文、后处理管线链式拆分、自动修复写库、草稿模式等功能）

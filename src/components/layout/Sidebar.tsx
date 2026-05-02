@@ -26,12 +26,9 @@ import {
   Swords,
   TreePine,
   Trash2,
-  Network,
-  Shield,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
 
 interface SidebarProps {
   novelId: string
@@ -54,19 +51,19 @@ const TAB_GROUPS: TabGroup[] = [
     label: '内容',
     items: [
       { value: 'chapters', label: '章节', icon: BookOpen },
-      { value: 'characters', label: '角色', icon: Users },
-      { value: 'settings', label: '设定', icon: Layers },
+      { value: 'volumes', label: '卷', icon: Library },
+      { value: 'outline', label: '总纲', icon: AlignLeft },
     ] as const,
   },
   {
     id: 'structure',
     label: '结构',
     items: [
-      { value: 'volumes', label: '卷', icon: Library },
-      { value: 'outline', label: '总纲', icon: AlignLeft },
+      { value: 'rules', label: '规则', icon: ScrollText },
+      { value: 'settings', label: '设定', icon: Layers },
+      { value: 'characters', label: '角色', icon: Users },
       { value: 'foreshadowing', label: '伏笔', icon: Bookmark },
       { value: 'power-level', label: '境界', icon: Swords },
-      { value: 'rules', label: '规则', icon: ScrollText },
     ] as const,
   },
   {
@@ -74,8 +71,6 @@ const TAB_GROUPS: TabGroup[] = [
     label: '管理',
     items: [
       { value: 'entity-tree', label: '实体树', icon: TreePine },
-      { value: 'graph', label: '图谱', icon: Network },
-      { value: 'cross-chapter', label: '跨章一致性', icon: Shield },
       { value: 'trash', label: '回收站', icon: Trash2 },
     ] as const,
   },
@@ -83,7 +78,6 @@ const TAB_GROUPS: TabGroup[] = [
 
 export function Sidebar({ novelId, onChapterSelect }: SidebarProps) {
   const { sidebarTab, setSidebarTab } = useNovelStore()
-  const navigate = useNavigate()
 
   // 计算当前激活的Tab分组
   const activeGroup = useMemo(
@@ -122,12 +116,6 @@ export function Sidebar({ novelId, onChapterSelect }: SidebarProps) {
         return <PowerLevelPanel novelId={novelId} />
       case 'entity-tree':
         return <EntityTreePanel novelId={novelId} onChapterSelect={onChapterSelect} />
-      case 'graph':
-        navigate(`/novels/${novelId}/graph`)
-        return null
-      case 'cross-chapter':
-        navigate(`/novels/${novelId}/cross-chapter`)
-        return null
       case 'trash':
         return <TrashPanel novelId={novelId} />
       default:

@@ -5,7 +5,7 @@
  * @modified 2026-04-26 - 增加小说设置Tab（System Prompt）
  */
 import { Link } from 'react-router-dom'
-import { ArrowLeft, BookOpen, Settings2, Home, Save, Network, Sparkles } from 'lucide-react'
+import { ArrowLeft, BookOpen, Settings2, Home, Save, Network, Sparkles, Shield } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ExportDialog } from '@/components/export/ExportDialog'
 import { Input } from '@/components/ui/input'
@@ -171,6 +171,13 @@ export function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
         </Dialog>
 
         <ExportDialog novelId={novel.id} novelTitle={novel.title} />
+
+        <Button variant="outline" size="sm" className="gap-2" asChild>
+          <Link to={`/novels/${novel.id}/cross-chapter`}>
+            <Shield className="h-4 w-4" />
+            <span className="hidden sm:inline">跨章一致性</span>
+          </Link>
+        </Button>
 
         <Button variant="outline" size="sm" className="gap-2" asChild>
           <Link to={`/novels/${novel.id}/graph`}>

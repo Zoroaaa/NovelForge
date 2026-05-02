@@ -4,12 +4,11 @@
  * @version 1.0.0
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Graph } from '@antv/g6'
 import { api } from '@/lib/api'
-import { MainLayout } from '@/components/layout/MainLayout'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -33,6 +32,7 @@ import {
   Loader2,
   Sparkles,
   Download,
+  ArrowLeft,
 } from 'lucide-react'
 import type { GraphData, PlotNode, Volume, Chapter } from '@/lib/types'
 
@@ -406,6 +406,11 @@ export default function GraphPage() {
 
   const headerActions = (
     <div className="flex items-center gap-2">
+      <Link to={`/novels/${novelId}`}>
+        <Button variant="ghost" size="sm" className="gap-1.5">
+          <ArrowLeft className="h-4 w-4" /> 返回工作台
+        </Button>
+      </Link>
       <Button
         variant="outline"
         size="sm"
@@ -433,12 +438,16 @@ export default function GraphPage() {
   )
 
   return (
-    <MainLayout
-      headerTitle="情节图谱"
-      headerSubtitle={novelData?.title || '加载中...'}
-      headerActions={headerActions}
-    >
-      <div className="flex h-[calc(100vh-4rem)]">
+    <div className="h-screen flex flex-col bg-background">
+      <header className="h-14 border-b bg-card/50 backdrop-blur-sm flex items-center justify-between px-6 shrink-0">
+        <div className="flex items-center gap-3">
+          <h1 className="text-lg font-semibold">情节图谱</h1>
+          <p className="text-sm text-muted-foreground">{novelData?.title || '加载中...'}</p>
+        </div>
+        {headerActions}
+      </header>
+
+      <div className="flex-1 flex overflow-hidden">
         {/* 左侧控制面板 */}
         <div className="w-72 shrink-0 border-r border-border/50 bg-background overflow-y-auto">
           <div className="p-4 space-y-5">
@@ -680,6 +689,6 @@ export default function GraphPage() {
           )}
         </div>
       </div>
-    </MainLayout>
+    </div>
   )
 }

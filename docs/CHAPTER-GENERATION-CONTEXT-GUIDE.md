@@ -1,8 +1,8 @@
 # NovelForge 章节生成上下文构建 — 完整执行指南
 
-> 版本: v2.4.0 | 模块: `server/services/contextBuilder.ts` + `server/routes/generate.ts` + `server/services/agent/generation.ts`
-> 前端页面: [NovelWorkspacePage.tsx](file:///d:/user/NovelForge/src/pages/NovelWorkspacePage.tsx)（小说工作台）
-> 创建日期: 2026-04-25 | 最后更新: 2026-04-30
+> 版本: v2.5.0 | 模块: `server/services/contextBuilder.ts` + `server/routes/generate.ts` + `server/services/agent/generation.ts` + `server/routes/cross-chapter.ts`
+> 前端页面: [NovelWorkspacePage.tsx](file:///d:/user/NovelForge/src/pages/NovelWorkspacePage.tsx)（小说工作台）+ [CrossChapterPage.tsx](file:///d:/user/NovelForge/src/pages/CrossChapterPage.tsx)（跨章一致性管理）
+> 创建日期: 2026-04-25 | 最后更新: 2026-05-02
 
 ---
 
@@ -18,7 +18,7 @@
 
 | 能力 | 说明 |
 |------|------|
-| **精准分槽** | 10 个独立槽位（Slot），每个槽位独立预算控制 |
+| **精准分槽** | 12 个独立槽位（Slot-0~Slot-11），每个槽位独立预算控制 |
 | **智能 RAG** | 向量检索只负责"找相关 ID"，DB 提供完整数据 |
 | **动态适配** | 根据章节类型（战斗/修炼/情感）动态匹配世界设定 |
 | **高优兜底** | 高重要性伏笔 DB 直查，不依赖 RAG score |
@@ -32,12 +32,16 @@
 | **草稿预览模式** | ⭐v4.5 新增：支持跳过后处理（摘要/伏笔/评分），快速迭代多版本对比 |
 | **SSE 时序优化** | ⭐v4.5 新增：`[DONE]` 事件移至连贯性检查完成后发送，避免前端状态混乱 |
 | **超时统一配置** | ⭐v4.5 新增：全局统一 300 秒超时（路由层 + ReAct 循环），消除竞态窗口 |
+| **跨章上下文注入** | ⭐v2.1 新增：Slot-10 关键词精确匹配内联实体 + Slot-11 角色关系网络注入 |
+| **生成时硬性约束** | ⭐v2.1 新增：HARD_CONSTRAINTS F-I（情感/动机/境界/单章约束）防止跨章矛盾 |
+| **后处理固化** | ⭐v2.1 新增：10 步链式后处理管线（Step 7/8/9 实体提取→成长追踪→碰撞检测） |
+| **跨章管理面板** | ⭐v2.1 新增：前端 4 Tab 管理页（内联实体/碰撞/成长/关系网络） |
 
-### 1.3 上下文构建十槽体系
+### 1.3 上下文构建十二槽体系 ⭐v2.1 扩展
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                 章节生成上下文构建十槽体系                       │
+│                 章节生成上下文构建十二槽体系 ⭐v2.1              │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  【Core 层 - 固定数据（DB 直查）】                               │
@@ -47,17 +51,23 @@
 │  │ Slot-2  │ 上一章正文     │ DB chapters.content 完整内容    │ │
 │  │ Slot-3  │ 主角状态卡     │ DB characters (protagonist)     │ │
 │  │ Slot-4  │ 全部创作规则   │ DB writingRules (isActive=1)    │ │
-│  │ Slot-10 │ 创作节奏把控   │ DB novels/volumes.wordCount     │ │
+│  │ (Core)  │ 创作节奏把控   │ DB novels/volumes.wordCount     │ │
 │  └─────────┴───────────────┴────────────────────────────────┘ │
 │                                                                 │
 │  【Dynamic 层 - 动态数据（RAG+DB）】                            │
 │  ┌─────────┬───────────────┬────────────────────────────────┐ │
 │  │ Slot-5  │ 出场角色卡     │ RAG(character)→DB完整卡片      │ │
-│  │ Slot-6  │ 世界设定       │ RAG(setting)分6槽：普通显示【名称】+summary，high直接替换DB全文 │ │
+│  │ Slot-6  │ 世界设定       │ RAG(setting)分6槽：普通显示     │ │
+│  │         │               │ 【名称】+summary，high直接替换   │ │
+│  │         │               │ DB全文                          │ │
 │  │ Slot-7  │ 待回收伏笔     │ DB高优兜底 + RAG普通伏笔        │ │
 │  │ Slot-8  │ 本章类型规则   │ DB category匹配                │ │
 │  │ Slot-9  │ 近期剧情摘要链 │ DB chapters.summary × 20章     │ │
+│  │ Slot-10 │ 内联实体 ⭐    │ DB关键词精确匹配前文已知实体    │ │
+│  │ Slot-11 │ 关系网络 ⭐    │ DB角色关系网络快照              │ │
 │  └─────────┴───────────────┴────────────────────────────────┘ │
+│                                                                 │
+│  ⭐ Slot-10/11 为 v2.1 跨章一致性新增，详见跨章一致性指南       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -139,6 +149,19 @@ buildChapterContext(env, novelId, chapterId)
 │       ├─→ importance='high'：直接替换为 DB content 全文（不再显示RAG摘要）
 │       └─→ 每个设定之间空行分隔
 │
+├── Step 3b: Slot-10 关键词精确匹配（内联实体）⭐v2.1 新增
+│   └─ DB 查询 novelInlineEntities 表
+│      ├─ 提取上一章正文 + 当前章节标题中的关键词
+│      ├─ 精确匹配实体名（name 字段 IN 查询）
+│      ├─ 仅查 deletedAt IS NULL 的有效实体
+│      └─ 按实体类型分组组装（角色/地点/物品/势力/功法/事件）
+│
+├── Step 3c: Slot-11 关系网络注入 ⭐v2.1 新增
+│   └─ DB 查询 characterRelationships 表
+│      ├─ 查询主角（protagonist）的关系网络快照
+│      ├─ 双向匹配：characterIdA OR characterIdB 均命中
+│      └─ 按关系类型组装（师徒/敌对/盟友/道侣/亲属等）
+│
 ├── Step 4: Core Token 预算检查
 │   └─ 超预算时从尾部弹出规则项（规则优先级最低）
 │
@@ -146,13 +169,13 @@ buildChapterContext(env, novelId, chapterId)
     └─→ assemblePromptContext() → 最终 prompt 字符串
 ```
 
-### 2.3 预算分配 v4.1
+### 2.3 预算分配 v2.1
 
 | 槽位 | 层级 | 预算 (tokens) | 数据来源 |
 |------|------|--------------|---------|
 | 总纲 (Slot-0) | L0 Core | ≤12000 | DB masterOutline.content |
 | 卷规划 (Slot-1) | L0 Core | ≤2000 | DB volumes.{blueprint,eventLine} |
-| **创作节奏把控 (Slot-10)** | L0 Core | ≤500 | **DB novels.wordCount + volumes.wordCount** ⭐v4.1新增 |
+| **创作节奏把控** | L0 Core | ≤500 | **DB novels.wordCount + volumes.wordCount** ⭐v4.1新增 |
 | 上一章正文 (Slot-2) | L0 Core | ≤8000 | DB chapters.content（完整内容） |
 | 主角卡 (Slot-3) | L0 Core | ≤3000 | DB characters(protagonist) |
 | 创作规则 (Slot-4) | L0 Core | ≤8000 | DB writingRules(isActive=1) |
@@ -162,7 +185,9 @@ buildChapterContext(env, novelId, chapterId)
 | 世界设定 (Slot-6) | L2 Dynamic | ≤25000 | RAG(setting)：普通【名称】+summary，high替换DB全文 |
 | 待回收伏笔 (Slot-7) | L2 Dynamic | ≤10000 | DB高优兜底 + RAG(foreshadowing) |
 | 本章规则 (Slot-8) | L2 Dynamic | ≤8000 | DB writingRules(category匹配) |
-| **总计** | | **≤128000** (~90k 中文字) | |
+| **内联实体 (Slot-10)** | L2 Dynamic | **≤15000** | **DB关键词精确匹配 ⭐v2.1新增** |
+| **关系网络 (Slot-11)** | L2 Dynamic | **≤8000** | **DB角色关系网络 ⭐v2.1新增** |
+| **总计** | | **≤151000** (~106k 中文字) | |
 
 ---
 
@@ -280,7 +305,9 @@ POST /api/generate/preview-context
         "artifacts": ["..."],
         "misc": ["..."]
       },
-      "chapterTypeRules": ["[节奏] ...", "..."]
+      "chapterTypeRules": ["[节奏] ...", "..."],
+      "inlineEntities": ["【角色名】(角色) ...", "..."],         // ⭐v2.1
+      "characterRelationships": ["【角色A→角色B】(师徒) ..."]   // ⭐v2.1
     },
     "debug": {
       "totalTokenEstimate": 85000,
@@ -295,7 +322,9 @@ POST /api/generate/preview-context
         "characterCards": 8000,
         "foreshadowing": 3000,
         "settings": 12000,
-        "chapterTypeRules": 1000
+        "chapterTypeRules": 1000,
+        "inlineEntities": 5000,       // ⭐v2.1
+        "characterRelationships": 2000 // ⭐v2.1
       },
       "ragQueriesCount": 3,
       "buildTimeMs": 450,
@@ -342,6 +371,8 @@ export interface ContextBundle {
     relevantForeshadowing: string[]   // 待回收伏笔
     relevantSettings: SlottedSettings // 分槽世界设定
     chapterTypeRules: string[]       // 本章类型规则
+    inlineEntities: string[]         // ⭐v2.1 Slot-10 关键词匹配内联实体
+    characterRelationships: string[] // ⭐v2.1 Slot-11 角色关系网络
   }
   debug: {
     totalTokenEstimate: number         // 总 token 估算
@@ -393,6 +424,8 @@ export interface BudgetTier {
   foreshadowing: number
   settings: number
   rules: number
+  inlineEntities: number     // ⭐v2.1 Slot-10 内联实体预算
+  relationships: number      // ⭐v2.1 Slot-11 关系网络预算
   total: number
 }
 ```
@@ -927,6 +960,18 @@ const findChapterLine = (chapterNum) => lines.find(l => l.match(new RegExp(`第$
 [节奏] 战斗章节需紧凑
 {rule content}
 ...
+
+## 已知内联实体 ⭐v2.1 Slot-10
+以下实体在前文已出现，本章如需引用请保持一致：
+【青云门】(势力) - 正道第一大宗，掌门清虚真人
+【玄天剑】(物品) - 林岩的本命飞剑，品阶：中品灵器
+...
+
+## 角色关系网络 ⭐v2.1 Slot-11
+主角当前社交关系（截至上一章）：
+【林岩→苏清婉】道侣 | 关系描述：共同修炼，互相信任
+【林岩→王虎】师兄弟 | 关系描述：同门师兄，性格稳重
+...
 ```
 
 ---
@@ -1217,7 +1262,8 @@ debug: {
 masterOutlineContent, volumeBlueprint, volumeEventLine,
 prevChapterContent, protagonistCards, activeRules,
 summaryChain, characterCards, foreshadowing,
-settings, chapterTypeRules
+settings, chapterTypeRules,
+inlineEntities, characterRelationships   ⭐v2.1 新增
 ```
 
 前端 AiMonitorPage 可直接展示这些数据用于调优。
@@ -1247,42 +1293,48 @@ CREATE INDEX idx_novel_settings_importance
 
 ---
 
-## 十二、v3 → v4 → v4.1 → v4.2 → v4.3 → v4.3.2 → v4.4 迁移对照
+## 十二、v3 → v4 → v4.1 → v4.2 → v4.3 → v4.3.2 → v4.4 → v2.1 迁移对照
 
-| 维度 | v3 | v4 | v4.1 | v4.2 | v4.3 | v4.3.2 | **v4.4** | 变化原因 |
-|------|----|----|------|------|------|---------|---------|---------|
-| 总纲 | 可能空的 summary | content 全文（≤12k） | **不变** | **不变** | **不变** | **不变** | **不变** | 256k 够用 |
-| 上一章 | context 摘要 | context 摘要 | **正文完整内容（≤8k）** | **不变** | **不变** | **不变** | **不变** | 摘要信息不足 |
-| 角色 | RAG 返回 500字碎片 | RAG 返回 ID → DB 完整卡片 | **阈值 0.50→0.38, MAX 8→6** | **阈值 0.38→0.45, 排除主角** | **不变** | **不变** | **⭐动态阈值 0.45→0.35** | 小规模角色集零结果 |
-| 设定 | RAG 返回全文切块 | RAG 返回 summary（≤400字） | **阈值全面下调 0.55-0.72→0.42-0.48** | **Slot预算精细化** | **不变** | **优化** | **不变** | 适应更大预算 |
-| 伏笔 | 仅 RAG 过滤 | 高优 DB 兜底 + RAG | **阈值 0.55→0.42** | **按创建时间排序，高优限制10→15** | **不变** | **不变** | **⭐路径C：回收计划±10章窗口注入** | 时序感知伏笔调度 |
-| 规则 | priority≤2 前5条 | 全部 isActive 规则 | **不变** | **新增fetchAllActiveRuleIds，Slot-8自动排除已注入规则** | **不变** | **不变** | **不变** | 避免重复注入 |
-| 摘要链 | 默认 5 章 | 默认 20 章 | **不变** | **不变** | **不变** | **不变** | **⭐volumeId 约束，优先同卷** | 跨卷摘要不连贯 |
-| **创作节奏** | 无 | 无 | **新增 Slot-10** | **不变** | **不变** | **不变** | **不变** | 帮助 AI 均衡节奏 |
-| 预算 | total=14k | total=55k | **total=128k** | **不变** | **不变** | **不变** | **不变** | 利用窗口 |
-| RAG查询 | 整卷eventLine+整章正文 | 整卷eventLine+整章正文 | **不变** | **不变** | **聚焦当前章节语义，≤800字** | **优化查询文本构建** | **⭐+上章末尾400字** | 最强语义锚 |
-| RAG 次数 | 3 次 | **3 次** | **不变** | **不变** | **不变** | **不变** | **⭐VECTORIZE不可用时DB兜底(0次)** | 可靠性 |
-| 向量类型 | 6 种 | **3 种** | **不变** | **不变** | **不变** | **不变** | **不变** | 聚焦上下文构建 |
-| 单任务最大 chunks | 12+（超时） | **≤1** | **不变** | **不变** | **不变** | **不变** | **不变** | 安全 |
-| Slot过滤 | 无 | 无 | 无 | **新增slotFilter选项** | **不变** | **不变** | **⭐续写/重写补全上下文槽** | AI 知道更多上下文 |
-| eventLine格式 | 纯文本 | 纯文本 | **不变** | **不变** | **纯文本正则匹配** | **不变** | **⭐JSON数组格式首选** | O(1)索引零歧义 |
-| inferChapterType | - | - | - | - | **整卷eventLine** | **不变** | **⭐currentEvent精确推断** | 类型判断收敛 |
-| **调试信息** | 无 | 无 | 无 | 无 | **新增queryText+ragRawResults** | **增强调试信息** | **⭐+ragFallbackUsed** | VECTORIZE兜底监控 |
+| 维度 | v3 | v4 | v4.1 | v4.2 | v4.3 | v4.3.2 | **v4.4** | **v2.1** | 变化原因 |
+|------|----|----|------|------|------|---------|---------|---------|---------|
+| 总纲 | 可能空的 summary | content 全文（≤12k） | **不变** | **不变** | **不变** | **不变** | **不变** | **不变** | 256k 够用 |
+| 上一章 | context 摘要 | context 摘要 | **正文完整内容（≤8k）** | **不变** | **不变** | **不变** | **不变** | **不变** | 摘要信息不足 |
+| 角色 | RAG 返回 500字碎片 | RAG 返回 ID → DB 完整卡片 | **阈值 0.50→0.38, MAX 8→6** | **阈值 0.38→0.45, 排除主角** | **不变** | **不变** | **⭐动态阈值 0.45→0.35** | **不变** | 小规模角色集零结果 |
+| 设定 | RAG 返回全文切块 | RAG 返回 summary（≤400字） | **阈值全面下调 0.55-0.72→0.42-0.48** | **Slot预算精细化** | **不变** | **优化** | **不变** | **不变** | 适应更大预算 |
+| 伏笔 | 仅 RAG 过滤 | 高优 DB 兜底 + RAG | **阈值 0.55→0.42** | **按创建时间排序，高优限制10→15** | **不变** | **不变** | **⭐路径C：回收计划±10章窗口注入** | **不变** | 时序感知伏笔调度 |
+| 规则 | priority≤2 前5条 | 全部 isActive 规则 | **不变** | **新增fetchAllActiveRuleIds，Slot-8自动排除已注入规则** | **不变** | **不变** | **不变** | **不变** | 避免重复注入 |
+| 摘要链 | 默认 5 章 | 默认 20 章 | **不变** | **不变** | **不变** | **不变** | **⭐volumeId 约束，优先同卷** | **不变** | 跨卷摘要不连贯 |
+| **创作节奏** | 无 | 无 | **新增 Slot-10** | **不变** | **不变** | **不变** | **不变** | **降为 Core 辅助项** | Slot 编号让给内联实体 |
+| **内联实体** | 无 | 无 | 无 | 无 | 无 | 无 | 无 | **⭐新增 Slot-10** | 前文已知实体注入 |
+| **关系网络** | 无 | 无 | 无 | 无 | 无 | 无 | 无 | **⭐新增 Slot-11** | 角色互动一致性 |
+| **硬性约束** | 无 | 无 | 无 | 无 | 无 | 无 | 无 | **⭐A-I 共 9 条（+F-I）** | 跨章情感/动机/境界约束 |
+| **后处理管线** | 单任务 | 单任务 | 单任务 | 单任务 | 单任务 | 单任务 | 单任务 | **⭐10步链式队列** | 防超时+跨章固化 |
+| 预算 | total=14k | total=55k | **total=128k** | **不变** | **不变** | **不变** | **不变** | **⭐total=151k** | 新增 23k 跨章预算 |
+| RAG查询 | 整卷eventLine+整章正文 | 整卷eventLine+整章正文 | **不变** | **不变** | **聚焦当前章节语义，≤800字** | **优化查询文本构建** | **⭐+上章末尾400字** | **不变** | 最强语义锚 |
+| RAG 次数 | 3 次 | **3 次** | **不变** | **不变** | **不变** | **不变** | **⭐VECTORIZE不可用时DB兜底(0次)** | **不变** | 可靠性 |
+| 向量类型 | 6 种 | **3 种** | **不变** | **不变** | **不变** | **不变** | **不变** | **不变** | 聚焦上下文构建 |
+| 单任务最大 chunks | 12+（超时） | **≤1** | **不变** | **不变** | **不变** | **不变** | **不变** | **不变** | 安全 |
+| Slot过滤 | 无 | 无 | 无 | **新增slotFilter选项** | **不变** | **不变** | **⭐续写/重写补全上下文槽** | **不变** | AI 知道更多上下文 |
+| eventLine格式 | 纯文本 | 纯文本 | **不变** | **不变** | **纯文本正则匹配** | **不变** | **⭐JSON数组格式首选** | **不变** | O(1)索引零歧义 |
+| inferChapterType | - | - | - | - | **整卷eventLine** | **不变** | **⭐currentEvent精确推断** | **不变** | 类型判断收敛 |
+| **调试信息** | 无 | 无 | 无 | 无 | **新增queryText+ragRawResults** | **增强调试信息** | **⭐+ragFallbackUsed** | **不变** | VECTORIZE兜底监控 |
 
 ---
 
-## 十三、DEFAULT_BUDGET v4.1 完整配置
+## 十三、DEFAULT_BUDGET v2.1 完整配置
 
 ```typescript
-// 文件位置: contextBuilder.ts:113-121
+// 文件位置: contextBuilder.ts:136-146
 export const DEFAULT_BUDGET: BudgetTier = {
   core: 40000,          // Core 层总预算
   summaryChain: 25000,  // 摘要链预算
   characters: 20000,    // 出场角色预算
   foreshadowing: 10000, // 伏笔预算
   settings: 25000,      // 世界设定预算
-  rules: 8000,         // 本章类型规则预算
-  total: 128000,        // 全部预算上限
+  rules: 8000,          // 本章类型规则预算
+  inlineEntities: 15000,    // ⭐v2.1 Slot-10 内联实体预算
+  relationships: 8000,       // ⭐v2.1 Slot-11 关系网络预算
+  total: 151000,        // 全部预算上限（v2.1: 128k→151k）
 }
 ```
 
@@ -1358,28 +1410,37 @@ POST /api/generate/preview-context
 
 | 文件 | 说明 |
 |------|------|
-| [contextBuilder.ts](file:///d:/user/NovelForge/server/services/contextBuilder.ts) | 核心上下文构建逻辑 |
+| [contextBuilder.ts](file:///d:/user/NovelForge/server/services/contextBuilder.ts) | 核心上下文构建逻辑（12 槽体系，含 Slot-10/11） |
 | [generation.ts (service)](file:///d:/user/NovelForge/server/services/agent/generation.ts) | 章节生成服务（含草稿模式） |
 | [generate.ts (route)](file:///d:/user/NovelForge/server/routes/generate.ts) | API 路由定义（SSE 流式 + 自动修复） |
 | [coherence.ts](file:///d:/user/NovelForge/server/services/agent/coherence.ts) | 连贯性检查与修复（自动写库） |
 | [consistency.ts](file:///d:/user/NovelForge/server/services/agent/consistency.ts) | 角色一致性检查与修复（自动写库） |
 | [volumeProgress.ts](file:///d:/user/NovelForge/server/services/agent/volumeProgress.ts) | 卷进度检查与修复（自动写库） |
+| [postProcess.ts](file:///d:/user/NovelForge/server/services/agent/postProcess.ts) | ⭐v2.1 后处理管线（10 步链式队列，Step 7/8/9 跨章固化） |
+| [entityExtract.ts](file:///d:/user/NovelForge/server/services/agent/entityExtract.ts) | ⭐v2.1 LLM 实体提取服务 |
+| [entityConflict.ts](file:///d:/user/NovelForge/server/services/agent/entityConflict.ts) | ⭐v2.1 实体碰撞检测服务 |
+| [characterGrowth.ts](file:///d:/user/NovelForge/server/services/agent/characterGrowth.ts) | ⭐v2.1 角色成长追踪服务 |
+| [messages.ts](file:///d:/user/NovelForge/server/services/agent/messages.ts) | ⭐v2.1 硬性约束 A-I（F-I 跨章约束） |
+| [tools.ts](file:///d:/user/NovelForge/server/services/agent/tools.ts) | ⭐v2.1 ReAct 工具集（8 个，含 3 个跨章工具） |
+| [cross-chapter.ts (route)](file:///d:/user/NovelForge/server/routes/cross-chapter.ts) | ⭐v2.1 跨章一致性 API（10 个端点） |
+| [CrossChapterPage.tsx](file:///d:/user/NovelForge/src/pages/CrossChapterPage.tsx) | ⭐v2.1 跨章一致性管理页（4 个 Tab） |
+| [ContextPreview.tsx](file:///d:/user/NovelForge/src/components/generate/ContextPreview.tsx) | ⭐v2.1 上下文预览组件（含 Slot-10/11 展示） |
 | [constants.ts](file:///d:/user/NovelForge/server/services/agent/constants.ts) | 全局常量配置（超时统一 300s） |
 | [batchGenerate.ts](file:///d:/user/NovelForge/server/services/agent/batchGenerate.ts) | 批量生成服务 |
 | [batch.ts (route)](file:///d:/user/NovelForge/server/routes/batch.ts) | 批量生成路由（含历史查询 API） |
-| [queue-handler.ts](file:///d:/user/NovelForge/server/queue-handler.ts) | 队列处理器（批量任务执行） |
+| [queue-handler.ts](file:///d:/user/NovelForge/server/queue-handler.ts) | 队列处理器（批量任务 + 后处理管线） |
 | [embedding.ts](file:///d:/user/NovelForge/server/services/embedding.ts) | 向量嵌入服务 |
-| [schema.ts](file:///d:/user/NovelForge/server/db/schema.ts) | 数据库 Schema 定义 |
+| [schema.ts](file:///d:/user/NovelForge/server/db/schema.ts) | 数据库 Schema 定义（含跨章 6 表） |
 | [types.ts](file:///d:/user/NovelForge/server/services/agent/types.ts) | 类型定义（GenerationOptions 含 draftMode） |
 | [NovelWorkspacePage.tsx](file:///d:/user/NovelForge/src/pages/NovelWorkspacePage.tsx) | 前端小说工作台页面 |
 | [GeneratePanel.tsx](file:///d:/user/NovelForge/src/components/generate/GeneratePanel.tsx) | 前端单章生成面板（含草稿模式开关） |
 | [BatchGeneratePanel.tsx](file:///d:/user/NovelForge/src/components/generation/BatchGeneratePanel.tsx) | 前端批量生成面板 |
 | [useGenerate.ts](file:///d:/user/NovelForge/src/hooks/useGenerate.ts) | 前端生成 Hook（含持久弹窗逻辑） |
-| [api.ts](file:///d:/user/NovelForge/src/lib/api.ts) | 前端 API 调用封装 |
+| [api.ts](file:///d:/user/NovelForge/src/lib/api.ts) | 前端 API 调用封装（含 crossChapter 模块） |
 
 ---
 
-> 文档版本：v2.4.0
-> 最后更新：2026-04-30
+> 文档版本：v2.5.0
+> 最后更新：2026-05-02
 > 维护者：NovelForge 开发团队
-> v2.4.0 更新：上下文构建优化、eventLine JSON 格式支持、向量化和队列处理改进
+> v2.5.0 更新：跨章一致性三层防御体系（12 槽位、HARD_CONSTRAINTS F-I、10 步链式后处理管线、前端管理面板）

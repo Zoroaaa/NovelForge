@@ -11,7 +11,6 @@ import {
   Database, TrendingUp, Network, Trash2, CheckCircle2,
 } from 'lucide-react'
 import { api } from '@/lib/api'
-import { MainLayout } from '@/components/layout/MainLayout'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -101,19 +100,25 @@ export default function CrossChapterPage() {
     <div className="flex items-center gap-3">
       <Link to={`/novels/${novelId}`}>
         <Button variant="ghost" size="sm" className="gap-1.5">
-          <ArrowLeft className="h-4 w-4" /> 返回工作区
+          <ArrowLeft className="h-4 w-4" /> 返回工作台
         </Button>
       </Link>
     </div>
   )
 
   return (
-    <>
-    <MainLayout
-      headerTitle="跨章一致性管理"
-      headerSubtitle={`内联实体 ${stats?.inlineEntityCount ?? 0} · 待处理矛盾 ${stats?.pendingConflictCount ?? 0} · 成长记录 ${stats?.growthRecordCount ?? 0} · 关系 ${stats?.relationshipCount ?? 0}`}
-      headerActions={headerActions}
-    >
+    <div className="h-screen flex flex-col bg-background">
+      <header className="h-14 border-b bg-card/50 backdrop-blur-sm flex items-center justify-between px-6 shrink-0">
+        <div className="flex items-center gap-3">
+          <h1 className="text-lg font-semibold">跨章一致性管理</h1>
+          <p className="text-sm text-muted-foreground">
+            内联实体 {stats?.inlineEntityCount ?? 0} · 待处理矛盾 {stats?.pendingConflictCount ?? 0} · 成长记录 {stats?.growthRecordCount ?? 0} · 关系 {stats?.relationshipCount ?? 0}
+          </p>
+        </div>
+        {headerActions}
+      </header>
+
+      <main className="flex-1 overflow-y-auto">
       <div className="p-6 space-y-6 max-w-7xl mx-auto">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
@@ -294,6 +299,7 @@ export default function CrossChapterPage() {
             </TabsContent>
           </Tabs>
       </div>
+      </main>
 
       <AlertDialog open={!!deleteTargetId} onOpenChange={() => setDeleteTargetId(null)}>
         <AlertDialogContent>
@@ -311,7 +317,6 @@ export default function CrossChapterPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </MainLayout>
-    </>
+    </div>
   )
 }
