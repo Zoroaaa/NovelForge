@@ -94,10 +94,10 @@ export async function detectPowerLevelBreakthrough(
           const powerData = JSON.parse(p.powerLevel)
           info += `：${powerData.system || '未知体系'} - 当前${powerData.current || '未知'}`
         } catch {
-          info += '：无境界信息'
+          info += '：无实力信息'
         }
       } else {
-        info += '：无境界信息'
+        info += '：无实力信息'
       }
       return info
     }).join('\n')
@@ -112,11 +112,11 @@ export async function detectPowerLevelBreakthrough(
     }
 
     // 构建提示词
-    const detectionPrompt = `你是一个专业的小说境界分析助手。请分析以下小说章节内容，检测主角是否发生了境界突破或实力提升。
+    const detectionPrompt = `你是一个专业的小说实力/成长体系分析助手。请分析以下小说章节内容，检测主角是否发生了实力提升或重要状态突破。
 
 【章节标题】：《${chapter.title}》
 
-【主角当前境界信息】：
+【主角当前实力信息】：
 ${characterPowerInfo}
 
 【正文内容】（前8000字）：
@@ -129,20 +129,20 @@ ${chapter.content.slice(0, 8000)}
     {
       "characterName": "角色名",
       "characterId": "角色ID",
-      "system": "境界体系名称（如'修仙境界'、'斗气等级'等）",
-      "current": "新的当前境界（如'金丹期初期'）",
-      "previousLevel": "突破前的境界（如未提及则留空）",
-      "breakthroughNote": "突破过程简述（50字以内）"
+      "system": "本小说的力量/成长体系名称（从设定中提取，不得自行替换）",
+      "current": "新的当前等级（使用本小说设定中的名称）",
+      "previousLevel": "突破前的等级（如未提及则留空）",
+      "breakthroughNote": "突破/提升过程简述（50字以内）"
     }
   ]
 }
 
 判断标准：
-1. 境界突破：明确描述了角色实力提升、突破瓶颈、进阶等情节
-2. 实力变化：获得了新的能力、技能、装备等实质性提升
-3. 如果本章没有任何角色的境界/实力变化，hasBreakthrough 为 false，updates 为空数组
+1. 实力突破：明确描述了角色实力提升、突破瓶颈、进阶等情节
+2. 状态变化：获得了新的能力、技能、装备等实质性提升
+3. 如果本章没有任何角色的实力/状态变化，hasBreakthrough 为 false，updates 为空数组
 
-注意：只报告明确的境界突破，模糊的暗示不算。`
+注意：只报告明确的突破，模糊的暗示不算。等级名称必须与本小说设定一致，不得使用设定外的通用词。`
 
     // 调用 LLM 进行检测
     const overrideConfig = {
@@ -266,5 +266,3 @@ ${chapter.content.slice(0, 8000)}
     return { hasBreakthrough: false, updates: [] }
   }
 }
-
-

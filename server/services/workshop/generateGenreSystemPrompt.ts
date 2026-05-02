@@ -44,7 +44,7 @@ export async function generateGenreSystemPrompt(
       .limit(1)
       .get()
     if (protagonist) {
-      contextParts.push(`主角：${protagonist.name}${protagonist.powerLevel ? '，当前境界：' + protagonist.powerLevel : ''}${protagonist.description ? '，简介：' + protagonist.description.slice(0, 200) : ''}`)
+      contextParts.push(`主角：${protagonist.name}${protagonist.powerLevel ? '，当前实力等级：' + protagonist.powerLevel : ''}${protagonist.description ? '，简介：' + protagonist.description.slice(0, 200) : ''}`)
     }
   } catch {}
 
@@ -82,15 +82,16 @@ export async function generateGenreSystemPrompt(
 
 要求：
 1. 按以下类别结构输出，每个类别用【】标签标注：
-   【题材定位】一句话概括题材类型和核心路子
-   【基础信息】世界名、主角、境界体系（从设定中提取，没有则省略）
-   【写作技巧】该题材特有的写法要点
-   【节奏控制】爽点安排、悬念设置、突破节奏等
+   【题材定位】一句话概括题材类型和核心叙事路子
+   【基础信息】世界名、主角、力量/成长体系简述（从设定中提取，没有则省略；术语必须与设定一致，不得自行替换）
+   【写作技巧】该题材特有的写法要点（贴合实际题材，东方修真/西方奇幻/都市/科幻等各有侧重）
+   【节奏控制】爽点安排、悬念设置、关键成长节奏等
    【注意事项】禁止项、特殊规则等
 2. 总字数400-600字
 3. 直接输出提示词内容，不要加标题或解释
 4. 不要包含硬性约束（角色一致性、设定一致性等），这些由系统自动注入
-5. 不要包含工具使用规范，这些由系统自动注入`,
+5. 不要包含工具使用规范，这些由系统自动注入
+6. 所有术语（力量等级名称、地名、势力名等）必须与提供的设定完全一致，禁止使用设定外的通用词替换`,
     },
     {
       role: 'user',

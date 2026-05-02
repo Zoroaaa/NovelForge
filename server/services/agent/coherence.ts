@@ -299,14 +299,15 @@ function extractKeyPhrases(text: string): string[] {
 }
 
 function estimatePowerLevelGap(fromLevel: string, toLevel: string): number {
-  const commonLevels = [
-    '凡人', '炼气', '筑基', '金丹', '元婴', '化神', '合体', '大乘', '渡劫', '仙人',
-    '一级', '二级', '三级', '四级', '五级', '六级', '七级', '八级', '九级', '十级',
+  // 通用数字阶段匹配（适配任意体系，如1-10级、一至九层等）
+  const numericLevels = [
+    '一', '二', '三', '四', '五', '六', '七', '八', '九', '十',
+    '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
     '初级', '中级', '高级', '巅峰', '圆满',
   ]
 
-  const fromIndex = commonLevels.findIndex(l => fromLevel.includes(l))
-  const toIndex = commonLevels.findIndex(l => toLevel.includes(l))
+  const fromIndex = numericLevels.findIndex(l => fromLevel.includes(l))
+  const toIndex = numericLevels.findIndex(l => toLevel.includes(l))
 
   if (fromIndex === -1 || toIndex === -1) return 1
   return Math.abs(toIndex - fromIndex)
