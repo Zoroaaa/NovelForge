@@ -91,6 +91,9 @@ export async function processWorkshopMessage(
     }
 
     let fullResponse = ''
+    let chunkBuffer = ''
+    let lastFlushTime = Date.now()
+    const FLUSH_INTERVAL_MS = 100
 
     const { streamGenerate } = await import('../llm')
 
@@ -100,18 +103,30 @@ export async function processWorkshopMessage(
       timestamp: Date.now(),
     }
     messages.push(placeholderAssistantMsg)
-    await updateSession(db, sessionId, { messages, extractedData: currentData })
 
-    await streamGenerate(llmConfig, llmMessages, {
-      onChunk: (text) => {
-        fullResponse += text
+    const flushChunkBuffer = () => {
+      if (chunkBuffer.length > 0) {
         messages[messages.length - 1] = {
           ...placeholderAssistantMsg,
           content: fullResponse,
         }
-        onChunk(text)
+        onChunk(chunkBuffer)
+        chunkBuffer = ''
+        lastFlushTime = Date.now()
+      }
+    }
+
+    await streamGenerate(llmConfig, llmMessages, {
+      onChunk: (text) => {
+        fullResponse += text
+        chunkBuffer += text
+
+        if (Date.now() - lastFlushTime >= FLUSH_INTERVAL_MS) {
+          flushChunkBuffer()
+        }
       },
       onDone: async () => {
+        flushChunkBuffer()
         if (activeStage === 'volume_outline' && fullResponse.length > 0) {
           const hasClosingBlock = fullResponse.trimEnd().endsWith('```')
 
