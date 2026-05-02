@@ -46,6 +46,112 @@ export type QueueMessage =
       }
     }
   | {
+      type: 'post_process_step_1'
+      payload: {
+        chapterId: string
+        novelId: string
+        enableAutoSummary: boolean
+        usage: { prompt_tokens: number; completion_tokens: number }
+        taskId?: string
+        volumeId?: string
+      }
+    }
+  | {
+      type: 'post_process_step_1b'
+      payload: {
+        chapterId: string
+        novelId: string
+        taskId?: string
+        volumeId?: string
+      }
+    }
+  | {
+      type: 'post_process_step_2'
+      payload: {
+        chapterId: string
+        novelId: string
+        taskId?: string
+        volumeId?: string
+      }
+    }
+  | {
+      type: 'post_process_step_3'
+      payload: {
+        chapterId: string
+        novelId: string
+        taskId?: string
+        volumeId?: string
+      }
+    }
+  | {
+      type: 'post_process_step_4'
+      payload: {
+        chapterId: string
+        novelId: string
+        taskId?: string
+        volumeId?: string
+      }
+    }
+  | {
+      type: 'post_process_step_5'
+      payload: {
+        chapterId: string
+        novelId: string
+        taskId?: string
+        volumeId?: string
+      }
+    }
+  | {
+      type: 'post_process_step_6'
+      payload: {
+        chapterId: string
+        novelId: string
+        taskId?: string
+        volumeId?: string
+      }
+    }
+  | {
+      type: 'post_process_step_7'
+      payload: {
+        chapterId: string
+        novelId: string
+        taskId?: string
+        volumeId?: string
+      }
+    }
+  | {
+      type: 'post_process_step_8'
+      payload: {
+        chapterId: string
+        novelId: string
+        characterGrowths: Array<{
+          characterName: string
+          dimension: string
+          characterNameTarget?: string
+          prevState?: string
+          currState: string
+          detail?: string
+        }>
+        knowledgeReveals: Array<{
+          characterName: string
+          targetEntityName: string
+          revealDetail: string
+          isSecret?: boolean
+        }>
+        taskId?: string
+        volumeId?: string
+      }
+    }
+  | {
+      type: 'post_process_step_9'
+      payload: {
+        chapterId: string
+        novelId: string
+        taskId?: string
+        volumeId?: string
+      }
+    }
+  | {
       type: 'commit_workshop'
       payload: {
         sessionId: string

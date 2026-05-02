@@ -14,7 +14,7 @@ import { buildMessages } from './messages'
 import { DEFAULT_AGENT_CONFIG } from './types'
 import { ERROR_MESSAGES, LOG_STYLES } from './constants'
 import type { AgentConfig, GenerationOptions, ToolCallEvent } from './types'
-import { runPostProcess } from './postProcess'
+import { dispatchPostProcess } from './postProcess'
 
 function extractTitleFromContent(content: string): string | null {
   const match = content.match(/^#\s+(.+)$/m)
@@ -118,7 +118,7 @@ export async function generateChapter(
       } else {
         LOG_STYLES.TASK_QUEUE_UNAVAILABLE()
 
-        await runPostProcess(env, {
+        await dispatchPostProcess(env, {
           chapterId,
           novelId,
           enableAutoSummary: agentConfig.enableAutoSummary,

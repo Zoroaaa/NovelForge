@@ -146,4 +146,101 @@ export const AGENT_TOOLS = [
       },
     },
   },
+
+  // ── 工具6：查询内联实体（Slot-10关键词精确匹配层）─────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'queryInlineEntity',
+      description: `查询前文中已提取的内联实体信息（角色、法宝、功法、地点、道具、势力等）。
+适用场景：
+- 确认某个法宝/功法/道具的详细信息
+- 查询某个地点的描述
+- 确认某势力的基本信息
+- 在生成新内容前核实已有实体的一致性
+注意：此工具返回的是前文自动提取的实体，不包含已手动设定的核心角色和设定。`,
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: '实体名称（精确匹配，如"混沌珠"、"玄天宗"）'
+          },
+          entityType: {
+            type: 'string',
+            enum: ['character', 'artifact', 'technique', 'location', 'item', 'faction'],
+            description: '实体类型过滤，不传则搜索全部类型'
+          },
+        },
+        required: ['name'],
+      },
+    },
+  },
+
+  // ── 工具7：查询实体状态历史（entity_state_log）─────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'queryEntityStateHistory',
+      description: `查询某个实体（角色/法宝/功法等）的完整状态变化历史链。
+适用场景：
+- 确认某法宝的品阶变化历程
+- 确认某功法的升级/强化历史
+- 确认某角色的境界突破历程
+- 在描写实体当前状态前核实历史记录
+注意：返回按章节顺序排列的完整状态链。`,
+      parameters: {
+        type: 'object',
+        properties: {
+          entityName: {
+            type: 'string',
+            description: '实体名称（如"林逸"、"混沌珠"）'
+          },
+          stateType: {
+            type: 'string',
+            description: '状态类型过滤（如"品阶"、"境界"、"等级"、"熟练度"）'
+          },
+          limit: {
+            type: 'number',
+            description: '返回条目数上限，默认10，最大20'
+          },
+        },
+        required: ['entityName'],
+      },
+    },
+  },
+
+  // ── 工具8：查询角色成长记录（character_growth_log）─────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'queryCharacterGrowth',
+      description: `查询角色的多维度成长记录（能力/社交/知识/情感/战斗/物品/成长性）。
+适用场景：
+- 确认角色当前的社交关系网络
+- 查询角色的知识获取历史
+- 确认角色的情感变化轨迹
+- 查询角色的物品获得历史
+注意：可按维度过滤，返回按章节顺序的成长记录。`,
+      parameters: {
+        type: 'object',
+        properties: {
+          characterName: {
+            type: 'string',
+            description: '角色名称'
+          },
+          dimension: {
+            type: 'string',
+            enum: ['ability', 'social', 'knowledge', 'emotion', 'combat', 'possession', 'growth'],
+            description: '成长维度过滤（ability=能力, social=社交, knowledge=知识, emotion=情感, combat=战斗, possession=物品, growth=成长性）'
+          },
+          limit: {
+            type: 'number',
+            description: '返回条目数上限，默认10，最大20'
+          },
+        },
+        required: ['characterName'],
+      },
+    },
+  },
 ]

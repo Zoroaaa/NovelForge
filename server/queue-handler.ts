@@ -2,7 +2,7 @@ import type { Env } from './lib/types'
 import type { QueueMessage } from './lib/queue'
 import { indexContent, deindexContent, deleteVector } from './services/embedding'
 import { rebuildEntityIndex } from './services/entity-index'
-import { runPostProcess } from './services/agent/postProcess'
+import { dispatchPostProcess, runPostProcess, runStep1, runStep1b, runStep2, runStep3, runStep4, runStep5, runStep6, runStep7, runStep8, runStep9 } from './services/agent/postProcess'
 import { extractForeshadowingFromChapter } from './services/foreshadowing'
 import { logGeneration } from './services/agent/logging'
 import { commitWorkshopSessionCore } from './services/workshop'
@@ -202,7 +202,6 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
 
       // 幂等锁：用 post_processed_at 原子抢占执行权
       // 防止 Cloudflare Queue visibility timeout（~5分钟）导致同一章节后处理重复执行
-      // post_process 单次耗时 8~9 分钟，超过 visibility timeout 后消息会被重新投递
       {
         const db = drizzle(env.DB)
         const locked = await db.update(chapters)
@@ -215,40 +214,109 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
         }
       }
 
-      await runPostProcess(env, {
+      // 改为调度器模式：仅入队 step_1，由链式入队完成后续步骤
+      await dispatchPostProcess(env, {
         chapterId,
         novelId,
         enableAutoSummary,
         usage: usage || { prompt_tokens: 0, completion_tokens: 0 },
+        taskId: batchTaskId,
+        volumeId: batchVolumeId,
       })
 
-      console.log(`✅ [Queue] 章节后处理全部完成 for chapter ${chapterId}`)
-      
-      // 批量模式：runPostProcess 完成后发送 quality_check（带批量参数）
-      if (batchTaskId && batchVolumeId) {
-        if (env.TASK_QUEUE) {
-          await env.TASK_QUEUE.send({
-            type: 'quality_check',
-            payload: { chapterId, novelId, taskId: batchTaskId, volumeId: batchVolumeId },
-          })
-        }
-      } else {
-        // 单个模式：发送 quality_check 和 extract_plot_graph
-        if (env.TASK_QUEUE) {
-          await env.TASK_QUEUE.send({
-            type: 'quality_check',
-            payload: { chapterId, novelId },
-          })
-        }
+      break
+    }
 
-        if (env.TASK_QUEUE) {
-          await env.TASK_QUEUE.send({
-            type: 'extract_plot_graph',
-            payload: { chapterId, novelId },
-          })
-        }
+    case 'post_process_step_1': {
+      const p = msg.payload
+      const db = drizzle(env.DB)
+      await db.update(chapters).set({ status: 'post_processing' }).where(eq(chapters.id, p.chapterId)).run()
+      try {
+        await runStep1(env, p)
+      } catch (e) {
+        console.error(`[PostProcess Step1] 异常: ${(e as Error).message}`)
       }
+      break
+    }
 
+    case 'post_process_step_1b': {
+      try {
+        await runStep1b(env, msg.payload)
+      } catch (e) {
+        console.error(`[PostProcess Step1b] 异常: ${(e as Error).message}`)
+      }
+      break
+    }
+
+    case 'post_process_step_2': {
+      try {
+        await runStep2(env, msg.payload)
+      } catch (e) {
+        console.error(`[PostProcess Step2] 异常: ${(e as Error).message}`)
+      }
+      break
+    }
+
+    case 'post_process_step_3': {
+      try {
+        await runStep3(env, msg.payload)
+      } catch (e) {
+        console.error(`[PostProcess Step3] 异常: ${(e as Error).message}`)
+      }
+      break
+    }
+
+    case 'post_process_step_4': {
+      try {
+        await runStep4(env, msg.payload)
+      } catch (e) {
+        console.error(`[PostProcess Step4] 异常: ${(e as Error).message}`)
+      }
+      break
+    }
+
+    case 'post_process_step_5': {
+      try {
+        await runStep5(env, msg.payload)
+      } catch (e) {
+        console.error(`[PostProcess Step5] 异常: ${(e as Error).message}`)
+      }
+      break
+    }
+
+    case 'post_process_step_6': {
+      try {
+        await runStep6(env, msg.payload)
+      } catch (e) {
+        console.error(`[PostProcess Step6] 异常: ${(e as Error).message}`)
+      }
+      break
+    }
+
+    case 'post_process_step_7': {
+      try {
+        await runStep7(env, msg.payload)
+      } catch (e) {
+        console.error(`[PostProcess Step7] 异常: ${(e as Error).message}`)
+      }
+      break
+    }
+
+    case 'post_process_step_8': {
+      try {
+        await runStep8(env, msg.payload)
+      } catch (e) {
+        console.error(`[PostProcess Step8] 异常: ${(e as Error).message}`)
+      }
+      break
+    }
+
+    case 'post_process_step_9': {
+      try {
+        await runStep9(env, msg.payload)
+      } catch (e) {
+        console.error(`[PostProcess Step9] 异常: ${(e as Error).message}`)
+      }
       break
     }
 
@@ -684,6 +752,26 @@ function getNovelId(msg: QueueMessage): string {
     case 'extract_foreshadowing':
       return msg.payload.novelId
     case 'post_process_chapter':
+      return msg.payload.novelId
+    case 'post_process_step_1':
+      return msg.payload.novelId
+    case 'post_process_step_1b':
+      return msg.payload.novelId
+    case 'post_process_step_2':
+      return msg.payload.novelId
+    case 'post_process_step_3':
+      return msg.payload.novelId
+    case 'post_process_step_4':
+      return msg.payload.novelId
+    case 'post_process_step_5':
+      return msg.payload.novelId
+    case 'post_process_step_6':
+      return msg.payload.novelId
+    case 'post_process_step_7':
+      return msg.payload.novelId
+    case 'post_process_step_8':
+      return msg.payload.novelId
+    case 'post_process_step_9':
       return msg.payload.novelId
     case 'commit_workshop':
       return ''

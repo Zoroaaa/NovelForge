@@ -734,6 +734,66 @@ export const api = {
         page: number
       }>(`/api/cost-analysis/details?novelId=${novelId}&page=${page}&limit=${limit}`),
   },
+
+  // ── 跨章一致性系统 ──────────────────────────────────────────────
+  crossChapter: {
+    getInlineEntities: (novelId: string, params?: { entityType?: string; page?: number; pageSize?: number }) => {
+      const qs = new URLSearchParams({ novelId, ...(params as Record<string, string> || {}) })
+      return req<Array<{
+        id: string; novelId: string; entityType: string; name: string; aliases: string | null
+        description: string; firstChapterOrder: number; lastChapterOrder: number | null
+        isGrowable: number; createdAt: number
+      }>>(`/api/cross-chapter/inline-entities?${qs}`)
+    },
+    getInlineEntity: (id: string) =>
+      req<{ id: string; name: string; entityType: string; description: string }>(`/api/cross-chapter/inline-entities/${id}`),
+    deleteInlineEntity: (id: string) =>
+      req(`/api/cross-chapter/inline-entities/${id}`, { method: 'DELETE' }),
+    getEntityStateLog: (novelId: string, params?: { entityName?: string; stateType?: string; limit?: number }) => {
+      const qs = new URLSearchParams({ novelId, ...(params as Record<string, string> || {}) })
+      return req<Array<{
+        id: string; entityName: string; entityType: string; stateType: string
+        chapterOrder: number; prevState: string | null; currState: string; stateSummary: string
+      }>>(`/api/cross-chapter/entity-state-log?${qs}`)
+    },
+    getEntityConflicts: (novelId: string, params?: { resolution?: string; page?: number; pageSize?: number }) => {
+      const qs = new URLSearchParams({ novelId, ...(params as Record<string, string> || {}) })
+      return req<Array<{
+        id: string; entityName: string; entityType: string; conflictType: string
+        description: string; severity: string; resolution: string | null
+        detectedChapterOrder: number; createdAt: number
+      }>>(`/api/cross-chapter/entity-conflicts?${qs}`)
+    },
+    resolveConflict: (id: string, resolution: string) =>
+      req(`/api/cross-chapter/entity-conflicts/${id}/resolve`, { method: 'PUT', body: j({ resolution }) }),
+    getCharacterGrowth: (novelId: string, params?: { characterId?: string; dimension?: string; limit?: number }) => {
+      const qs = new URLSearchParams({ novelId, ...(params as Record<string, string> || {}) })
+      return req<Array<{
+        id: string; characterName: string; growthDimension: string
+        chapterOrder: number; prevState: string | null; currState: string; detail: string | null
+      }>>(`/api/cross-chapter/character-growth?${qs}`)
+    },
+    getRelationships: (novelId: string, params?: { characterId?: string }) => {
+      const qs = new URLSearchParams({ novelId, ...(params as Record<string, string> || {}) })
+      return req<Array<{
+        id: string; characterNameA: string; characterNameB: string
+        relationType: string; relationDesc: string; lastUpdatedChapterOrder: number
+      }>>(`/api/cross-chapter/relationships?${qs}`)
+    },
+    getStructuredData: (novelId: string, params?: { chapterId?: string; limit?: number }) => {
+      const qs = new URLSearchParams({ novelId, ...(params as Record<string, string> || {}) })
+      return req<Array<{
+        id: string; chapterId: string; chapterOrder: number
+        characterChanges: string | null; newEntities: string | null
+        chapterEndState: string | null; keyEvents: string | null
+      }>>(`/api/cross-chapter/structured-data?${qs}`)
+    },
+    getStats: (novelId: string) =>
+      req<{
+        inlineEntityCount: number; pendingConflictCount: number
+        growthRecordCount: number; relationshipCount: number
+      }>(`/api/cross-chapter/stats?novelId=${novelId}`),
+  },
 }
 
 export interface UserInfo {

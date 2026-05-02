@@ -41,6 +41,8 @@ import {
   Eye,
   DollarSign,
   Award,
+  Network,
+  Hash,
 } from 'lucide-react'
 
 interface VectorStats {
@@ -530,6 +532,53 @@ export default function AiMonitorPage() {
                             </div>
                           </div>
                         </div>
+
+                        {contextResult.contextBundle?.dynamic?.inlineEntities?.length > 0 && (
+                          <div className="bg-cyan-50 dark:bg-cyan-950 border border-cyan-200 dark:border-cyan-800 rounded-lg p-4">
+                            <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
+                              <Database className="w-4 h-4" />
+                              跨章一致性 · 关键词匹配实体（Slot-10）
+                              <Badge variant="outline" className="text-[10px]">×{contextResult.contextBundle.dynamic.inlineEntities.length}</Badge>
+                            </h4>
+                            <div className="space-y-1 max-h-32 overflow-y-auto">
+                              {contextResult.contextBundle.dynamic.inlineEntities.map((e: string, i: number) => (
+                                <p key={i} className="text-xs text-cyan-700 dark:text-cyan-300 truncate">{e.slice(0, 120)}</p>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {contextResult.contextBundle?.dynamic?.characterRelationships?.length > 0 && (
+                          <div className="bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 rounded-lg p-4">
+                            <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
+                              <Network className="w-4 h-4" />
+                              跨章一致性 · 角色关系网络（Slot-11）
+                              <Badge variant="outline" className="text-[10px]">×{contextResult.contextBundle.dynamic.characterRelationships.length}</Badge>
+                            </h4>
+                            <div className="space-y-1 max-h-24 overflow-y-auto">
+                              {contextResult.contextBundle.dynamic.characterRelationships.map((r: string, i: number) => (
+                                <p key={i} className="text-xs text-emerald-700 dark:text-emerald-300 truncate">{r.slice(0, 100)}</p>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {contextResult.contextBundle?.debug?.slotBreakdown && (
+                          <div className="bg-slate-50 dark:bg-slate-900 border rounded-lg p-4">
+                            <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
+                              <Hash className="w-4 h-4" />
+                              Token 分配明细（分槽）
+                            </h4>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 text-[10px]">
+                              {Object.entries(contextResult.contextBundle.debug.slotBreakdown).map(([key, value]) => (
+                                <div key={key} className="flex justify-between items-center px-2 py-1 rounded bg-background/50">
+                                  <span className="text-muted-foreground truncate">{key}</span>
+                                  <span className="font-mono font-medium">{String(value)}t</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
                         {contextResult.finalPrompt && (
                           <details className="bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800 rounded-lg">

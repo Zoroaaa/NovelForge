@@ -29,6 +29,8 @@ import {
   Gem,
   Users,
   Sparkles,
+  Database,
+  Network,
 } from 'lucide-react'
 
 export interface ContextDebugInfo {
@@ -45,6 +47,8 @@ export interface ContextDebugInfo {
     foreshadowing: number
     settings: number
     rules: number
+    inlineEntities: number
+    relationships: number
     total: number
   }
   chapterTypeHint: string
@@ -76,6 +80,8 @@ export interface ContextBundle {
     relevantForeshadowing: string[]
     relevantSettings: SlottedSettings
     chapterTypeRules: string[]
+    inlineEntities: string[]
+    characterRelationships: string[]
   }
   debug: ContextDebugInfo
 }
@@ -583,6 +589,64 @@ export function ContextPreview({ contextBundle, isGenerating, toolCalls, systemP
                     ))}
                   </div>
                 </ScrollArea>
+              </div>
+            )}
+
+            {/* 跨章一致性 - 关键词匹配的已知实体（内联实体） */}
+            {dynamic.inlineEntities && dynamic.inlineEntities.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                  <Database className="h-3 w-3" />
+                  关键词匹配的已知实体（Slot-10）
+                  {debug.slotBreakdown?.inlineEntities && (
+                    <Badge variant="outline" className="text-[10px]">
+                      {debug.slotBreakdown.inlineEntities}t (×{dynamic.inlineEntities.length})
+                    </Badge>
+                  )}
+                </h4>
+                <div className="rounded border p-2 space-y-1">
+                  <p className="text-[10px] text-muted-foreground px-1 mb-1">
+                    与本章关键词精确匹配的、前文中已提及但未纳入"出场角色"或"世界设定"的实体信息
+                  </p>
+                  <ScrollArea className="max-h-24 mt-1">
+                    <div className="space-y-0.5">
+                      {dynamic.inlineEntities.map((entity, idx) => (
+                        <p key={idx} className="text-xs text-cyan-600 dark:text-cyan-400 px-1 py-0.5 truncate">
+                          {entity.slice(0, 120)}{entity.length > 120 ? '...' : ''}
+                        </p>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              </div>
+            )}
+
+            {/* 跨章一致性 - 角色关系网络 */}
+            {dynamic.characterRelationships && dynamic.characterRelationships.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                  <Network className="h-3 w-3" />
+                  角色关系网络（Slot-11）
+                  {debug.slotBreakdown?.characterRelationships && (
+                    <Badge variant="outline" className="text-[10px]">
+                      {debug.slotBreakdown.characterRelationships}t (×{dynamic.characterRelationships.length})
+                    </Badge>
+                  )}
+                </h4>
+                <div className="rounded border p-2 space-y-1">
+                  <p className="text-[10px] text-muted-foreground px-1 mb-1">
+                    主角的最新社交关系图谱，保持角色互动一致性
+                  </p>
+                  <ScrollArea className="max-h-20 mt-1">
+                    <div className="space-y-0.5">
+                      {dynamic.characterRelationships.map((rel, idx) => (
+                        <p key={idx} className="text-xs text-emerald-600 dark:text-emerald-400 px-1 py-0.5 truncate">
+                          {rel.slice(0, 100)}{rel.length > 100 ? '...' : ''}
+                        </p>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
               </div>
             )}
 

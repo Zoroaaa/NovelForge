@@ -11,7 +11,7 @@ import { vectorIndex, masterOutline, chapters, novelSettings, characters } from 
 
 export interface VectorMetadata {
   novelId: string
-  sourceType: 'outline' | 'chapter' | 'character' | 'summary' | 'setting' | 'foreshadowing'
+  sourceType: 'outline' | 'chapter' | 'character' | 'summary' | 'setting' | 'foreshadowing' | 'inline_entity'
   sourceId: string
   title?: string
   content?: string

@@ -45,6 +45,7 @@ import { cover } from './routes/cover'
 import { graph } from './routes/graph'
 import { workshopFormatImport } from './routes/workshop-format-import'
 import { workshopImport } from './routes/workshop-import'
+import { crossChapterRouter } from './routes/cross-chapter'
 
 import authRouter from './routes/auth'
 import inviteCodesRouter from './routes/invite-codes'
@@ -286,6 +287,7 @@ protectedApi.route('/cover', cover)
 protectedApi.route('/graph', graph)
 protectedApi.route('/workshop-format-import', workshopFormatImport)
 protectedApi.route('/workshop-import', workshopImport)
+protectedApi.route('/cross-chapter', crossChapterRouter)
 
 app.route('/', protectedApi)
 

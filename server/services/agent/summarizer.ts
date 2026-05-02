@@ -3,7 +3,7 @@
  * @description Agent摘要生成功能
  */
 import { drizzle } from 'drizzle-orm/d1'
-import { chapters, masterOutline, volumes, novelSettings } from '../../db/schema'
+import { chapters, masterOutline, volumes, novelSettings, chapterStructuredData } from '../../db/schema'
 import { eq, desc, sql } from 'drizzle-orm'
 import type { Env } from '../../lib/types'
 import { resolveConfig, generateWithMetrics } from '../llm'
@@ -386,4 +386,82 @@ function extractBlueprintCore(blueprint: string): string {
 function validateSummaryStructure(text: string): boolean {
   return ['【角色状态变化】', '【关键事件】', '【道具/功法】', '【章末状态】']
     .every(tag => text.includes(tag))
+}
+
+const STRUCTURED_TAG_PATTERN = /【(角色状态变化|关键事件|道具\/功法|章末状态)】([\s\S]*?)(?=【|$)/g
+
+/**
+ * step1b：解析摘要中的结构化标签，写入 chapter_structured_data 表。
+ * 幂等设计：若该章节已存在记录，覆盖更新。
+ */
+export async function parseStructuredDataFromSummary(
+  env: Env,
+  chapterId: string,
+  novelId: string,
+): Promise<void> {
+  try {
+    const db = drizzle(env.DB)
+    const rows = await db
+      .select({
+        summary: chapters.summary,
+        sortOrder: chapters.sortOrder,
+      })
+      .from(chapters)
+      .where(eq(chapters.id, chapterId))
+      .limit(1)
+
+    if (rows.length === 0) {
+      LOG_STYLES.ERROR(`[step1b] 找不到章节: ${chapterId}`)
+      return
+    }
+
+    const { summary, sortOrder } = rows[0]
+    if (!summary) {
+      LOG_STYLES.ERROR(`[step1b] 章节 ${chapterId} 无摘要，跳过结构化解析`)
+      return
+    }
+
+    const parsed: Record<string, string> = {}
+    let match: RegExpExecArray | null
+    STRUCTURED_TAG_PATTERN.lastIndex = 0
+    while ((match = STRUCTURED_TAG_PATTERN.exec(summary)) !== null) {
+      const [, tagName, content] = match
+      parsed[tagName] = content.trim()
+    }
+
+    if (Object.keys(parsed).length === 0) {
+      LOG_STYLES.ERROR(`[step1b] 摘要中未发现结构化标签`)
+      return
+    }
+
+    const structuredRow = {
+      novelId,
+      chapterId,
+      chapterOrder: sortOrder,
+      characterChanges: parsed['角色状态变化'] ?? null,
+      newEntities: parsed['道具/功法'] ?? null,
+      chapterEndState: parsed['章末状态'] ?? null,
+      keyEvents: parsed['关键事件'] ?? null,
+      knowledgeReveals: null,
+      updatedAt: Math.floor(Date.now() / 1000),
+    }
+
+    const existing = await db
+      .select({ id: chapterStructuredData.id })
+      .from(chapterStructuredData)
+      .where(eq(chapterStructuredData.chapterId, chapterId))
+      .limit(1)
+
+    if (existing.length > 0) {
+      await db.update(chapterStructuredData)
+        .set(structuredRow)
+        .where(eq(chapterStructuredData.chapterId, chapterId))
+    } else {
+      await db.insert(chapterStructuredData).values(structuredRow)
+    }
+
+    LOG_STYLES.SUCCESS(`[step1b] 摘要结构化完成，标签数: ${Object.keys(parsed).length}`)
+  } catch (error) {
+    LOG_STYLES.ERROR(`[step1b] 结构化解析失败: ${error}`)
+  }
 }

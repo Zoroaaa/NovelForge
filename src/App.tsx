@@ -23,6 +23,7 @@ import ModelConfigPage from '@/pages/ModelConfigPage'
 import SetupPage from '@/pages/SetupPage'
 import AiMonitorPage from '@/pages/AiMonitorPage'
 import GraphPage from '@/pages/GraphPage'
+import CrossChapterPage from '@/pages/CrossChapterPage'
 
 const qc = new QueryClient({
   defaultOptions: { queries: { staleTime: 1000 * 30 } },
@@ -208,6 +209,12 @@ export default function App() {
           <Route path="/novels/:id/graph" element={
             <ProtectedRoute>
               <GraphPage />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/novels/:id/cross-chapter" element={
+            <ProtectedRoute>
+              <CrossChapterPage />
             </ProtectedRoute>
           } />
           

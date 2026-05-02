@@ -4,7 +4,7 @@
  * @version 2.1.0
  * @modified 2026-04-21 - P0修复：统一ID策略、补全索引、软删除一致性
  */
-import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { sql } from 'drizzle-orm'
 
 const id = () =>
@@ -498,4 +498,152 @@ export const plotEdges = sqliteTable('plot_edges', {
   index('idx_plot_edges_novel').on(table.novelId),
   index('idx_plot_edges_from').on(table.fromId),
   index('idx_plot_edges_to').on(table.toId),
+])
+
+// ============================================================
+// 25. 章节内提取的临时实体注册中心（跨章一致性系统）
+// ============================================================
+export const novelInlineEntities = sqliteTable('novel_inline_entities', {
+  id: id(),
+  novelId: text('novel_id').notNull(),
+  entityType: text('entity_type').notNull(),
+  name: text('name').notNull(),
+  aliases: text('aliases'),
+  description: text('description').notNull(),
+  summary: text('summary'),
+  firstChapterId: text('first_chapter_id').notNull(),
+  firstChapterOrder: integer('first_chapter_order').notNull(),
+  lastChapterId: text('last_chapter_id'),
+  lastChapterOrder: integer('last_chapter_order'),
+  isGrowable: integer('is_growable').notNull().default(0),
+  promotedToSettingId: text('promoted_to_setting_id'),
+  vectorId: text('vector_id'),
+  indexedAt: integer('indexed_at'),
+  ...timestamps,
+  deletedAt: integer('deleted_at'),
+}, (table) => [
+  index('idx_inline_entities_novel').on(table.novelId).where(sql`${table.deletedAt} IS NULL`),
+  index('idx_inline_entities_type').on(table.novelId, table.entityType).where(sql`${table.deletedAt} IS NULL`),
+  index('idx_inline_entities_name').on(table.novelId, table.name).where(sql`${table.deletedAt} IS NULL`),
+  index('idx_inline_entities_growable').on(table.novelId, table.isGrowable).where(sql`${table.deletedAt} IS NULL`),
+])
+
+// ============================================================
+// 26. 成长性实体的全历史状态链（跨章一致性系统）
+// ============================================================
+export const entityStateLog = sqliteTable('entity_state_log', {
+  id: id(),
+  novelId: text('novel_id').notNull(),
+  sourceType: text('source_type').notNull(),
+  sourceId: text('source_id').notNull(),
+  entityName: text('entity_name').notNull(),
+  entityType: text('entity_type').notNull(),
+  chapterId: text('chapter_id').notNull(),
+  chapterOrder: integer('chapter_order').notNull(),
+  stateType: text('state_type').notNull(),
+  stateSummary: text('state_summary').notNull(),
+  stateDetail: text('state_detail'),
+  prevState: text('prev_state'),
+  currState: text('curr_state').notNull(),
+  createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
+}, (table) => [
+  index('idx_state_log_entity').on(table.sourceType, table.sourceId, table.chapterOrder),
+  index('idx_state_log_novel').on(table.novelId, table.chapterOrder),
+  index('idx_state_log_chapter').on(table.chapterId),
+])
+
+// ============================================================
+// 27. 检测到的矛盾记录（跨章一致性系统）
+// ============================================================
+export const entityConflictLog = sqliteTable('entity_conflict_log', {
+  id: id(),
+  novelId: text('novel_id').notNull(),
+  detectedChapterId: text('detected_chapter_id').notNull(),
+  detectedChapterOrder: integer('detected_chapter_order').notNull(),
+  entityName: text('entity_name').notNull(),
+  entityType: text('entity_type').notNull(),
+  sourceType: text('source_type').notNull(),
+  sourceId: text('source_id').notNull(),
+  conflictType: text('conflict_type').notNull(),
+  description: text('description').notNull(),
+  currentChapterExcerpt: text('current_chapter_excerpt'),
+  historicalRecord: text('historical_record'),
+  historicalChapterOrder: integer('historical_chapter_order'),
+  severity: text('severity').notNull(),
+  resolution: text('resolution'),
+  resolvedAt: integer('resolved_at'),
+  createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
+}, (table) => [
+  index('idx_conflict_log_novel').on(table.novelId, sql`${table.createdAt} DESC`),
+  index('idx_conflict_log_chapter').on(table.detectedChapterId),
+  index('idx_conflict_log_pending').on(table.novelId, table.resolution).where(sql`${table.resolution} IS NULL`),
+])
+
+// ============================================================
+// 28. 角色成长历史链（跨章一致性系统 · 7维度）
+// ============================================================
+export const characterGrowthLog = sqliteTable('character_growth_log', {
+  id: id(),
+  novelId: text('novel_id').notNull(),
+  characterId: text('character_id').notNull(),
+  characterName: text('character_name').notNull(),
+  chapterId: text('chapter_id').notNull(),
+  chapterOrder: integer('chapter_order').notNull(),
+  growthDimension: text('growth_dimension').notNull(),
+  characterIdTarget: text('character_id_target'),
+  characterNameTarget: text('character_name_target'),
+  prevState: text('prev_state'),
+  currState: text('curr_state').notNull(),
+  detail: text('detail'),
+  isSecret: integer('is_secret').default(0),
+  isPublic: integer('is_public').default(1),
+  createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
+}, (table) => [
+  index('idx_char_growth_character').on(table.characterId, table.chapterOrder),
+  index('idx_char_growth_novel').on(table.novelId, table.chapterOrder),
+  index('idx_char_growth_dimension').on(table.novelId, table.growthDimension),
+  index('idx_char_growth_knowledge').on(table.characterId, table.growthDimension).where(sql`${table.growthDimension} = 'knowledge'`),
+])
+
+// ============================================================
+// 29. 关系网络当前快照（跨章一致性系统）
+// ============================================================
+export const characterRelationships = sqliteTable('character_relationships', {
+  id: id(),
+  novelId: text('novel_id').notNull(),
+  characterIdA: text('character_id_a').notNull(),
+  characterNameA: text('character_name_a').notNull(),
+  characterIdB: text('character_id_b').notNull(),
+  characterNameB: text('character_name_b').notNull(),
+  relationType: text('relation_type').notNull(),
+  relationDesc: text('relation_desc').notNull(),
+  establishedChapterOrder: integer('established_chapter_order'),
+  lastUpdatedChapterOrder: integer('last_updated_chapter_order').notNull(),
+  lastUpdatedChapterId: text('last_updated_chapter_id').notNull(),
+  ...timestamps,
+  deletedAt: integer('deleted_at'),
+}, (table) => [
+  index('idx_relationship_novel').on(table.novelId).where(sql`${table.deletedAt} IS NULL`),
+  uniqueIndex('idx_relationship_pair').on(table.novelId, table.characterIdA, table.characterIdB).where(sql`${table.deletedAt} IS NULL`),
+  index('idx_relationship_char_a').on(table.characterIdA).where(sql`${table.deletedAt} IS NULL`),
+  index('idx_relationship_char_b').on(table.characterIdB).where(sql`${table.deletedAt} IS NULL`),
+])
+
+// ============================================================
+// 30. 摘要结构化缓存（跨章一致性系统）
+// ============================================================
+export const chapterStructuredData = sqliteTable('chapter_structured_data', {
+  id: id(),
+  novelId: text('novel_id').notNull(),
+  chapterId: text('chapter_id').notNull().unique(),
+  chapterOrder: integer('chapter_order').notNull(),
+  characterChanges: text('character_changes'),
+  newEntities: text('new_entities'),
+  chapterEndState: text('chapter_end_state'),
+  keyEvents: text('key_events'),
+  knowledgeReveals: text('knowledge_reveals'),
+  ...timestamps,
+}, (table) => [
+  index('idx_structured_data_novel').on(table.novelId, table.chapterOrder),
+  index('idx_structured_data_chapter').on(table.chapterId),
 ])

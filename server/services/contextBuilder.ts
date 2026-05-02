@@ -29,7 +29,8 @@
 import { drizzle, type DrizzleD1Database } from 'drizzle-orm/d1'
 import {
   chapters, volumes, characters, modelConfigs, foreshadowing,
-  novelSettings, masterOutline, writingRules, novels
+  novelSettings, masterOutline, writingRules, novels,
+  novelInlineEntities, entityStateLog, characterGrowthLog, characterRelationships, chapterStructuredData,
 } from '../db/schema'
 import { eq, and, sql, desc, inArray, notInArray, asc } from 'drizzle-orm'
 import type { Env } from '../lib/types'
@@ -77,6 +78,8 @@ export interface ContextBundle {
     relevantForeshadowing: string[]
     relevantSettings: SlottedSettings
     chapterTypeRules: string[]
+    inlineEntities: string[]
+    characterRelationships: string[]
   }
   debug: {
     totalTokenEstimate: number
@@ -121,11 +124,13 @@ export interface BudgetTier {
   foreshadowing: number
   settings: number
   rules: number
+  inlineEntities: number
+  relationships: number
   total: number
 }
 
 // ============================================================
-// 预算配置 v4 — 充分利用 256k 窗口
+// 预算配置 v5 — 跨章一致性增强版
 // ============================================================
 
 export const DEFAULT_BUDGET: BudgetTier = {
@@ -135,7 +140,9 @@ export const DEFAULT_BUDGET: BudgetTier = {
   foreshadowing: 10000,
   settings: 25000,
   rules: 8000,
-  total: 128000,
+  inlineEntities: 15000,
+  relationships: 8000,
+  total: 151000,
 }
 
 // ============================================================
@@ -319,6 +326,12 @@ export async function buildChapterContext(
     chapterTypeRules = await fetchChapterTypeRules(db, novelId, chapterTypeHint, activeRuleIds)
   }
 
+  // ── Step 3b: Slot-10 关键词精确匹配（内联实体）──
+  const inlineEntities = await fetchInlineEntities(db, novelId, queryText, budget.inlineEntities)
+
+  // ── Step 3c: Slot-11 关系网络注入 ──
+  const relationshipCards = await fetchCharacterRelationships(db, novelId, budget.relationships)
+
   // ── Step 4: Core Token 预算检查 ──
   const coreContent = [
     outlineContent,
@@ -360,6 +373,8 @@ export async function buildChapterContext(
       ...slottedSettings.artifacts, ...slottedSettings.misc,
     ].reduce((s, t) => s + estimateTokens(t), 0),
     chapterTypeRules: chapterTypeRules.reduce((s, t) => s + estimateTokens(t), 0),
+    inlineEntities: inlineEntities.reduce((s, t) => s + estimateTokens(t), 0),
+    characterRelationships: relationshipCards.reduce((s, t) => s + estimateTokens(t), 0),
   }
   const totalTokenEstimate = Object.values(slotBreakdown).reduce((a, b) => a + b, 0)
 
@@ -406,6 +421,8 @@ export async function buildChapterContext(
       relevantForeshadowing,
       relevantSettings: slottedSettings,
       chapterTypeRules,
+      inlineEntities,
+      characterRelationships: relationshipCards,
     },
     debug: {
       totalTokenEstimate,
@@ -973,6 +990,140 @@ function mergeProtagonistAndPower(
 }
 
 /**
+ * Slot-10：关键词精确匹配层 — 从 novelInlineEntities 中检索与 queryText 关键词匹配的实体。
+ * 返回格式化的实体描述列表，按 lastChapterOrder DESC 排序，限制在 tokenBudget 内。
+ */
+async function fetchInlineEntities(
+  db: AppDb,
+  novelId: string,
+  queryText: string,
+  tokenBudget: number,
+): Promise<string[]> {
+  try {
+    if (!queryText || queryText.trim().length === 0) return []
+
+    const keywords = queryText
+      .replace(/[^\u4e00-\u9fff\w\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length >= 2)
+      .slice(0, 20)
+
+    if (keywords.length === 0) return []
+
+    const rows = await db
+      .select({
+        name: novelInlineEntities.name,
+        entityType: novelInlineEntities.entityType,
+        description: novelInlineEntities.description,
+        aliases: novelInlineEntities.aliases,
+        lastChapterOrder: novelInlineEntities.lastChapterOrder,
+      })
+      .from(novelInlineEntities)
+      .where(and(
+        eq(novelInlineEntities.novelId, novelId),
+        sql`${novelInlineEntities.deletedAt} IS NULL`,
+      ))
+      .orderBy(desc(novelInlineEntities.lastChapterOrder))
+      .limit(50)
+      .all()
+
+    const matched = rows.filter(r => {
+      const searchText = `${r.name} ${r.aliases || ''} ${r.description}`.toLowerCase()
+      return keywords.some(kw => searchText.includes(kw.toLowerCase()))
+    })
+
+    const typeLabel: Record<string, string> = {
+      character: '角色', artifact: '法宝', technique: '功法',
+      location: '地点', item: '道具', faction: '势力',
+    }
+
+    const result: string[] = []
+    let usedTokens = 0
+    for (const entity of matched.slice(0, 15)) {
+      const label = typeLabel[entity.entityType] || entity.entityType
+      const card = `【${entity.name}】(${label})${entity.aliases ? ` 别名：${entity.aliases}` : ''}\n${entity.description}`
+      const tokens = estimateTokens(card)
+      if (usedTokens + tokens > tokenBudget) break
+      result.push(card)
+      usedTokens += tokens
+    }
+
+    return result
+  } catch (error) {
+    console.error('[contextBuilder] fetchInlineEntities failed:', error)
+    return []
+  }
+}
+
+/**
+ * Slot-11：关系网络注入 — 从 characterRelationships 中获取主角的关系网络快照。
+ * 返回格式化的关系描述列表。
+ */
+async function fetchCharacterRelationships(
+  db: AppDb,
+  novelId: string,
+  tokenBudget: number,
+): Promise<string[]> {
+  try {
+    const protagonistRows = await db
+      .select({ id: characters.id, name: characters.name })
+      .from(characters)
+      .where(and(
+        eq(characters.novelId, novelId),
+        eq(characters.role, 'protagonist'),
+        sql`${characters.deletedAt} IS NULL`,
+      ))
+      .all()
+
+    if (protagonistRows.length === 0) return []
+
+    const protagonistIds = protagonistRows.map(p => p.id)
+
+    const relations = await db
+      .select({
+        characterIdA: characterRelationships.characterIdA,
+        characterNameA: characterRelationships.characterNameA,
+        characterIdB: characterRelationships.characterIdB,
+        characterNameB: characterRelationships.characterNameB,
+        relationType: characterRelationships.relationType,
+        relationDesc: characterRelationships.relationDesc,
+        lastUpdatedChapterOrder: characterRelationships.lastUpdatedChapterOrder,
+      })
+      .from(characterRelationships)
+      .where(and(
+        eq(characterRelationships.novelId, novelId),
+        sql`(${characterRelationships.characterIdA} IN (${sql.join(protagonistIds, sql`, `)}) OR ${characterRelationships.characterIdB} IN (${sql.join(protagonistIds, sql`, `)}))`,
+        sql`${characterRelationships.deletedAt} IS NULL`,
+      ))
+      .orderBy(desc(characterRelationships.lastUpdatedChapterOrder))
+      .limit(20)
+      .all()
+
+    if (relations.length === 0) return []
+
+    const result: string[] = []
+    let usedTokens = 0
+
+    const header = '【主角关系网络】'
+    result.push(header)
+    usedTokens += estimateTokens(header)
+
+    for (const rel of relations.slice(0, 10)) {
+      const entry = `${rel.characterNameA} → ${rel.characterNameB}：${rel.relationType}（${rel.relationDesc}）`
+      const tokens = estimateTokens(entry)
+      if (usedTokens + tokens > tokenBudget) break
+      result.push(entry)
+      usedTokens += tokens
+    }
+
+    return result
+  } catch (error) {
+    console.error('[contextBuilder] fetchCharacterRelationships failed:', error)
+    return []
+  }
+}
+
+/**
  * 全部活跃规则（v4: 不再限制 priority≤2，256k 窗口放得下）
  */
 async function fetchAllActiveRules(db: AppDb, novelId: string): Promise<string[]> {
@@ -1236,7 +1387,7 @@ export function estimateTokens(text: string): number {
 // ============================================================
 
 export interface AssembleOptions {
-  slotFilter?: Array<'masterOutline' | 'volume' | 'prevChapter' | 'currentEvent' | 'nextThreeChapters' | 'protagonist' | 'rules' | 'summaryChain' | 'characters' | 'foreshadowing' | 'worldSettings' | 'chapterTypeRules' | 'rhythmStats'>
+  slotFilter?: Array<'masterOutline' | 'volume' | 'prevChapter' | 'currentEvent' | 'nextThreeChapters' | 'protagonist' | 'rules' | 'summaryChain' | 'characters' | 'foreshadowing' | 'worldSettings' | 'chapterTypeRules' | 'rhythmStats' | 'inlineEntities' | 'characterRelationships'>
 }
 
 export function assemblePromptContext(bundle: ContextBundle, options?: AssembleOptions): string {
@@ -1321,6 +1472,10 @@ export function assemblePromptContext(bundle: ContextBundle, options?: AssembleO
   }
 
   if (shouldInclude('chapterTypeRules') && bundle.dynamic.chapterTypeRules.length > 0) sections.push(`## 本章创作指引\n${bundle.dynamic.chapterTypeRules.join('\n\n')}`)
+
+  if (shouldInclude('inlineEntities') && bundle.dynamic.inlineEntities.length > 0) sections.push(`## 关键词匹配的已知实体（内联实体）\n本节包含与本章关键词精确匹配的、前文中已提及但未纳入"出场角色"或"世界设定"的实体信息。请在本章创作中参考，保持一致性。\n\n${bundle.dynamic.inlineEntities.join('\n\n')}`)
+
+  if (shouldInclude('characterRelationships') && bundle.dynamic.characterRelationships.length > 0) sections.push(`## 角色关系网络\n本节展示主角的最新社交关系图谱。请在创作中参考这些关系状态，保持角色互动的一致性。\n\n${bundle.dynamic.characterRelationships.join('\n')}`)
 
   return sections.join('\n\n---\n\n')
 }

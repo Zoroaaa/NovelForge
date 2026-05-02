@@ -1,9 +1,12 @@
 /**
  * @file executor.ts
- * @description Agent工具执行器 v2 — 实现5个资料包盲区工具
+ * @description Agent工具执行器 v3 — 实现8个资料包工具（含跨章一致性工具6/7/8）
  */
 import { drizzle } from 'drizzle-orm/d1'
-import { chapters, characters, novelSettings, foreshadowing } from '../../db/schema'
+import {
+  chapters, characters, novelSettings, foreshadowing,
+  novelInlineEntities, entityStateLog, characterGrowthLog,
+} from '../../db/schema'
 import { eq, and, desc, like, or, sql, inArray } from 'drizzle-orm'
 import type { Env } from '../../lib/types'
 import { embedText, searchSimilarMulti, ACTIVE_SOURCE_TYPES } from '../embedding'
@@ -201,10 +204,139 @@ export async function executeAgentTool(
       })), null, 2)
     }
 
+    // ── 工具6：查询内联实体 ───────────────────────────────
+    case 'queryInlineEntity': {
+      const { name: entityName, entityType } = args
+      if (!entityName) return JSON.stringify({ error: 'name参数必填' })
+
+      const conditions = [
+        eq(novelInlineEntities.novelId, novelId),
+        sql`${novelInlineEntities.deletedAt} IS NULL`,
+      ]
+      if (entityType) {
+        conditions.push(eq(novelInlineEntities.entityType, entityType))
+      }
+
+      const entityRows = await db
+        .select({
+          name: novelInlineEntities.name,
+          entityType: novelInlineEntities.entityType,
+          description: novelInlineEntities.description,
+          aliases: novelInlineEntities.aliases,
+          firstChapterOrder: novelInlineEntities.firstChapterOrder,
+          lastChapterOrder: novelInlineEntities.lastChapterOrder,
+          isGrowable: novelInlineEntities.isGrowable,
+        })
+        .from(novelInlineEntities)
+        .where(and(...conditions))
+        .orderBy(desc(novelInlineEntities.lastChapterOrder))
+        .limit(5)
+        .all()
+
+      const matched = entityRows.filter(r => {
+        const nameMatch = r.name === entityName || r.name.includes(entityName)
+        const aliasMatch = r.aliases && (r.aliases.includes(entityName))
+        return nameMatch || aliasMatch
+      })
+
+      if (matched.length === 0) {
+        return JSON.stringify({ message: `未找到名为"${entityName}"的内联实体` })
+      }
+
+      return JSON.stringify(matched.map(r => ({
+        name: r.name,
+        entityType: r.entityType,
+        description: r.description,
+        aliases: r.aliases,
+        firstChapterOrder: r.firstChapterOrder,
+        lastChapterOrder: r.lastChapterOrder,
+        isGrowable: r.isGrowable === 1,
+      })), null, 2)
+    }
+
+    // ── 工具7：查询实体状态历史 ───────────────────────────────
+    case 'queryEntityStateHistory': {
+      const { entityName: stateEntityName, stateType, limit: stateLimit = 10 } = args
+      if (!stateEntityName) return JSON.stringify({ error: 'entityName参数必填' })
+
+      const stateConditions = [
+        eq(entityStateLog.novelId, novelId),
+        eq(entityStateLog.entityName, stateEntityName),
+      ]
+      if (stateType) {
+        stateConditions.push(eq(entityStateLog.stateType, stateType))
+      }
+
+      const stateRows = await db
+        .select({
+          chapterOrder: entityStateLog.chapterOrder,
+          stateType: entityStateLog.stateType,
+          prevState: entityStateLog.prevState,
+          currState: entityStateLog.currState,
+          stateSummary: entityStateLog.stateSummary,
+        })
+        .from(entityStateLog)
+        .where(and(...stateConditions))
+        .orderBy(desc(entityStateLog.chapterOrder))
+        .limit(Math.min(stateLimit, 20))
+        .all()
+
+      if (stateRows.length === 0) {
+        return JSON.stringify({ message: `未找到"${stateEntityName}"的状态历史` })
+      }
+
+      return JSON.stringify(stateRows, null, 2)
+    }
+
+    // ── 工具8：查询角色成长记录 ───────────────────────────────
+    case 'queryCharacterGrowth': {
+      const { characterName, dimension, limit: growthLimit = 10 } = args
+      if (!characterName) return JSON.stringify({ error: 'characterName参数必填' })
+
+      const resolvedChar = await db
+        .select({ id: characters.id })
+        .from(characters)
+        .where(and(eq(characters.novelId, novelId), eq(characters.name, characterName)))
+        .limit(1)
+
+      if (resolvedChar.length === 0) {
+        return JSON.stringify({ message: `未找到角色"${characterName}"` })
+      }
+
+      const growthConditions = [
+        eq(characterGrowthLog.novelId, novelId),
+        eq(characterGrowthLog.characterId, resolvedChar[0].id),
+      ]
+      if (dimension) {
+        growthConditions.push(eq(characterGrowthLog.growthDimension, dimension))
+      }
+
+      const growthRows = await db
+        .select({
+          chapterOrder: characterGrowthLog.chapterOrder,
+          growthDimension: characterGrowthLog.growthDimension,
+          characterNameTarget: characterGrowthLog.characterNameTarget,
+          prevState: characterGrowthLog.prevState,
+          currState: characterGrowthLog.currState,
+          detail: characterGrowthLog.detail,
+        })
+        .from(characterGrowthLog)
+        .where(and(...growthConditions))
+        .orderBy(desc(characterGrowthLog.chapterOrder))
+        .limit(Math.min(growthLimit, 20))
+        .all()
+
+      if (growthRows.length === 0) {
+        return JSON.stringify({ message: `未找到"${characterName}"的成长记录${dimension ? `（维度: ${dimension}）` : ''}` })
+      }
+
+      return JSON.stringify(growthRows, null, 2)
+    }
+
     default:
       return JSON.stringify({
         error: `未知工具: ${toolName}`,
-        available: ['searchChapterHistory', 'queryCharacterByName', 'queryForeshadowing', 'querySettingByName', 'searchSemantic']
+        availableTools: ['searchChapterHistory', 'queryCharacterByName', 'queryForeshadowing', 'querySettingByName', 'searchSemantic', 'queryInlineEntity', 'queryEntityStateHistory', 'queryCharacterGrowth'],
       })
   }
 }
