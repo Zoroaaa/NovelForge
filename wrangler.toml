@@ -45,8 +45,12 @@ max_batch_timeout = 10
 max_retries = 3
 max_concurrency = 1
 
-# vectorize建库
+# # ========== 第一步：删除现有索引 ==========
+# npx wrangler vectorize delete novelforge-index
+
+# # ========== 第二步：重新创建索引 ==========
 # npx wrangler vectorize create novelforge-index --dimensions=1024 --metric=cosine
-# ---先建库再执行语句
+
+# # ========== 第三步：创建元数据索引（必须先完成第二步） ==========
 # npx wrangler vectorize create-metadata-index novelforge-index --property-name=novelId --type=string
 # npx wrangler vectorize create-metadata-index novelforge-index --property-name=sourceType --type=string

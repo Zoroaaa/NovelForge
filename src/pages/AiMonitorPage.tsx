@@ -72,7 +72,6 @@ export default function AiMonitorPage() {
   const [isSearching, setIsSearching] = useState(false)
   const [isReindexing, setIsReindexing] = useState(false)
   const [isIndexingMissing, setIsIndexingMissing] = useState(false)
-  const [isClearingAll, setIsClearingAll] = useState(false)
   const [contextChapterId, setContextChapterId] = useState<string>('')
   const [contextResult, setContextResult] = useState<any>(null)
   const [isLoadingContext, setIsLoadingContext] = useState(false)
@@ -178,42 +177,6 @@ export default function AiMonitorPage() {
       queryClient.invalidateQueries({ queryKey: ['vector-stats'] })
     } catch {
       toast.error('实体树重建失败')
-    }
-  }
-
-  const handleClearAllIndexes = async () => {
-    if (!confirm('确定要清空全部索引吗？清空后所有小说的向量索引将被删除，需要手动重建！')) return
-    setIsClearingAll(true)
-    try {
-      const result = await api.vectorize.clearAllIndexes()
-
-      let detailMessage = result.message || '清空完成'
-      if (result.deletedFromBinding !== undefined) {
-        detailMessage += `\n✅ Binding 删除: ${result.deletedFromBinding} 条`
-      }
-      if (result.deletedFromREST !== undefined && result.deletedFromREST > 0) {
-        detailMessage += `\n✅ REST API 删除: ${result.deletedFromREST} 条`
-      }
-      if (result.localRecordsCleared !== undefined) {
-        detailMessage += `\n📝 本地记录清除: ${result.localRecordsCleared} 条`
-      }
-      if (result.durationMs !== undefined) {
-        detailMessage += `\n⏱️ 耗时: ${(result.durationMs / 1000).toFixed(2)} 秒`
-      }
-      if (result.errors && result.errors.length > 0) {
-        detailMessage += `\n⚠️ 遇到 ${result.errors.length} 个问题:\n${result.errors.join('\n')}`
-        toast.warning(detailMessage, { duration: 10000 })
-      } else {
-        toast.success(detailMessage, { duration: 5000 })
-      }
-
-      console.log('[clear-all] 详细结果:', JSON.stringify(result, null, 2))
-      queryClient.invalidateQueries({ queryKey: ['vector-stats'] })
-    } catch (e: any) {
-      console.error('[clear-all] 清空失败:', e)
-      toast.error(`清空全部索引失败：${e.message || '未知错误'}`, { duration: 8000 })
-    } finally {
-      setIsClearingAll(false)
     }
   }
 
@@ -704,33 +667,6 @@ export default function AiMonitorPage() {
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <AlertTriangle className="w-5 h-5" />
-                      索引维护
-                    </CardTitle>
-                    <CardDescription>清理全部向量索引数据</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <Button
-                      variant="destructive"
-                      className="w-full"
-                      onClick={handleClearAllIndexes}
-                      disabled={isClearingAll}
-                    >
-                      {isClearingAll ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <AlertTriangle className="w-4 h-4 mr-2" />
-                      )}
-                      清空全部索引
-                    </Button>
-                    <p className="text-sm text-muted-foreground text-center">
-                      清空后需手动重建每个小说的向量索引
-                    </p>
-                  </CardContent>
-                </Card>
               </div>
             </TabsContent>
 
