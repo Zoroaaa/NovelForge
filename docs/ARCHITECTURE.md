@@ -2,7 +2,7 @@
 
 > 完整的技术架构、数据流设计和模块依赖关系图。
 >
-> **版本**: 2.4.0 | **最后更新**: 2026-04-30
+> **版本**: 2.5.0 | **最后更新**: 2026-05-02
 
 ---
 
@@ -186,7 +186,8 @@ src/
 │   ├── ReaderPage.tsx
 │   ├── ModelConfigPage.tsx
 │   ├── AccountPage.tsx
-│   └── AiMonitorPage.tsx     # AI监控中心 (v1.6.0)
+│   ├── AiMonitorPage.tsx     # AI监控中心 (v1.6.0)
+│   └── CrossChapterPage.tsx  # 跨章一致性管理页 (v2.5.0)
 ├── components/
 │   ├── ui/                    # shadcn 基础组件
 │   ├── layout/                # 布局组件
@@ -378,6 +379,7 @@ server/
 │   ├── batch.ts               # 批量生成路由 (v2.1.0)
 │   ├── quality.ts             # 质量评分路由 (v2.1.0)
 │   ├── cost-analysis.ts       # 成本分析路由 (v2.3.0)
+│   ├── cross-chapter.ts       # 跨章一致性路由 (v2.5.0)
 │   └── settings.ts             # 模型配置路由
 ├── services/                   # 服务层
 │   ├── llm.ts                  # LLM 统一调用层
@@ -400,7 +402,10 @@ server/
 │   │   ├── batchGenerate.ts    # 批量生成服务 (v2.1.0)
 │   │   ├── qualityCheck.ts     # 质量评分服务 (v2.1.0)
 │   │   ├── prevChapterAdvice.ts # 上一章建议服务 (v2.1.0)
-│   │   └── volumeCompletion.ts # 卷完成检测服务 (v2.1.0)
+│   │   ├── volumeCompletion.ts # 卷完成检测服务 (v2.1.0)
+│   │   ├── entityExtract.ts    # 内联实体提取服务 (v2.5.0)
+│   │   ├── characterGrowth.ts  # 角色成长追踪服务 (v2.5.0)
+│   │   └── entityConflict.ts   # 实体冲突检测服务 (v2.5.0)
 │   ├── contextBuilder.ts       # 上下文组装 (v4.0)
 │   ├── embedding.ts            # 向量化服务
 │   ├── vision.ts               # 视觉分析服务
@@ -525,7 +530,7 @@ app.use('*', cors())
 └──────────────┘
 ```
 
-### 数据库表清单（共 19 张表）
+### 数据库表清单（共 25 张表）
 
 | 表名 | 说明 | 主要字段 | 创建版本 |
 |------|------|----------|----------|
@@ -549,6 +554,12 @@ app.use('*', cors())
 | `workshopSessions` | 工坊会话 | id, novelId, stage, status, extractedData, messages, title | v1.5 |
 | `checkLogs` | 检查日志 | id, novelId, chapterId, checkType, score, result, **volumeProgressResult**, status | v1.6.0 (+v1.7.0) |
 | `queueTaskLogs` | 队列任务日志 | id, taskType, novelId, payload, status, error, startedAt, completedAt | v1.6.0 |
+| `novelInlineEntities` | 内联实体注册中心 | id, novelId, entityType, name, aliases, description, firstChapterOrder, lastChapterOrder, isGrowable, deletedAt | v2.5.0 |
+| `entityStateLog` | 实体状态链 | id, entityName, entityType, stateType, chapterOrder, prevState, currState, stateSummary, createdAt | v2.5.0 |
+| `entityConflictLog` | 实体冲突记录 | id, entityName, entityType, conflictType, description, severity, resolution, detectedChapterOrder, createdAt | v2.5.0 |
+| `characterGrowthLog` | 角色成长日志 | id, characterName, growthDimension, chapterOrder, prevState, currState, detail, createdAt | v2.5.0 |
+| `characterRelationships` | 角色关系网络 | id, characterNameA, characterNameB, relationType, relationDesc, lastUpdatedChapterOrder, createdAt | v2.5.0 |
+| `chapterStructuredData` | 章节结构化数据 | id, chapterId, chapterOrder, characterChanges, newEntities, chapterEndState, keyEvents, createdAt | v2.5.0 |
 
 > **注意**: 加粗字段为 v1.7.0 新增或修改的字段
 
@@ -567,6 +578,7 @@ app.use('*', cors())
 | `0019_batch_generation_tasks.sql` | v2.1.0 | 批量生成任务队列表 |
 | `0020_quality_scores.sql` | v2.1.0 | 质量评分表 |
 | `0021_chapter_post_processed_at.sql` | v2.3.0 | chapters表新增postProcessedAt字段 |
+| `0022_cross_chapter_consistency.sql` | v2.5.0 | 新增6张跨章一致性表（内联实体、实体状态、冲突、角色成长、关系网络、结构化数据） |
 
 ---
 
@@ -1259,11 +1271,12 @@ CLOUDFLARE_API_TOKEN=xxx      # Cloudflare API Token
 | **v1.11.0** | Workshop架构模块化拆分 + 10+前端组件全新设计 |
 | **v2.1.0** | 批量生成系统 + 质量评分 + 上一章建议 + 卷完成检测 |
 | **v2.3.0** | 成本分析系统 + 上下文构建优化 + 队列处理优化 |
+| **v2.5.0** | 跨章一致性系统 + 后处理链式执行 + Agent工具扩展 + 前端跨章管理页面 |
 
 ----
 
 <div align="center">
 
-**Architecture Version: 2.4.0 · 最后更新: 2026-04-30**
+**Architecture Version: 2.5.0 · 最后更新: 2026-05-02**
 
 </div>

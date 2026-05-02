@@ -120,6 +120,17 @@
   - [获取每日消耗明细](#获取每日消耗明细)
   - [获取消耗趋势数据](#获取消耗趋势数据)
   - [获取分类分项明细](#获取分类分项明细)
+- **跨章一致性 (Cross Chapter)** - v2.5.0新增
+  - [获取内联实体列表](#获取内联实体列表)
+  - [获取内联实体详情](#获取内联实体详情)
+  - [删除内联实体](#删除内联实体)
+  - [获取实体状态历史](#获取实体状态历史)
+  - [获取实体冲突列表](#获取实体冲突列表)
+  - [解决实体冲突](#解决实体冲突)
+  - [获取角色成长记录](#获取角色成长记录)
+  - [获取关系网络](#获取关系网络)
+  - [获取结构化数据](#获取结构化数据)
+  - [获取跨章统计汇总](#获取跨章统计汇总)
 - **境界管理 (Power Level)**
   - [检测境界突破](#检测境界突破)
   - [批量检测境界](#批量检测境界)
@@ -2791,6 +2802,291 @@ data: [DONE]
 
 ---
 
+## 跨章一致性 (Cross Chapter)
+
+> v2.5.0 新增 - 跨章一致性系统提供实体管理、角色成长追踪、冲突检测功能
+
+### 获取内联实体列表
+
+**GET** `/api/cross-chapter/inline-entities`
+
+> **需要认证**
+
+**查询参数**:
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| novelId | string | ✅ | 小说ID |
+| entityType | string | - | 实体类型过滤：character/artifact/technique/location/item/faction |
+| page | number | 1 | 页码 |
+| pageSize | number | 50 | 每页数量（最大200） |
+
+**响应示例**:
+```json
+[
+  {
+    "id": "ie_abc123",
+    "novelId": "novel456",
+    "entityType": "character",
+    "name": "林风",
+    "aliases": "小风,风少",
+    "description": "主角，一位天赋异禀的少年",
+    "firstChapterOrder": 1,
+    "lastChapterOrder": 25,
+    "isGrowable": 1,
+    "createdAt": 1714348800
+  }
+]
+```
+
+---
+
+### 获取内联实体详情
+
+**GET** `/api/cross-chapter/inline-entities/:id`
+
+> **需要认证**
+
+**响应示例**:
+```json
+{
+  "id": "ie_abc123",
+  "novelId": "novel456",
+  "entityType": "character",
+  "name": "林风",
+  "aliases": "小风,风少",
+  "description": "主角，一位天赋异禀的少年",
+  "firstChapterOrder": 1,
+  "lastChapterOrder": 25,
+  "isGrowable": 1
+}
+```
+
+---
+
+### 删除内联实体
+
+**DELETE** `/api/cross-chapter/inline-entities/:id`
+
+> **需要认证**
+
+**说明**: 软删除，实体不会在上下文中出现
+
+**响应**:
+```json
+{
+  "success": true
+}
+```
+
+---
+
+### 获取实体状态历史
+
+**GET** `/api/cross-chapter/entity-state-log`
+
+> **需要认证**
+
+**查询参数**:
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| novelId | string | ✅ | 小说ID |
+| entityName | string | - | 实体名称过滤 |
+| stateType | string | - | 状态类型过滤 |
+| limit | number | 50 | 返回数量（最大200） |
+
+**响应示例**:
+```json
+[
+  {
+    "id": "esl_abc123",
+    "entityName": "林风",
+    "entityType": "character",
+    "stateType": "cultivation",
+    "chapterOrder": 15,
+    "prevState": "炼气初期",
+    "currState": "炼气中期",
+    "stateSummary": "服用筑基丹后突破",
+    "createdAt": 1714348800
+  }
+]
+```
+
+---
+
+### 获取实体冲突列表
+
+**GET** `/api/cross-chapter/entity-conflicts`
+
+> **需要认证**
+
+**查询参数**:
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| novelId | string | ✅ | 小说ID |
+| resolution | string | - | 过滤条件：pending/known_setting/fixed |
+| page | number | 1 | 页码 |
+| pageSize | number | 50 | 每页数量（最大200） |
+
+**响应示例**:
+```json
+[
+  {
+    "id": "ecl_abc123",
+    "entityName": "林风",
+    "entityType": "character",
+    "conflictType": "state_inconsistency",
+    "description": "角色在第20章描述为炼气后期，但在第25章又变回炼气中期",
+    "severity": "error",
+    "resolution": null,
+    "detectedChapterOrder": 25,
+    "createdAt": 1714348800
+  }
+]
+```
+
+---
+
+### 解决实体冲突
+
+**PUT** `/api/cross-chapter/entity-conflicts/:id/resolve`
+
+> **需要认证**
+
+**请求体**:
+```json
+{
+  "resolution": "known_setting"
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| resolution | string | ✅ | 解决方案：known_setting（已知设定）/ fixed（已修复） |
+
+**响应**:
+```json
+{
+  "success": true
+}
+```
+
+---
+
+### 获取角色成长记录
+
+**GET** `/api/cross-chapter/character-growth`
+
+> **需要认证**
+
+**查询参数**:
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| novelId | string | ✅ | 小说ID |
+| characterId | string | - | 角色ID过滤 |
+| dimension | string | - | 成长维度过滤：ability/social/knowledge/emotion/combat/possession/growth |
+| limit | number | 50 | 返回数量（最大200） |
+
+**响应示例**:
+```json
+[
+  {
+    "id": "cgl_abc123",
+    "characterName": "林风",
+    "growthDimension": "ability",
+    "chapterOrder": 20,
+    "prevState": "炼气初期",
+    "currState": "炼气中期",
+    "detail": "服用筑基丹后成功突破",
+    "createdAt": 1714348800
+  }
+]
+```
+
+---
+
+### 获取关系网络
+
+**GET** `/api/cross-chapter/relationships`
+
+> **需要认证**
+
+**查询参数**:
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| novelId | string | ✅ | 小说ID |
+| characterId | string | - | 角色ID过滤 |
+
+**响应示例**:
+```json
+[
+  {
+    "id": "rel_abc123",
+    "characterNameA": "林风",
+    "characterNameB": "苏瑶",
+    "relationType": "师徒",
+    "relationDesc": "林风拜苏瑶为师",
+    "lastUpdatedChapterOrder": 30,
+    "createdAt": 1714348800
+  }
+]
+```
+
+---
+
+### 获取结构化数据
+
+**GET** `/api/cross-chapter/structured-data`
+
+> **需要认证**
+
+**查询参数**:
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| novelId | string | ✅ | 小说ID |
+| chapterId | string | - | 章节ID过滤 |
+| limit | number | 50 | 返回数量（最大200） |
+
+**响应示例**:
+```json
+[
+  {
+    "id": "csd_abc123",
+    "chapterId": "chap123",
+    "chapterOrder": 15,
+    "characterChanges": "林风境界从炼气初期突破到炼气中期",
+    "newEntities": "筑基丹 - 服用后可加速修炼",
+    "chapterEndState": "林风成功突破，正在稳固境界",
+    "keyEvents": "1. 发现神秘玉佩 2. 服用筑基丹 3. 成功突破",
+    "createdAt": 1714348800
+  }
+]
+```
+
+---
+
+### 获取跨章统计汇总
+
+**GET** `/api/cross-chapter/stats`
+
+> **需要认证**
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| novelId | string | ✅ | 小说ID |
+
+**响应示例**:
+```json
+{
+  "inlineEntityCount": 45,
+  "pendingConflictCount": 3,
+  "growthRecordCount": 128,
+  "relationshipCount": 22
+}
+```
+
+---
+
 ## 境界管理 (Power Level)
 
 ### 检测境界突破
@@ -3838,6 +4134,6 @@ X-Export-Id: export_abc123
 
 <div align="center">
 
-**API Version: 3.2.0**
+**API Version: 3.3.0**
 
 </div>

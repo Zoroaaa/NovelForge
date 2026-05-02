@@ -7,6 +7,110 @@
 
 ---
 
+## [2.5.0] - 2026-05-02
+
+### 🎉 重大更新：Phase 16 · 跨章一致性系统全面实现
+
+#### 🆕 新增功能
+
+##### 跨章一致性系统 🚀
+- **跨章一致性管理API** (`server/routes/cross-chapter.ts`)
+  - `GET /api/cross-chapter/inline-entities` - 获取内联实体列表
+  - `GET /api/cross-chapter/inline-entities/:id` - 获取单个实体详情
+  - `DELETE /api/cross-chapter/inline-entities/:id` - 删除内联实体
+  - `GET /api/cross-chapter/entity-state-log` - 获取实体状态历史
+  - `GET /api/cross-chapter/entity-conflicts` - 获取实体冲突记录
+  - `PUT /api/cross-chapter/entity-conflicts/:id/resolve` - 标记冲突已解决
+  - `GET /api/cross-chapter/character-growth` - 获取角色成长记录
+  - `GET /api/cross-chapter/relationships` - 获取关系网络
+  - `GET /api/cross-chapter/structured-data` - 获取结构化数据
+  - `GET /api/cross-chapter/stats` - 获取统计汇总
+
+- **内联实体管理** (`server/services/agent/entityExtract.ts`)
+  - 从章节内容中自动提取内联实体（角色、法宝、功法、地点、道具、势力）
+  - 实体信息持久化到数据库
+  - 自动触发实体向量索引
+
+- **角色成长追踪** (`server/services/agent/characterGrowth.ts`)
+  - 追踪角色多维度成长记录（能力/社会/知识/情感/战斗/ possession/成长型）
+  - 记录角色关系网络变化
+  - 支持知识揭示和秘密揭示追踪
+
+- **实体冲突检测** (`server/services/agent/entityConflict.ts`)
+  - 自动检测实体状态前后矛盾
+  - 冲突严重程度分级（error/warning/info）
+  - 提供已知设定/已修复等解决方案
+
+##### 前端跨章一致性管理页面 🖥️
+- **跨章一致性管理页面** (`src/pages/CrossChapterPage.tsx`)
+  - 内联实体管理Tab - 展示和管理小说中的内联实体
+  - 实体冲突Tab - 查看和解决检测到的冲突
+  - 角色成长Tab - 查看角色成长历程
+  - 关系网络Tab - 展示角色关系图谱
+  - 统计概览 - 显示各类数据统计
+
+##### 后处理流程重构 📋
+- **链式步骤执行** (`server/services/agent/postProcess.ts`)
+  - step1: 自动摘要生成
+  - step1b: 解析结构化数据（从摘要中提取标签）
+  - step2: 伏笔提取
+  - step3: 境界检测
+  - step4: 角色一致性检查
+  - step5: 连贯性检查
+  - step6: 卷进度检查
+  - step7: 实体提取
+  - step8: 角色成长追踪
+  - step9: 实体冲突检测
+
+- **双重执行模式**
+  - 队列模式：有TASK_QUEUE时异步链式执行
+  - 同步模式：无TASK_QUEUE时同步执行所有步骤
+
+##### Agent工具扩展 🛠️
+- **queryInlineEntity** - 查询内联实体信息（精确匹配）
+- **queryEntityStateHistory** - 查询实体状态历史记录
+- **queryCharacterGrowth** - 查询角色多维度成长记录
+
+##### 摘要结构化解析 📝
+- **parseStructuredDataFromSummary** (`server/services/agent/summarizer.ts`)
+  - 自动解析摘要中的结构化标签
+  - 支持标签：角色状态变化、关键事件、道具/功法、章末状态
+  - 写入 `chapterStructuredData` 表
+
+#### 🗄️ 数据库变更
+
+- 🔧 新增 `novel_inline_entities` 表 - 内联实体注册中心
+- 🔧 新增 `entity_state_log` 表 - 实体全程状态链
+- 🔧 新增 `entity_conflict_log` 表 - 检测到的冲突记录
+- 🔧 新增 `character_growth_log` 表 - 角色成长历史记录（7维度）
+- 🔧 新增 `character_relationships` 表 - 关系网络快照
+- 🔧 新增 `chapter_structured_data` 表 - 摘要结构化缓存
+- 🔧 数据库迁移 `0002_cross_chapter_consistency.sql`
+
+#### 📝 文档更新
+
+- 📝 **CROSS-CHAPTER-CONSISTENCY-GUIDE.md** - 新增跨章一致性完整使用指南
+- 📝 **CHAPTER-GENERATION-CONTEXT-GUIDE.md** - 更新至v2.5.0
+- 📝 **CHAPTER-GENERATION-USAGE-GUIDE.md** - 更新至v2.5.0
+
+#### 🚀 架构优化
+
+- **队列系统扩展** (`server/lib/queue.ts`)
+  - 新增 post_process_step_1 到 post_process_step_9 消息类型
+  - 支持链式任务调度
+
+- **上下文构建器增强** (`server/services/contextBuilder.ts`)
+  - 支持结构化数据查询
+
+#### ✅ 改进
+
+- 🔧 跨章一致性系统提供实体、角色成长、冲突检测的完整管理
+- 🔧 后处理流程链式执行，处理更高效
+- 🔧 摘要支持结构化解析，信息更结构化
+- 🔧 Agent工具扩展，支持更多查询场景
+
+---
+
 ## [2.4.0] - 2026-04-30
 
 ### 🎉 重大更新：Phase 15 · 导入数据功能全面升级 + PWA 离线支持
@@ -1749,6 +1853,31 @@
 ---
 
 ## 升级指南
+
+### 升级到 2.5.0
+
+```bash
+# 拉取最新代码
+git pull origin main
+
+# 更新依赖
+pnpm update
+
+# 运行数据库迁移（如有）
+wrangler d1 migrations apply novelforge --remote
+
+# 重新部署
+pnpm build
+wrangler pages deploy dist
+```
+
+**重要变更说明**：
+- 新增跨章一致性系统：提供内联实体管理、角色成长追踪、实体冲突检测功能
+- 新增6张数据库表，需要运行迁移 `0002_cross_chapter_consistency.sql`
+- 后处理流程重构为链式步骤执行（step1 到 step9）
+- 新增3个Agent工具：`queryInlineEntity`、`queryEntityStateHistory`、`queryCharacterGrowth`
+- 摘要生成支持结构化标签解析
+- 前端新增跨章一致性管理页面
 
 ### 升级到 2.4.0
 

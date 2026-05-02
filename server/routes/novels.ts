@@ -2,7 +2,7 @@
  * @file novels.ts
  * @description 小说管理路由模块，提供小说CRUD、封面上传等功能
  * @version 1.0.0
- * @modified 2026-04-21 - 添加规范化注释
+ * @modified 2026-05-02 - 硬删除补充清理 novel_inline_entities、entity_state_log、entity_conflict_log、character_growth_log、character_relationships、chapter_structured_data
  */
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
@@ -15,6 +15,12 @@ import { deindexContent, deindexNovel } from '../services/embedding'
 import { generateGenreSystemPrompt } from '../services/workshop/generateGenreSystemPrompt'
 
 const router = new Hono<{ Bindings: Env }>()
+
+type TrashSourceType = 'character' | 'setting' | 'foreshadowing'
+
+function extractIds(results: { id: string }[] | undefined): string[] {
+  return results?.map(r => r.id) ?? []
+}
 
 const CreateSchema = z.object({
   title: z.string().min(1).max(200),
@@ -198,6 +204,30 @@ router.delete('/trash', async (c) => {
       `DELETE FROM writing_rules WHERE novel_id = ?`
     ).bind(novelId).run()
 
+    await c.env.DB.prepare(
+      `DELETE FROM novel_inline_entities WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM entity_state_log WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM entity_conflict_log WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM character_growth_log WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM character_relationships WHERE novel_id = ?`
+    ).bind(novelId).run()
+
+    await c.env.DB.prepare(
+      `DELETE FROM chapter_structured_data WHERE novel_id = ?`
+    ).bind(novelId).run()
+
     const result = await c.env.DB.prepare(
       `DELETE FROM novels WHERE id = ? AND deleted_at IS NOT NULL`
     ).bind(novelId).run()
@@ -355,7 +385,7 @@ router.post('/:id/cover', async (c) => {
   const novel = await db.select({ coverR2Key: t.coverR2Key }).from(t).where(eq(t.id, id)).get()
 
   if (novel?.coverR2Key) {
-    try { await c.env.STORAGE.delete(novel.coverR2Key) } catch {}
+    try { await c.env.STORAGE.delete(novel.coverR2Key) } catch { /* ignore delete failure */ }
   }
 
   await db.update(t).set({ coverR2Key: key, updatedAt: sql`(unixepoch())` }).where(eq(t.id, id))
@@ -441,22 +471,123 @@ router.delete('/:id/trash', async (c) => {
 
     try {
       if (tbl === 'chapters') {
+        const chapterIds = await c.env.DB.prepare(
+          `SELECT id FROM chapters WHERE novel_id = ? AND deleted_at IS NOT NULL`
+        ).bind(novelId).all()
+        const chapterIdList = extractIds(chapterIds.results as { id: string }[] | undefined)
+
+        if (chapterIdList.length > 0) {
+          const placeholders = chapterIdList.map(() => '?').join(',')
+          await c.env.DB.prepare(
+            `DELETE FROM foreshadowing WHERE chapter_id IN (${placeholders}) OR resolved_chapter_id IN (${placeholders})`
+          ).bind(...[...chapterIdList, ...chapterIdList]).run()
+          await c.env.DB.prepare(
+            `DELETE FROM generation_logs WHERE chapter_id IN (${placeholders})`
+          ).bind(...chapterIdList).run()
+          await c.env.DB.prepare(
+            `DELETE FROM check_logs WHERE chapter_id IN (${placeholders})`
+          ).bind(...chapterIdList).run()
+          await c.env.DB.prepare(
+            `DELETE FROM quality_scores WHERE chapter_id IN (${placeholders})`
+          ).bind(...chapterIdList).run()
+          await c.env.DB.prepare(
+            `DELETE FROM foreshadowing_progress WHERE chapter_id IN (${placeholders})`
+          ).bind(...chapterIdList).run()
+          await c.env.DB.prepare(
+            `DELETE FROM vector_index WHERE source_type = 'chapter' AND source_id IN (${placeholders})`
+          ).bind(...chapterIdList).run()
+          await c.env.DB.prepare(
+            `DELETE FROM entity_index WHERE entity_type = 'chapter' AND entity_id IN (${placeholders})`
+          ).bind(...chapterIdList).run()
+          await c.env.DB.prepare(
+            `DELETE FROM plot_nodes WHERE chapter_id IN (${placeholders})`
+          ).bind(...chapterIdList).run()
+          await c.env.DB.prepare(
+            `DELETE FROM chapter_structured_data WHERE chapter_id IN (${placeholders})`
+          ).bind(...chapterIdList).run()
+          await c.env.DB.prepare(
+            `DELETE FROM entity_state_log WHERE chapter_id IN (${placeholders})`
+          ).bind(...chapterIdList).run()
+          await c.env.DB.prepare(
+            `DELETE FROM character_growth_log WHERE chapter_id IN (${placeholders})`
+          ).bind(...chapterIdList).run()
+          await c.env.DB.prepare(
+            `DELETE FROM entity_conflict_log WHERE detected_chapter_id IN (${placeholders})`
+          ).bind(...chapterIdList).run()
+        }
+      }
+
+      if (tbl === 'characters') {
+        const charIds = await c.env.DB.prepare(
+          `SELECT id FROM characters WHERE novel_id = ? AND deleted_at IS NOT NULL`
+        ).bind(novelId).all()
+        const charIdList = extractIds(charIds.results as { id: string }[] | undefined)
+
+        if (charIdList.length > 0) {
+          const placeholders = charIdList.map(() => '?').join(',')
+          await c.env.DB.prepare(
+            `DELETE FROM character_growth_log WHERE character_id IN (${placeholders})`
+          ).bind(...charIdList).run()
+          await c.env.DB.prepare(
+            `DELETE FROM character_relationships WHERE character_id_a IN (${placeholders}) OR character_id_b IN (${placeholders})`
+          ).bind(...[...charIdList, ...charIdList]).run()
+          await c.env.DB.prepare(
+            `DELETE FROM entity_state_log WHERE source_type = 'character' AND source_id IN (${placeholders})`
+          ).bind(...charIdList).run()
+          await c.env.DB.prepare(
+            `DELETE FROM entity_conflict_log WHERE source_type = 'character' AND source_id IN (${placeholders})`
+          ).bind(...charIdList).run()
+          await c.env.DB.prepare(
+            `DELETE FROM novel_inline_entities WHERE entity_type = 'character' AND (first_chapter_id IN (SELECT id FROM chapters WHERE novel_id = ? AND deleted_at IS NOT NULL) OR last_chapter_id IN (SELECT id FROM chapters WHERE novel_id = ? AND deleted_at IS NOT NULL))`
+          ).bind(novelId, novelId).run()
+        }
+      }
+
+      if (tbl === 'volumes') {
+        const volumeIds = await c.env.DB.prepare(
+          `SELECT id FROM volumes WHERE novel_id = ? AND deleted_at IS NOT NULL`
+        ).bind(novelId).all()
+        const volumeIdList = extractIds(volumeIds.results as { id: string }[] | undefined)
+
+        if (volumeIdList.length > 0) {
+          const placeholders = volumeIdList.map(() => '?').join(',')
+          await c.env.DB.prepare(
+            `DELETE FROM foreshadowing WHERE volume_id IN (${placeholders})`
+          ).bind(...volumeIdList).run()
+          await c.env.DB.prepare(
+            `DELETE FROM entity_index WHERE entity_type = 'volume' AND entity_id IN (${placeholders})`
+          ).bind(...volumeIdList).run()
+        }
+      }
+
+      if (tbl === 'foreshadowing') {
+        const foreIds = await c.env.DB.prepare(
+          `SELECT id FROM foreshadowing WHERE novel_id = ? AND deleted_at IS NOT NULL`
+        ).bind(novelId).all()
+        const foreIdList = extractIds(foreIds.results as { id: string }[] | undefined)
+
+        if (foreIdList.length > 0) {
+          const placeholders = foreIdList.map(() => '?').join(',')
+          await c.env.DB.prepare(
+            `DELETE FROM foreshadowing_progress WHERE foreshadowing_id IN (${placeholders})`
+          ).bind(...foreIdList).run()
+        }
+      }
+
+      if (tbl === 'settings') {
         await c.env.DB.prepare(
-          `DELETE FROM foreshadowing WHERE chapter_id IN (SELECT id FROM chapters WHERE novel_id = ? AND deleted_at IS NOT NULL) OR resolved_chapter_id IN (SELECT id FROM chapters WHERE novel_id = ? AND deleted_at IS NOT NULL)`
-        ).bind(novelId, novelId).run()
-        await c.env.DB.prepare(
-          `DELETE FROM generation_logs WHERE chapter_id IN (SELECT id FROM chapters WHERE novel_id = ? AND deleted_at IS NOT NULL)`
+          `DELETE FROM novel_inline_entities WHERE entity_type = 'setting' AND novel_id = ?`
         ).bind(novelId).run()
       }
 
       if (tbl === 'characters' || tbl === 'settings' || tbl === 'foreshadowing') {
-        const sourceType = tbl === 'characters' ? 'character' : tbl === 'settings' ? 'setting' : 'foreshadowing'
+        const sourceType: TrashSourceType = tbl === 'characters' ? 'character' : tbl === 'settings' ? 'setting' : 'foreshadowing'
         const query = tbl === 'settings'
           ? `SELECT id FROM novel_settings WHERE novel_id = ? AND deleted_at IS NOT NULL`
           : `SELECT id FROM ${tableName} WHERE novel_id = ? AND deleted_at IS NOT NULL`
         const deletedRows = await c.env.DB.prepare(query).bind(novelId).all()
         for (const row of deletedRows.results ?? []) {
-          await deindexContent(c.env, sourceType as any, String(row.id), 1).catch((e: any) => console.warn(`[trash] Failed to deindex ${sourceType} ${row.id}:`, e))
+          await deindexContent(c.env, sourceType as 'character' | 'setting' | 'foreshadowing', String(row.id), 1).catch((e: unknown) => console.warn(`[trash] Failed to deindex ${sourceType} ${row.id}:`, e))
         }
       }
 

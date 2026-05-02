@@ -3,8 +3,8 @@
 <div align="center">
 
 ![NovelForge Logo](https://img.shields.io/badge/NovelForge-AI%20Writing%20Studio-blue?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-2.4.0-success?style=for-the-badge)
-![Phase](https://img.shields.io/badge/Phase-15%20Complete-success?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-2.5.0-success?style=for-the-badge)
+![Phase](https://img.shields.io/badge/Phase-16%20Complete-success?style=for-the-badge)
 ![Cloudflare](https://img.shields.io/badge/Cloudflare-Pages%2BWorkers-orange?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
@@ -251,6 +251,7 @@ Total: 128,000 tokens
 | **📈 卷完成检测** | 卷完成度评估 · 字数/章节数进度 · 完成百分比计算 |
 | **🗺️ 情节图谱** | 角色关系可视化 · 势力关系图 · 情节发展追踪 · 交互式探索 |
 | **🎨 封面生成** | AI智能生成小说封面 · 多风格支持 · 自定义上传 · R2存储 |
+| **🔗 跨章一致性** | ⭐v2.5.0新增：内联实体管理 · 角色成长追踪 · 实体冲突检测 · 关系网络 · 结构化数据 |
 
 ---
 
@@ -311,7 +312,8 @@ wrangler pages dev --local -- pnpm dev
 | [章节生成使用指南](./docs/CHAPTER-GENERATION-USAGE-GUIDE.md) | 章节生成操作指南 |
 | [模型使用指南](./docs/MODEL-USAGE-GUIDE.md) | 模型配置与使用详解 |
 | [创作工坊指南](./docs/WORKSHOP-EXECUTION-GUIDE.md) | 创作工坊完整执行逻辑 |
-| [导入数据指南](./docs/IMPORT-DATA-GUIDE.md) | ⭐v2.4.0 新增：数据批量导入详解 |
+| [导入数据指南](./docs/IMPORT-DATA-GUIDE.md) | ⭐v2.4.0新增：数据批量导入详解 |
+| [跨章一致性指南](./docs/CROSS-CHAPTER-CONSISTENCY-GUIDE.md) | ⭐v2.5.0新增：跨章一致性系统使用指南 |
 | [CHANGELOG](./CHANGELOG.md) | 版本更新记录 |
 
 ---
@@ -522,8 +524,9 @@ novelforge/
 │   │   ├── SetupPage.tsx         # 系统初始化页
 │   │   ├── WorkshopPage.tsx      # 创意工坊页
 │   │   ├── AiMonitorPage.tsx     # AI监控中心页
-│   │   ├── NovelsPage.tsx        # 小说列表页
-│   │   ├── WorkspacePage.tsx     # 工作区页面
+│   ├── CrossChapterPage.tsx  # 跨章一致性管理页 (v2.5.0 新增)
+│   ├── NovelsPage.tsx        # 小说列表页
+│   ├── WorkspacePage.tsx     # 工作区页面
 │   │   └── ReaderPage.tsx        # 阅读器页面
 │   ├── store/
 │   │   ├── authStore.ts          # 认证状态管理
@@ -564,6 +567,7 @@ novelforge/
 │   │   ├── batch.ts              # 批量生成 (v2.1.0)
 │   │   ├── quality.ts            # 质量评分 (v2.1.0)
 │   │   ├── cover.ts              # 封面生成 (v2.2.0)
+│   │   ├── cross.ts              # 跨章一致性 (v2.5.0 新增)
 │   │   ├── graph.ts              # 情节图谱 (v2.2.0)
 │   │   ├── settings.ts           # 模型配置
 │   │   ├── vectorize.ts          # 向量化索引
@@ -602,6 +606,9 @@ novelforge/
 │   │   ├── formatImport.ts      # 格式导入服务 (v1.8.0 新增)
 │   │   ├── plotGraph.ts         # 情节图谱 (v2.2.0 新增)
 │   │   ├── imageGen.ts          # 封面生成 (v2.2.0 新增)
+│   │   ├── entityExtract.ts      # 内联实体提取 (v2.5.0 新增)
+│   │   ├── characterGrowth.ts    # 角色成长追踪 (v2.5.0 新增)
+│   │   ├── entityConflict.ts     # 实体冲突检测 (v2.5.0 新增)
 │   │   └── workshop.ts          # 创意工坊服务
 │   ├── lib/
 │   │   ├── auth.ts              # 认证模块
@@ -688,6 +695,6 @@ novelforge/
 
 <div align="center">
 
-**Made with ❤️ by the NovelForge Team · Version 2.4.0**
+**Made with ❤️ by the NovelForge Team · Version 2.5.0**
 
 </div>

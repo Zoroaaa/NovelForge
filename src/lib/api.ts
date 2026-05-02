@@ -33,7 +33,7 @@ async function req<T>(
   init?: RequestInit & { timeout?: number; signal?: AbortSignal }
 ): Promise<T> {
   const controller = new AbortController()
-  const timeout = init?.timeout ?? 30000
+  const timeout = init?.timeout ?? 180000
 
   const timer = setTimeout(() => controller.abort(), timeout)
 
