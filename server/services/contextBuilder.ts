@@ -1,8 +1,8 @@
 /**
  * @file contextBuilder.ts
- * @description 精准分槽上下文构建器 v4 —— DB为主+向量为辅
+ * @description 精准分槽上下文构建器 v5 —— DB为主+向量为辅+跨章一致性增强
  *
- * 核心改造（从 v3 升级）:
+ * 核心改造（从 v4 升级）:
  * - 向量只负责"语义检索找相关ID"，不负责存储完整内容
  * - 角色槽：RAG 返回 sourceId → DB 批量 IN 查完整卡片（name+role+desc+attr+powerLevel）
  * - 设定槽：RAG 返回 summary 字段（novelSettings.summary），不再存全文切块
@@ -12,18 +12,35 @@
  * - 摘要链：默认 20 章（从 5 章扩展）
  * - 预算：~55k tokens（充分利用 256k 窗口，安全范围 40-50k）
  *
- * Slot-0  总纲全文/长摘要                    DB直查    ~10000 tokens
- * Slot-1  当前卷 blueprint + eventLine        DB直查    ~1500 tokens
- * Slot-2  上一章正文                          DB直查    ~5000 tokens
- * Slot-3  主角完整状态卡                      DB直查    ~3000 tokens
- * Slot-4  全部活跃创作规则                     DB直查    ~5000 tokens
- * Slot-5  出场角色卡（RAG引导→DB补全）         RAG+DB   ~8000 tokens
- * Slot-6  世界设定（RAG查summary）              RAG      ~12000 tokens
- * Slot-7  待回收伏笔（高优DB兜底+普通RAG）     混合     ~4000 tokens
- * Slot-8  本章类型匹配规则                    DB过滤   ~3000 tokens
- * Slot-9  近期剧情摘要链(20章)                 DB直查   ~10000 tokens
+ * v5 新增（跨章一致性系统）:
+ * - Slot-3 升级：主角卡注入 knowledge 已知信息边界 + oath_debt 誓言血仇
+ * - Slot-10：关键词精确匹配层，从 novel_inline_entities 确定性召回即兴创造实体，
+ *            成长性实体自动追加 entity_state_log 最新状态
+ * - Slot-11：角色关系网络，从 character_relationships 注入主角当前关系图谱
+ * - queryText 扩充至 1200 字，补入近期摘要尾部 + 卷蓝图片段，提升关键词命中率
  *
- * @version 4.0.0
+ * ReAct 工具层（tools.ts / executor.ts）:
+ * - 工具6 queryInlineEntity：LLM 主动查询 novel_inline_entities，适用于"记得前文出现过
+ *   某个名字但资料包里没有"的场景，返回实体描述 + 最新状态
+ * - 工具7 queryEntityStateHistory：查询成长性实体（功法/宝物/势力）的完整状态历史链，
+ *   适用于"需要确认当前修炼程度/势力规模/宝物状态"的场景
+ * - 工具8 queryCharacterGrowth：查询角色在 character_growth_log 中的成长记录，
+ *   适用于"需要确认角色当前心理状态/已知信息/人际关系"的场景
+ *
+ * Slot-0  总纲全文/长摘要                         DB直查         ~10000 tokens
+ * Slot-1  当前卷 blueprint + eventLine             DB直查         ~1500  tokens
+ * Slot-2  上一章正文                               DB直查         ~5000  tokens
+ * Slot-3  主角完整状态卡（含知识边界+誓言）★升级   DB直查         ~4000  tokens
+ * Slot-4  全部活跃创作规则                          DB直查         ~5000  tokens
+ * Slot-5  出场角色卡（RAG引导→DB补全）              RAG+DB         ~8000  tokens
+ * Slot-6  世界设定（RAG查summary）                  RAG            ~12000 tokens
+ * Slot-7  待回收伏笔（高优DB兜底+普通RAG）          混合           ~4000  tokens
+ * Slot-8  本章类型匹配规则                          DB过滤         ~3000  tokens
+ * Slot-9  近期剧情摘要链(20章)                      DB直查         ~10000 tokens
+ * Slot-10 关键词精确匹配的内联实体（含成长态）★新增  精确匹配+DB   ~6000  tokens
+ * Slot-11 主角关系网络快照                          ★新增 DB直查   ~2000  tokens
+ *
+ * @version 5.0.0
  */
 
 import { drizzle, type DrizzleD1Database } from 'drizzle-orm/d1'
@@ -183,8 +200,6 @@ export async function buildChapterContext(
     outlineContent,
     volumeInfo,
     prevContent,
-    protagonistData,
-    powerLevelInfo,
     allActiveRules,
     recentSummaries,
     rhythmStats,
@@ -193,8 +208,6 @@ export async function buildChapterContext(
     fetchMasterOutlineContent(db, novelId),
     fetchVolumeInfo(db, currentChapter.volumeId),
     fetchPrevChapterContent(db, currentChapter.novelId, currentChapter.sortOrder),
-    fetchProtagonistCards(db, novelId),
-    fetchProtagonistPowerLevel(db, novelId),
     fetchAllActiveRules(db, novelId),
     fetchRecentSummaries(db, currentChapter.novelId, currentChapter.sortOrder, summaryChainLength, currentChapter.volumeId ?? undefined),
     fetchRhythmStats(db, novelId, currentChapter.volumeId, currentChapter.sortOrder),
@@ -213,15 +226,28 @@ export async function buildChapterContext(
     ? currentChapter.sortOrder - firstChapterInVolume.sortOrder + 1
     : 1
 
-  const protagonistStateCards = mergeProtagonistAndPower(protagonistData, powerLevelInfo)
+  // Slot-3 升级：主角完整状态卡（含 knowledge 已知信息边界 + oath_debt 誓言血仇）
+  const protagonistStateCards = await fetchProtagonistFullState(db, novelId)
 
   // ── Step 2: 先提取本章事件（用于类型推断和向量构建） ──
   const { prevEvent, currentEvent, nextThreeChapters } = extractCurrentChapterEvent(volumeInfo.eventLine, chapterIndexInVolume)
   let typeHintSource: string = currentEvent || volumeInfo.eventLine
   const chapterTypeHint = inferChapterType(typeHintSource, currentChapter.title)
 
-  // ── Step 2b: 组装查询向量（聚焦当前章节语义，≤800字） ──
+  // ── Step 2b: 组装查询向量（聚焦当前章节语义，≤1200字）──
+  // v5：扩充 queryText，补入近期摘要尾部 + 卷蓝图片段，提升 Slot-10 关键词命中率
   const queryTextParts = [currentChapter.title, prevEvent, currentEvent, nextThreeChapters]
+
+  // 近期3条摘要尾部（捕捉"接续上回"类的隐式地名/实体名）
+  const summariesForQuery = recentSummaries.slice(-3)
+  for (const s of summariesForQuery) {
+    queryTextParts.push(s.slice(-200))
+  }
+
+  // 卷蓝图前段（卷级背景词，包含势力/地点名）
+  if (volumeInfo.blueprint) {
+    queryTextParts.push(volumeInfo.blueprint.slice(0, 300))
+  }
 
   if (!currentEvent && recentSummaries.length > 0) {
     const lastSummary = recentSummaries[recentSummaries.length - 1]
@@ -232,7 +258,7 @@ export async function buildChapterContext(
     queryTextParts.push(prevContent.slice(-400))
   }
 
-  const queryText = queryTextParts.filter(Boolean).join('\n').slice(0, 800)
+  const queryText = queryTextParts.filter(Boolean).join('\n').slice(0, 1200)
 
   // ── Step 3: Dynamic 层分槽检索 ──
   let characterCards: string[] = []
@@ -931,6 +957,131 @@ async function fetchRecentSummaries(
   }
 }
 
+/**
+ * Slot-3 升级版：主角完整状态卡
+ *
+ * 在原有 description + powerLevel 基础上，额外注入：
+ * 1. characters.attributes.growthStates — 心理/身体/立场当前状态（由 step8 维护）
+ * 2. character_growth_log (dimension='knowledge') — 主角已知的关键信息边界（最近8条）
+ * 3. character_growth_log (dimension='oath_debt')  — 誓言/恩情/血仇（最近5条）
+ *
+ * 这些数据由 postProcess step8（characterGrowth）写入，此处消费，形成"写→读"闭环。
+ */
+async function fetchProtagonistFullState(db: AppDb, novelId: string): Promise<string[]> {
+  try {
+    const protagonists = await db
+      .select({
+        id: characters.id,
+        name: characters.name,
+        description: characters.description,
+        role: characters.role,
+        attributes: characters.attributes,
+        powerLevel: characters.powerLevel,
+      })
+      .from(characters)
+      .where(and(
+        eq(characters.novelId, novelId),
+        eq(characters.role, 'protagonist'),
+        sql`${characters.deletedAt} IS NULL`,
+      ))
+      .all()
+
+    if (protagonists.length === 0) return []
+
+    const cards = await Promise.all(protagonists.map(async p => {
+      let card = `【${p.name}（主角）】\n${p.description || ''}`
+
+      // ── 境界/实力 ──
+      if (p.powerLevel) {
+        try {
+          const pl = JSON.parse(p.powerLevel)
+          const parts: string[] = []
+          if (pl.current) parts.push(`当前境界：${pl.current}`)
+          if (pl.nextMilestone) parts.push(`下一目标：${pl.nextMilestone}`)
+          if (parts.length > 0) card += `\n${parts.join('，')}`
+        } catch {}
+      }
+
+      // ── growthStates（心理/身体/立场，由 step8 写入 attributes.growthStates） ──
+      if (p.attributes) {
+        try {
+          const attrs = JSON.parse(p.attributes)
+          if (attrs.growthStates) {
+            const gs = attrs.growthStates
+            if (gs.psychology) card += `\n心理状态：${gs.psychology}`
+            if (gs.physical)   card += `\n身体状态：${gs.physical}`
+            if (gs.stance)     card += `\n当前立场：${gs.stance}`
+          } else {
+            // 兼容旧格式：把 attributes 所有字段展示出来
+            const entries = Object.entries(attrs)
+            if (entries.length > 0) {
+              card += `\n属性：${entries.map(([k, v]) => `${k}: ${v}`).join(' | ')}`
+            }
+          }
+        } catch {}
+      }
+
+      // ── 已知关键信息边界（knowledge） ──
+      try {
+        const knowledgeItems = await db
+          .select({
+            currState: characterGrowthLog.currState,
+            isSecret: characterGrowthLog.isSecret,
+            chapterOrder: characterGrowthLog.chapterOrder,
+          })
+          .from(characterGrowthLog)
+          .where(and(
+            eq(characterGrowthLog.characterId, p.id),
+            eq(characterGrowthLog.growthDimension, 'knowledge'),
+          ))
+          .orderBy(desc(characterGrowthLog.chapterOrder))
+          .limit(8)
+          .all()
+
+        if (knowledgeItems.length > 0) {
+          card += `\n\n【主角已知的关键信息——不得遗忘】`
+          for (const k of knowledgeItems) {
+            const secretTag = k.isSecret ? '（秘密·对外保密）' : ''
+            card += `\n• ${k.currState}${secretTag}`
+          }
+        }
+      } catch {}
+
+      // ── 誓言/恩情/血仇（oath_debt） ──
+      try {
+        const oaths = await db
+          .select({
+            currState: characterGrowthLog.currState,
+            chapterOrder: characterGrowthLog.chapterOrder,
+          })
+          .from(characterGrowthLog)
+          .where(and(
+            eq(characterGrowthLog.characterId, p.id),
+            eq(characterGrowthLog.growthDimension, 'oath_debt'),
+          ))
+          .orderBy(desc(characterGrowthLog.chapterOrder))
+          .limit(5)
+          .all()
+
+        if (oaths.length > 0) {
+          card += `\n\n【誓言/恩情/血仇】`
+          for (const o of oaths) {
+            card += `\n• 第${o.chapterOrder}章：${o.currState}`
+          }
+        }
+      } catch {}
+
+      return card.trim()
+    }))
+
+    return cards
+  } catch (error) {
+    console.error('[contextBuilder] fetchProtagonistFullState failed:', error)
+    return []
+  }
+}
+
+// 保留旧函数（供外部可能的直接调用，内部不再使用）
 async function fetchProtagonistCards(db: AppDb, novelId: string): Promise<Array<{
   id: string; name: string; description: string | null; role: string | null; attributes: string | null
 }>> {
@@ -946,52 +1097,17 @@ async function fetchProtagonistCards(db: AppDb, novelId: string): Promise<Array<
   }
 }
 
-async function fetchProtagonistPowerLevel(db: AppDb, novelId: string): Promise<Map<string, string>> {
-  const map = new Map<string, string>()
-  try {
-    const rows = await db
-      .select({ name: characters.name, powerLevel: characters.powerLevel })
-      .from(characters)
-      .where(and(eq(characters.novelId, novelId), eq(characters.role, 'protagonist'), sql`${characters.deletedAt} IS NULL`, sql`${characters.powerLevel} IS NOT NULL`))
-      .all()
-
-    for (const row of rows) {
-      if (!row.powerLevel) continue
-      try {
-        const p = JSON.parse(row.powerLevel)
-        const parts: string[] = []
-        if (p.current) parts.push(`当前境界：${p.current}`)
-        if (p.nextMilestone) parts.push(`下一目标：${p.nextMilestone}`)
-        map.set(row.name, parts.join('，'))
-      } catch {}
-    }
-  } catch (error) {
-    console.error('[contextBuilder] fetchProtagonistPowerLevel failed:', error)
-  }
-  return map
-}
-
-function mergeProtagonistAndPower(
-  cards: Array<{ name: string; description: string | null; role: string | null; attributes: string | null }>,
-  powerMap: Map<string, string>
-): string[] {
-  return cards.map(c => {
-    let card = `【${c.name}（主角）】\n${c.description || ''}`
-    const power = powerMap.get(c.name)
-    if (power) card += `\n${power}`
-    if (c.attributes) {
-      try {
-        const attrs = JSON.parse(c.attributes)
-        card += `\n属性：${Object.entries(attrs).map(([k, v]) => `${k}: ${v}`).join(' | ')}`
-      } catch {}
-    }
-    return card.trim()
-  })
-}
-
 /**
  * Slot-10：关键词精确匹配层 — 从 novelInlineEntities 中检索与 queryText 关键词匹配的实体。
- * 返回格式化的实体描述列表，按 lastChapterOrder DESC 排序，限制在 tokenBudget 内。
+ *
+ * 【匹配策略】精确子串匹配（不分词、不模糊）：
+ *   检查实体的 name 和 aliases 字段，只要 queryText 中包含任一关键词（≥2字）即命中。
+ *   不检查 description 全文，避免高频汉字（"谷"、"山"等）导致大量误匹配。
+ *
+ * 【成长态注入】对 is_growable=1 的命中实体，查询 entity_state_log 最新记录追加到卡片尾部，
+ *   确保 LLM 看到的是"当前状态"而非首次出场时的初始描述。
+ *
+ * 返回格式化的实体卡片列表，限制在 tokenBudget 内。
  */
 async function fetchInlineEntities(
   db: AppDb,
@@ -1002,20 +1118,15 @@ async function fetchInlineEntities(
   try {
     if (!queryText || queryText.trim().length === 0) return []
 
-    const keywords = queryText
-      .replace(/[^\u4e00-\u9fff\w\s]/g, ' ')
-      .split(/\s+/)
-      .filter(w => w.length >= 2)
-      .slice(0, 20)
-
-    if (keywords.length === 0) return []
-
+    // 读取所有 inline 实体（只取 name/aliases/isGrowable 等轻量字段用于匹配）
     const rows = await db
       .select({
+        id: novelInlineEntities.id,
         name: novelInlineEntities.name,
         entityType: novelInlineEntities.entityType,
         description: novelInlineEntities.description,
         aliases: novelInlineEntities.aliases,
+        isGrowable: novelInlineEntities.isGrowable,
         lastChapterOrder: novelInlineEntities.lastChapterOrder,
       })
       .from(novelInlineEntities)
@@ -1024,12 +1135,24 @@ async function fetchInlineEntities(
         sql`${novelInlineEntities.deletedAt} IS NULL`,
       ))
       .orderBy(desc(novelInlineEntities.lastChapterOrder))
-      .limit(50)
+      .limit(200)  // 最多扫描200条，500章后的规模保护
       .all()
 
+    // 精确子串匹配：只匹配 name + aliases，不匹配 description
     const matched = rows.filter(r => {
-      const searchText = `${r.name} ${r.aliases || ''} ${r.description}`.toLowerCase()
-      return keywords.some(kw => searchText.includes(kw.toLowerCase()))
+      const candidateKeywords: string[] = [r.name]
+      if (r.aliases) {
+        try {
+          const parsed = JSON.parse(r.aliases)
+          if (Array.isArray(parsed)) candidateKeywords.push(...parsed)
+          else if (typeof parsed === 'string') candidateKeywords.push(parsed)
+        } catch {
+          // aliases 存的是纯字符串时直接用
+          candidateKeywords.push(r.aliases)
+        }
+      }
+      // queryText 中精确包含该实体的任一关键词（≥2字）
+      return candidateKeywords.some(kw => kw.length >= 2 && queryText.includes(kw))
     })
 
     const typeLabel: Record<string, string> = {
@@ -1039,9 +1162,37 @@ async function fetchInlineEntities(
 
     const result: string[] = []
     let usedTokens = 0
+
     for (const entity of matched.slice(0, 15)) {
       const label = typeLabel[entity.entityType] || entity.entityType
-      const card = `【${entity.name}】(${label})${entity.aliases ? ` 别名：${entity.aliases}` : ''}\n${entity.description}`
+      let card = `【${entity.name}】(${label})${entity.aliases ? ` 别名：${entity.aliases}` : ''}\n${entity.description}`
+
+      // 成长态注入：对 is_growable 实体查询最新 state_log
+      if (entity.isGrowable) {
+        try {
+          const latest = await db
+            .select({
+              currState: entityStateLog.currState,
+              stateType: entityStateLog.stateType,
+              chapterOrder: entityStateLog.chapterOrder,
+            })
+            .from(entityStateLog)
+            .where(and(
+              eq(entityStateLog.novelId, novelId),
+              eq(entityStateLog.entityName, entity.name),
+            ))
+            .orderBy(desc(entityStateLog.chapterOrder))
+            .limit(1)
+            .get()
+
+          if (latest) {
+            card += `\n⚡ 当前状态（第${latest.chapterOrder}章·${latest.stateType}）：${latest.currState}`
+          }
+        } catch {
+          // 查询失败不影响主流程
+        }
+      }
+
       const tokens = estimateTokens(card)
       if (usedTokens + tokens > tokenBudget) break
       result.push(card)
