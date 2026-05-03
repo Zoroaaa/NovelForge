@@ -500,69 +500,117 @@ export async function generate(
 ): Promise<{ text: string; usage: UsageStats }> {
   const base = config.apiBase || getDefaultBase(config.provider)
   const mergedParams = { ...DEFAULT_PARAMS, ...config.params }
+  const isAnthropic = config.provider === 'anthropic'
 
+  // 强制 stream: true —— 避免 Cloudflare 524 超时
+  // non-stream 模式下 CF 需等待 LLM 完整响应才算"连接活跃"，大模型思考期间静默易超时
+  // stream 模式下第一个 SSE chunk 到达即保持连接，根本不会触发 524
   const payload: any = {
     model: config.modelId,
     messages,
-    stream: false,
+    stream: true,
     temperature: mergedParams.temperature,
     max_tokens: mergedParams.max_tokens,
   }
 
-  // Anthropic 格式适配
-  if (config.provider === 'anthropic') {
+  if (isAnthropic) {
     payload.system = messages.find(m => m.role === 'system')?.content || ''
     payload.messages = messages.filter(m => m.role !== 'system')
     delete payload.model
   }
 
-  const endpoint = config.provider === 'anthropic' ? '/messages' : '/chat/completions'
+  const endpoint = isAnthropic ? '/messages' : '/chat/completions'
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${config.apiKey}`,
   }
 
-  if (config.provider === 'anthropic') {
+  if (isAnthropic) {
     headers['x-api-key'] = config.apiKey
     headers['anthropic-dangerous-direct-browser-access'] = 'true'
   }
 
-  const response = await fetch(`${base}${endpoint}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
-  })
+  // 90s 硬超时兜底：即使模型卡住也能拿到可控的 AbortError，而非不可控的 524
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 90_000)
+
+  let response: Response
+  try {
+    response = await fetch(`${base}${endpoint}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timer)
+  }
 
   if (!response.ok) {
     const errorText = await response.text()
     throw new Error(`LLM API error: ${response.status} ${errorText}`)
   }
 
-  const result = await response.json() as any
-  
-  let text = ''
+  const reader = response.body?.getReader()
+  if (!reader) throw new Error('Response body is not readable')
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let fullText = ''
   let promptTokens = 0
   let completionTokens = 0
 
-  if (config.provider === 'anthropic') {
-    const textBlocks = (result.content || []).filter(
-      (block: any) => block.type === 'text'
-    )
-    text = textBlocks.map((block: any) => block.text).join('\n')
-    promptTokens = result.usage?.input_tokens || 0
-    completionTokens = result.usage?.output_tokens || 0
-  } else {
-    text = result.choices?.[0]?.message?.content || ''
-    promptTokens = result.usage?.prompt_tokens || 0
-    completionTokens = result.usage?.completion_tokens || 0
-  }
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
 
-  if (options?.onToken) {
-    options.onToken(text)
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed === 'data: [DONE]') continue
+      if (!trimmed.startsWith('data:')) continue
+
+      try {
+        const data = JSON.parse(trimmed.slice(5).trim())
+
+        if (isAnthropic) {
+          // Anthropic stream 事件：content_block_delta
+          const chunk = data.delta?.text || ''
+          if (chunk) {
+            fullText += chunk
+            options?.onToken?.(chunk)
+          }
+          // message_delta 事件携带最终 usage
+          if (data.usage) {
+            promptTokens = data.usage.input_tokens ?? promptTokens
+            completionTokens = data.usage.output_tokens ?? completionTokens
+          }
+          if (data.type === 'message_delta' && data.usage) {
+            completionTokens = data.usage.output_tokens ?? completionTokens
+          }
+        } else {
+          // OpenAI 兼容格式
+          const chunk = data.choices?.[0]?.delta?.content || ''
+          if (chunk) {
+            fullText += chunk
+            options?.onToken?.(chunk)
+          }
+          if (data.usage) {
+            promptTokens = data.usage.prompt_tokens ?? promptTokens
+            completionTokens = data.usage.completion_tokens ?? completionTokens
+          }
+        }
+      } catch {
+        // 忽略无效 SSE 行
+      }
+    }
   }
 
   return {
-    text,
+    text: fullText,
     usage: { prompt_tokens: promptTokens, completion_tokens: completionTokens },
   }
 }
