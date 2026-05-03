@@ -37,8 +37,7 @@ export interface ContextDebugInfo {
   totalTokenEstimate: number
   slotBreakdown: Record<string, number>
   ragQueriesCount: number
-  ragHitsCount: number
-  summaryChainLength: number
+  ragFallbackUsed: boolean
   buildTimeMs: number
   budgetTier: {
     core: number
@@ -52,6 +51,12 @@ export interface ContextDebugInfo {
     total: number
   }
   chapterTypeHint: string
+  queryText: string
+  ragRawResults?: {
+    characters: Array<{ sourceType: string; sourceId: string; score: number; content: string }>
+    foreshadowing: Array<{ sourceType: string; sourceId: string; score: number; content: string }>
+    settings: Array<{ sourceType: string; sourceId: string; score: number; content: string }>
+  }
 }
 
 export interface SlottedSettings {
@@ -70,6 +75,8 @@ export interface ContextBundle {
     volumeEventLine: string
     volumeNotes: string
     prevChapterContent: string
+    currentEvent: string
+    nextThreeChapters: string
     protagonistStateCards: string[]
     allActiveRules: string[]
     rhythmStats: RhythmStats | null

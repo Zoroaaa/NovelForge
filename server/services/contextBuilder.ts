@@ -229,6 +229,18 @@ export async function buildChapterContext(
   // Slot-3 升级：主角完整状态卡（含 knowledge 已知信息边界 + oath_debt 誓言血仇）
   const protagonistStateCards = await fetchProtagonistFullState(db, novelId)
 
+  // 获取主角ID数组（用于排除主角角色）
+  const protagonistRows = await db
+    .select({ id: characters.id })
+    .from(characters)
+    .where(and(
+      eq(characters.novelId, novelId),
+      eq(characters.role, 'protagonist'),
+      sql`${characters.deletedAt} IS NULL`,
+    ))
+    .all()
+  const protagonistIds = protagonistRows.map(p => p.id)
+
   // ── Step 2: 先提取本章事件（用于类型推断和向量构建） ──
   const { prevEvent, currentEvent, nextThreeChapters } = extractCurrentChapterEvent(volumeInfo.eventLine, chapterIndexInVolume)
   let typeHintSource: string = currentEvent || volumeInfo.eventLine
@@ -299,7 +311,6 @@ export async function buildChapterContext(
     actualRagQueriesCount = 3
 
     // D1: 角色 — RAG 取 ID → DB 批量查完整卡片（排除主角）
-    const protagonistIds = protagonistData.map(p => p.id)
     characterCards = await buildCharacterSlotFromDB(db, characterResults, budget.characters, protagonistIds)
 
     // D3: 伏笔 — 高重要性 DB 兜底 + 普通 RAG
