@@ -4,8 +4,8 @@ import {
   step8CharacterGrowth,
   step9EntityConflictDetect,
   finishPostProcess,
-} from './agent/postProcess'
-import type { EntityExtractResult } from './agent/entityExtract'
+} from '../services/agent/postProcess'
+import type { EntityExtractResult } from '../services/agent/entityExtract'
 
 export class PostProcessDo {
   async fetch(request: Request, env: Env): Promise<Response> {
