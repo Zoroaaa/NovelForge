@@ -1,23 +1,23 @@
-import type { Env } from './lib/types'
-import type { QueueMessage } from './lib/queue'
-import { indexContent, deindexContent, deleteVector } from './services/embedding'
-import { rebuildEntityIndex } from './services/entity-index'
-import { dispatchPostProcess, runPostProcess, runStep1, runStep1b, runStep2, runStep3, runStep4, runStep5, runStep6, runStep7 } from './services/agent/postProcess'
-import { extractForeshadowingFromChapter } from './services/foreshadowing'
-import { logGeneration } from './services/agent/logging'
-import { commitWorkshopSessionCore } from './services/workshop'
-import { generateChapter } from './services/agent/generation'
-import { startBatchGeneration as enqueueNextBatchChapter, incrementCompleted, markTaskDone, markTaskFailed, getBatchTask } from './services/agent/batchGenerate'
-import { checkAndCompleteVolume } from './services/agent/volumeCompletion'
-import { buildPrevChapterAdvice } from './services/agent/prevChapterAdvice'
-import { checkQuality } from './services/agent/qualityCheck'
-import { generateCover } from './services/imageGen'
-import { extractPlotGraph } from './services/plotGraph'
+import type { Env } from '../lib/types'
+import type { QueueMessage } from '../lib/queue'
+import { indexContent, deindexContent, deleteVector } from '../services/embedding'
+import { rebuildEntityIndex } from '../services/entity-index'
+import { dispatchPostProcess, runPostProcess, runStep1, runStep1b, runStep2, runStep3, runStep4, runStep5, runStep6, runStep7 } from '../services/agent/postProcess'
+import { extractForeshadowingFromChapter } from '../services/foreshadowing'
+import { logGeneration } from '../services/agent/logging'
+import { commitWorkshopSessionCore } from '../services/workshop'
+import { generateChapter } from '../services/agent/generation'
+import { startBatchGeneration as enqueueNextBatchChapter, incrementCompleted, markTaskDone, markTaskFailed, getBatchTask } from '../services/agent/batchGenerate'
+import { checkAndCompleteVolume } from '../services/agent/volumeCompletion'
+import { buildPrevChapterAdvice } from '../services/agent/prevChapterAdvice'
+import { checkQuality } from '../services/agent/qualityCheck'
+import { generateCover } from '../services/imageGen'
+import { extractPlotGraph } from '../services/plotGraph'
 import { drizzle } from 'drizzle-orm/d1'
-import { novelSettings, characters, foreshadowing, chapters, queueTaskLogs, vectorIndex } from './db/schema'
+import { novelSettings, characters, foreshadowing, chapters, queueTaskLogs, vectorIndex } from '../db/schema'
 import { eq, and, sql } from 'drizzle-orm'
-import { enqueueBatch } from './lib/queue'
-import { resolveConfig } from './services/llm'
+import { enqueueBatch } from '../lib/queue'
+import { resolveConfig } from '../services/llm'
 
 export async function handleQueueBatch(
   batch: MessageBatch<QueueMessage>,
@@ -74,7 +74,7 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
     case 'workshop_post_commit': {
       const { sessionId, novelId } = msg.payload
       console.log(`[Queue] 开始处理 workshop_post_commit for session ${sessionId}, novel ${novelId}`)
-      const { workshopPostCommit } = await import('./services/workshop')
+      const { workshopPostCommit } = await import('../services/workshop')
       await workshopPostCommit(env, sessionId, novelId)
       console.log(`[Queue] workshop_post_commit 完成`)
       break
@@ -84,14 +84,14 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
       const { sessionId, novelId } = msg.payload
       console.log(`[Queue] workshop_gen_system_prompt for novel ${novelId}`)
       const db = drizzle(env.DB)
-      const { workshopSessions } = await import('./db/schema')
+      const { workshopSessions } = await import('../db/schema')
       const { eq } = await import('drizzle-orm')
       const session = await db.select().from(workshopSessions).where(eq(workshopSessions.id, sessionId)).get()
       if (!session) { console.warn('[Queue] session not found:', sessionId); break }
       const data = JSON.parse(session.extractedData || '{}')
       if (!data.genre) break
-      const { generateGenreSystemPrompt } = await import('./services/workshop/generateGenreSystemPrompt')
-      const { novels } = await import('./db/schema')
+      const { generateGenreSystemPrompt } = await import('../services/workshop/generateGenreSystemPrompt')
+      const { novels } = await import('../db/schema')
       const genrePrompt = await generateGenreSystemPrompt(env, novelId, data)
       await db.update(novels).set({ systemPrompt: genrePrompt }).where(eq(novels.id, novelId)).run()
       console.log(`[Queue] workshop_gen_system_prompt 完成 for novel ${novelId}`)
@@ -102,13 +102,13 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
       const { sessionId, novelId } = msg.payload
       console.log(`[Queue] workshop_gen_outline for novel ${novelId}`)
       const db = drizzle(env.DB)
-      const { workshopSessions, masterOutline } = await import('./db/schema')
+      const { workshopSessions, masterOutline } = await import('../db/schema')
       const { eq } = await import('drizzle-orm')
       const session = await db.select().from(workshopSessions).where(eq(workshopSessions.id, sessionId)).get()
       if (!session) { console.warn('[Queue] session not found:', sessionId); break }
       const data = JSON.parse(session.extractedData || '{}')
       if (!data.title) break
-      const { buildOutlineContentWithAI } = await import('./services/workshop/helpers')
+      const { buildOutlineContentWithAI } = await import('../services/workshop/helpers')
       const aiOutlineContent = await buildOutlineContentWithAI(env, data)
       await db.update(masterOutline)
         .set({ content: aiOutlineContent, wordCount: aiOutlineContent.length })
@@ -121,7 +121,7 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
     case 'workshop_gen_setting_summary': {
       const { novelId, settingId, settingTitle } = msg.payload
       console.log(`[Queue] workshop_gen_setting_summary: ${settingTitle}`)
-      const { generateSettingSummary } = await import('./services/agent/summarizer')
+      const { generateSettingSummary } = await import('../services/agent/summarizer')
       await generateSettingSummary(env, settingId)
       console.log(`[Queue] workshop_gen_setting_summary 完成: ${settingTitle}`)
       break
@@ -130,7 +130,7 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
     case 'workshop_gen_volume_summary': {
       const { novelId, volumeId, volumeTitle } = msg.payload
       console.log(`[Queue] workshop_gen_volume_summary: ${volumeTitle}`)
-      const { generateVolumeSummary } = await import('./services/agent/summarizer')
+      const { generateVolumeSummary } = await import('../services/agent/summarizer')
       await generateVolumeSummary(env, volumeId, novelId)
       console.log(`[Queue] workshop_gen_volume_summary 完成: ${volumeTitle}`)
       break
@@ -139,7 +139,7 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
     case 'workshop_gen_master_summary': {
       const { novelId } = msg.payload
       console.log(`[Queue] workshop_gen_master_summary for novel ${novelId}`)
-      const { generateMasterOutlineSummary } = await import('./services/agent/summarizer')
+      const { generateMasterOutlineSummary } = await import('../services/agent/summarizer')
       await generateMasterOutlineSummary(env, novelId)
       console.log(`[Queue] workshop_gen_master_summary 完成 for novel ${novelId}`)
       break
@@ -313,6 +313,11 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
       }
       break
     }
+
+    case 'post_process_step_8':
+    case 'post_process_step_9':
+      console.warn('[Queue] step_8/step_9 应由 PostProcessDo 内部处理，不应单独入队')
+      break
 
     case 'batch_generate_chapter': {
       const { taskId, novelId, volumeId } = msg.payload

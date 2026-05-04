@@ -303,7 +303,7 @@ mcpApi.use('*', jwtAuthMiddleware())
 mcpApi.route('/', mcp)
 app.route('/', mcpApi)
 
-import { handleQueueBatch } from './queue-handler'
+import { handleQueueBatch } from './queue/queue-handler'
 import { PostProcessDo } from './durable-objects/postProcessDo'
 
 export default {
