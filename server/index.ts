@@ -304,6 +304,7 @@ mcpApi.route('/', mcp)
 app.route('/', mcpApi)
 
 import { handleQueueBatch } from './queue-handler'
+import { PostProcessDo } from './durable-objects/postProcessDo'
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
@@ -315,3 +316,5 @@ export default {
   },
   queue: handleQueueBatch,
 }
+
+export { PostProcessDo }
