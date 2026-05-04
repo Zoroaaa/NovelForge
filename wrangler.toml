@@ -51,7 +51,7 @@ class_name = "PostProcessDo"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["PostProcessDo"]
+new_sqlite_classes = ["PostProcessDo"]
 
 # # ========== 第一步：删除现有索引 ==========
 # npx wrangler vectorize delete novelforge-index
