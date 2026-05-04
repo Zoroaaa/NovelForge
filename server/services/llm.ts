@@ -511,6 +511,7 @@ export async function generate(
     stream: true,
     temperature: mergedParams.temperature,
     max_tokens: mergedParams.max_tokens,
+    stream_options: { include_usage: true },
   }
 
   if (isAnthropic) {

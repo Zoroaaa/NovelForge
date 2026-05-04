@@ -5,12 +5,13 @@
  * @modified 2026-04-21 - 添加规范化注释
  */
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { api } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Activity, Clock, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Activity, Clock, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react'
 
 interface GenerationLog {
   id: string
@@ -33,15 +34,24 @@ interface GenerationLogsProps {
 
 export function GenerationLogs({ novelId }: GenerationLogsProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [limit] = useState(50)
+  const [currentPage, setCurrentPage] = useState(1)
+  const pageSize = 10
+
+  useEffect(() => {
+    setCurrentPage(1)
+    setExpandedId(null)
+  }, [novelId])
 
   const { data: logs, isLoading } = useQuery({
-    queryKey: ['generation-logs', novelId, limit],
+    queryKey: ['generation-logs', novelId],
     queryFn: async () => {
-      const data = await api.generate.getLogs(novelId, limit)
+      const data = await api.generate.getLogs(novelId, 1000)
       return data.logs as GenerationLog[]
     },
   })
+
+  const totalPages = logs ? Math.ceil(logs.length / pageSize) : 0
+  const paginatedLogs = logs?.slice((currentPage - 1) * pageSize, currentPage * pageSize) || []
 
   if (isLoading) {
     return <div className="animate-pulse space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-16 bg-muted rounded" />)}</div>
@@ -82,7 +92,7 @@ export function GenerationLogs({ novelId }: GenerationLogsProps) {
       {errorCount > 0 && (
         <div className="flex items-center gap-2 p-2 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-xs text-red-700 dark:text-red-300">
           <AlertCircle className="h-4 w-4 shrink-0" />
-          近 {limit} 条记录中有 {errorCount} 次失败
+          近 {logs?.length || 0} 条记录中有 {errorCount} 次失败
         </div>
       )}
 
@@ -93,9 +103,10 @@ export function GenerationLogs({ novelId }: GenerationLogsProps) {
         </TabsList>
 
         <TabsContent value="list" className="mt-3">
-          <ScrollArea className="max-h-96">
-            <div className="space-y-1.5">
-              {logs.map((log) => (
+          <div className="h-[480px] overflow-hidden rounded-md border">
+            <ScrollArea className="h-full">
+              <div className="space-y-1.5">
+                {paginatedLogs.map((log) => (
                 <div key={log.id} className="border rounded-md overflow-hidden">
                   <button
                     onClick={() => setExpandedId(expandedId === log.id ? null : log.id)}
@@ -187,6 +198,36 @@ export function GenerationLogs({ novelId }: GenerationLogsProps) {
               ))}
             </div>
           </ScrollArea>
+          </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-3 border-t">
+              <span className="text-xs text-muted-foreground">
+                第 {currentPage}/{totalPages} 页 · 共 {logs?.length || 0} 条
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage <= 1}
+                  onClick={() => { setCurrentPage(p => p - 1); setExpandedId(null) }}
+                  className="h-7 px-2 text-xs"
+                >
+                  <ChevronLeft className="w-3 h-3 mr-1" />
+                  上一页
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => { setCurrentPage(p => p + 1); setExpandedId(null) }}
+                  className="h-7 px-2 text-xs"
+                >
+                  下一页
+                  <ChevronRight className="w-3 h-3 ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="chart" className="mt-3">
