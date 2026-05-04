@@ -6,8 +6,10 @@
 import { drizzle } from 'drizzle-orm/d1'
 import { plotNodes, plotEdges, chapters, characters } from '../db/schema'
 import { eq, and, sql } from 'drizzle-orm'
-import { resolveConfig, generate } from './llm'
+import { resolveConfig, generateWithMetrics } from './llm'
+import type { LLMCallResult } from './llm'
 import type { Env } from '../lib/types'
+import { logGeneration } from './agent/logging'
 
 interface ExtractedNode {
   title: string
@@ -110,14 +112,41 @@ ${content}
 
   const config = await resolveConfig(db, 'analysis', novelId)
 
-  const result = await generate(config, [
-    { role: 'system', content: '你是一个专业的小说情节分析助手，擅长从文本中提取结构化的情节图谱数据。只返回JSON，不要添加任何解释。' },
-    { role: 'user', content: prompt },
-  ])
+  let metrics: LLMCallResult
+  try {
+    metrics = await generateWithMetrics(config, [
+      { role: 'system', content: '你是一个专业的小说情节分析助手，擅长从文本中提取结构化的情节图谱数据。只返回JSON，不要添加任何解释。' },
+      { role: 'user', content: prompt },
+    ])
+  } catch (llmError) {
+    await logGeneration(env, {
+      novelId,
+      chapterId,
+      stage: 'plot_graph_extraction',
+      modelId: config?.modelId || 'N/A',
+      durationMs: 0,
+      status: 'error',
+      errorMsg: (llmError as Error).message,
+    })
+    throw llmError
+  }
 
-  const extraction = parseExtractionResult(result.text)
+  const extraction = parseExtractionResult(metrics.text)
   if (!extraction) {
     console.warn(`[plotGraph] Failed to parse extraction result for chapter ${chapterId}`)
+
+    await logGeneration(env, {
+      novelId,
+      chapterId,
+      stage: 'plot_graph_extraction',
+      modelId: metrics.modelId || 'N/A',
+      promptTokens: metrics.usage.prompt_tokens,
+      completionTokens: metrics.usage.completion_tokens,
+      durationMs: metrics.durationMs || 0,
+      status: 'error',
+      errorMsg: 'Failed to parse extraction result',
+    })
+
     return
   }
 
@@ -185,6 +214,18 @@ ${content}
   }
 
   console.log(`[plotGraph] Extracted ${extraction.nodes.length} nodes, ${extraction.edges.length} edges for chapter ${chapterId}`)
+
+  await logGeneration(env, {
+    novelId,
+    chapterId,
+    stage: 'plot_graph_extraction',
+    modelId: metrics.modelId || 'N/A',
+    promptTokens: metrics.usage.prompt_tokens,
+    completionTokens: metrics.usage.completion_tokens,
+    durationMs: metrics.durationMs || 0,
+    status: 'success',
+    contextSnapshot: JSON.stringify({ nodeCount: extraction.nodes.length, edgeCount: extraction.edges.length }),
+  })
 }
 
 function parseExtractionResult(text: string): ExtractionResult | null {

@@ -263,7 +263,7 @@ ${chapter.content.slice(0, 8000)}
     return { hasBreakthrough: finalUpdates.length > 0, updates: finalUpdates, metrics: detectionMetrics }
   } catch (error) {
     console.error('Power level detection failed:', error)
-    return { hasBreakthrough: false, updates: [] }
+    return { hasBreakthrough: false, updates: [], metrics: undefined }
   }
 }
 

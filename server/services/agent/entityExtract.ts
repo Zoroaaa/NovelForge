@@ -217,7 +217,7 @@ export async function extractEntitiesFromChapter(
 
   if (chapter.length === 0 || !chapter[0].content) {
     LOG_STYLES.ERROR(`[step7] 找不到章节或内容为空: ${chapterId}`)
-    return { entities: [], stateChanges: [], characterGrowths: [], knowledgeReveals: [] }
+    return { entities: [], stateChanges: [], characterGrowths: [], knowledgeReveals: [], metrics: undefined }
   }
 
   const { title, content, sortOrder } = chapter[0]

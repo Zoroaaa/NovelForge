@@ -496,6 +496,18 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
         const qScore = await checkQuality(env, { chapterId, novelId })
         console.log(`✅ [Queue] 质量评分完成 for chapter ${chapterId}, score=${qScore.totalScore}`)
 
+        await logGeneration(env, {
+          novelId,
+          chapterId,
+          stage: 'quality_check',
+          modelId: qScore.metrics?.modelId || 'N/A',
+          promptTokens: qScore.metrics?.usage?.prompt_tokens || 0,
+          completionTokens: qScore.metrics?.usage?.completion_tokens || 0,
+          durationMs: qScore.metrics?.durationMs || 0,
+          status: 'success',
+          contextSnapshot: JSON.stringify({ totalScore: qScore.totalScore }),
+        })
+
         // 批量生成时：质量检查完成后发送图谱提取请求，然后再推进到下一章节
         if (batchTaskId && batchVolumeId) {
           if (env.TASK_QUEUE) {
@@ -513,6 +525,16 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
         }
       } catch (qualityError) {
         console.warn('[Queue] 质量评分失败（非致命）:', qualityError)
+
+        await logGeneration(env, {
+          novelId,
+          chapterId,
+          stage: 'quality_check',
+          modelId: 'N/A',
+          durationMs: 0,
+          status: 'error',
+          errorMsg: (qualityError as Error).message,
+        })
 
         // 批量生成时：质量检查失败仍发送图谱提取并推进，不卡死流程
         if (batchTaskId && batchVolumeId && env.TASK_QUEUE) {

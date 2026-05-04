@@ -6,13 +6,14 @@ import { drizzle } from 'drizzle-orm/d1'
 import { chapters, characters } from '../../db/schema'
 import { eq, and, sql, inArray, isNull } from 'drizzle-orm'
 import type { Env } from '../../lib/types'
-import { resolveConfig, generate, streamGenerate } from '../llm'
+import { resolveConfig, generateWithMetrics, streamGenerate } from '../llm'
+import type { LLMCallResult } from '../llm'
 import { ERROR_MESSAGES, JSON_OUTPUT_PROMPT } from './constants'
 
 export async function checkCharacterConsistency(
   env: Env,
   data: { chapterId: string; characterIds: string[] }
-): Promise<{ conflicts: any[]; warnings: string[]; raw?: string; score: number }> {
+): Promise<{ conflicts: any[]; warnings: string[]; raw?: string; score: number; metrics?: LLMCallResult }> {
   const db = drizzle(env.DB)
   const { chapterId } = data
   let { characterIds } = data
@@ -34,7 +35,7 @@ export async function checkCharacterConsistency(
   }
 
   if (characterIds.length === 0) {
-    return { conflicts: [], warnings: ['未设置角色，跳过检查'], score: -1 }
+    return { conflicts: [], warnings: ['未设置角色，跳过检查'], score: -1, metrics: undefined }
   }
 
   let characterInfo = ''
@@ -66,6 +67,7 @@ export async function checkCharacterConsistency(
       conflicts: [],
       warnings: [ERROR_MESSAGES.MODEL_NOT_CONFIGED('智能分析') + '（用于一致性检查、境界检测、伏笔提取等分析任务）'],
       score: 100,
+      metrics: undefined,
     }
   }
 
@@ -106,18 +108,18 @@ ${chapter.content.slice(0, 10000)}
     params: { ...(analysisConfig.params || {}), temperature: 0.3, max_tokens: 1000 },
   }
 
-  const { text } = await generate(overrideConfig, [
+  const metrics = await generateWithMetrics(overrideConfig, [
     { role: 'system', content: JSON_OUTPUT_PROMPT },
     { role: 'user', content: checkPrompt },
   ])
 
   try {
-    const result = JSON.parse(text)
+    const result = JSON.parse(metrics.text)
     const conflictCount = result.conflicts?.length || 0
     const score = conflictCount > 0 ? Math.max(0, 100 - conflictCount * 20) : 100
-    return { ...result, score }
+    return { ...result, score, metrics }
   } catch {
-    return { conflicts: [], warnings: ['解析失败'], raw: text, score: 100 }
+    return { conflicts: [], warnings: ['解析失败'], raw: metrics.text, score: 100, metrics }
   }
 }
 

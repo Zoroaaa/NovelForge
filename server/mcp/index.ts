@@ -441,16 +441,16 @@ export async function handleToolCall(
 
       const { triggerAutoSummary } = await import('../services/agent')
       try {
-        await triggerAutoSummary(env, chapterId, chapter.novelId, { prompt_tokens: 0, completion_tokens: 0 })
+        const result = await triggerAutoSummary(env, chapterId, chapter.novelId, { prompt_tokens: 0, completion_tokens: 0 })
 
         await logGeneration(env, {
           novelId: chapter.novelId,
           chapterId,
           stage: 'auto_summary',
-          modelId: 'N/A',
-          promptTokens: 0,
-          completionTokens: 0,
-          durationMs: 0,
+          modelId: result.metrics?.modelId || 'N/A',
+          promptTokens: result.metrics?.usage?.prompt_tokens || 0,
+          completionTokens: result.metrics?.usage?.completion_tokens || 0,
+          durationMs: result.metrics?.durationMs || 0,
           status: 'success',
           contextSnapshot: JSON.stringify({ enabled: true, mcp: true }),
         })

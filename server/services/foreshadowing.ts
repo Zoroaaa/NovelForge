@@ -286,7 +286,7 @@ ${existingForeshadowingText}
     return { ...parsed, metrics: extractMetrics }
   } catch (error) {
     console.error('Foreshadowing extraction failed:', error)
-    return { newForeshadowing: [], resolvedForeshadowingIds: [], progresses: [] }
+    return { newForeshadowing: [], resolvedForeshadowingIds: [], progresses: [], metrics: undefined }
   }
 }
 

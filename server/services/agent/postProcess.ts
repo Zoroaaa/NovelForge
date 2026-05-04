@@ -381,6 +381,21 @@ async function step4CharacterConsistency(env: Env, chapterId: string, novelId: s
       characterResult: consistencyResult,
       issuesCount: consistencyResult.conflicts.length + consistencyResult.warnings.length,
     })
+
+    await logGeneration(env, {
+      novelId,
+      chapterId,
+      stage: 'character_consistency_check',
+      modelId: consistencyResult.metrics?.modelId || 'N/A',
+      promptTokens: consistencyResult.metrics?.usage?.prompt_tokens || 0,
+      completionTokens: consistencyResult.metrics?.usage?.completion_tokens || 0,
+      durationMs: consistencyResult.metrics?.durationMs || 0,
+      status: 'success',
+      contextSnapshot: JSON.stringify({
+        conflictCount: consistencyResult.conflicts.length,
+        warningCount: consistencyResult.warnings.length,
+      }),
+    })
   } catch (consistencyError) {
     console.warn('[PostProcess] 角色一致性检查失败（非致命）:', consistencyError)
 
@@ -436,6 +451,23 @@ async function step6VolumeProgress(env: Env, chapterId: string, novelId: string)
       status: 'success',
       volumeProgressResult: volumeProgressResult,
       issuesCount: volumeProgressResult.wordCountIssues.length + volumeProgressResult.rhythmIssues.length,
+    })
+
+    await logGeneration(env, {
+      novelId,
+      chapterId,
+      stage: 'volume_progress_check',
+      modelId: volumeProgressResult.metrics?.modelId || 'N/A',
+      promptTokens: volumeProgressResult.metrics?.usage?.prompt_tokens || 0,
+      completionTokens: volumeProgressResult.metrics?.usage?.completion_tokens || 0,
+      durationMs: volumeProgressResult.metrics?.durationMs || 0,
+      status: 'success',
+      contextSnapshot: JSON.stringify({
+        wordCountScore: volumeProgressResult.wordCountScore,
+        rhythmScore: volumeProgressResult.rhythmScore,
+        totalScore: volumeProgressResult.score,
+        issueCount: volumeProgressResult.wordCountIssues.length + volumeProgressResult.rhythmIssues.length,
+      }),
     })
   } catch (progressError) {
     console.warn('[PostProcess] 卷进度检查失败（非致命）:', progressError)
@@ -517,9 +549,31 @@ async function step8CharacterGrowth(
 
 async function step9EntityConflictDetect(env: Env, chapterId: string, novelId: string): Promise<void> {
   try {
-    const { candidateCount, conflictCount } = await detectEntityConflicts(env, chapterId, novelId)
+    const { candidateCount, conflictCount, metrics } = await detectEntityConflicts(env, chapterId, novelId)
     console.log(`⚔️ [PostProcess] 实体碰撞检测完成: ${candidateCount} 个候选, ${conflictCount} 个确认矛盾`)
+
+    await logGeneration(env, {
+      novelId,
+      chapterId,
+      stage: 'entity_conflict_detection',
+      modelId: metrics?.modelId || 'N/A',
+      promptTokens: metrics?.usage?.prompt_tokens || 0,
+      completionTokens: metrics?.usage?.completion_tokens || 0,
+      durationMs: metrics?.durationMs || 0,
+      status: 'success',
+      contextSnapshot: JSON.stringify({ candidateCount, conflictCount }),
+    })
   } catch (error) {
     console.warn('[PostProcess] 实体碰撞检测失败（非致命）:', error)
+
+    await logGeneration(env, {
+      novelId,
+      chapterId,
+      stage: 'entity_conflict_detection',
+      modelId: 'N/A',
+      durationMs: 0,
+      status: 'error',
+      errorMsg: (error as Error).message,
+    })
   }
 }

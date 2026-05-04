@@ -15,6 +15,7 @@ import {
 import type { Env } from '../../lib/types'
 import type { EntityExtractResult } from './entityExtract'
 import { resolveConfig, generateWithMetrics } from '../llm'
+import type { LLMCallResult } from '../llm'
 import { JSON_OUTPUT_PROMPT, LOG_STYLES } from './constants'
 
 interface ConflictCandidate {
@@ -121,8 +122,8 @@ async function llmJudgeConflicts(
   novelId: string,
   chapterContent: string,
   candidates: ConflictCandidate[],
-): Promise<LLMJudgedConflict[]> {
-  if (candidates.length === 0) return []
+): Promise<{ conflicts: LLMJudgedConflict[]; metrics?: LLMCallResult }> {
+  if (candidates.length === 0) return { conflicts: [] }
 
   const db = drizzle(env.DB)
 
@@ -132,12 +133,14 @@ async function llmJudgeConflicts(
     judgeConfig.apiKey = judgeConfig.apiKey || ''
   } catch {
     LOG_STYLES.WARN('[step9] 未配置分析模型，跳过LLM判断，全部候选视为矛盾')
-    return candidates.map(c => ({
-      entityName: c.entityName,
-      conflictType: c.conflictType,
-      description: `精确匹配检测到可能矛盾：${c.historicalRecord}`,
-      severity: 'warning',
-    }))
+    return {
+      conflicts: candidates.map(c => ({
+        entityName: c.entityName,
+        conflictType: c.conflictType,
+        description: `精确匹配检测到可能矛盾：${c.historicalRecord}`,
+        severity: 'warning',
+      })),
+    }
   }
 
   const candidateDesc = candidates.map((c, i) =>
@@ -181,25 +184,31 @@ async function llmJudgeConflicts(
   const jsonMatch = metrics.text.match(/\{[\s\S]*?\}(?=\s*$)/)
   if (!jsonMatch) {
     LOG_STYLES.WARN('[step9] LLM判断返回无有效JSON，保守处理')
-    return candidates.map(c => ({
-      entityName: c.entityName,
-      conflictType: c.conflictType,
-      description: `LLM判断失败，保守记录：${c.historicalRecord}`,
-      severity: 'warning',
-    }))
+    return {
+      conflicts: candidates.map(c => ({
+        entityName: c.entityName,
+        conflictType: c.conflictType,
+        description: `LLM判断失败，保守记录：${c.historicalRecord}`,
+        severity: 'warning',
+      })),
+      metrics,
+    }
   }
 
   try {
     const parsed = JSON.parse(jsonMatch[0])
-    return parsed.conflicts || []
+    return { conflicts: parsed.conflicts || [], metrics }
   } catch {
     LOG_STYLES.WARN('[step9] JSON解析失败，保守处理')
-    return candidates.map(c => ({
-      entityName: c.entityName,
-      conflictType: c.conflictType,
-      description: `JSON解析失败，保守记录：${c.historicalRecord}`,
-      severity: 'warning',
-    }))
+    return {
+      conflicts: candidates.map(c => ({
+        entityName: c.entityName,
+        conflictType: c.conflictType,
+        description: `JSON解析失败，保守记录：${c.historicalRecord}`,
+        severity: 'warning',
+      })),
+      metrics,
+    }
   }
 }
 
@@ -207,7 +216,7 @@ export async function detectEntityConflicts(
   env: Env,
   chapterId: string,
   novelId: string,
-): Promise<{ candidateCount: number; conflictCount: number }> {
+): Promise<{ candidateCount: number; conflictCount: number; metrics?: LLMCallResult }> {
   const db = drizzle(env.DB)
 
   const chapter = await db
@@ -222,7 +231,7 @@ export async function detectEntityConflicts(
 
   if (chapter.length === 0 || !chapter[0].content) {
     LOG_STYLES.ERROR(`[step9] 找不到章节或内容为空: ${chapterId}`)
-    return { candidateCount: 0, conflictCount: 0 }
+    return { candidateCount: 0, conflictCount: 0, metrics: undefined }
   }
 
   const { content, sortOrder } = chapter[0]
@@ -231,12 +240,12 @@ export async function detectEntityConflicts(
 
   if (candidates.length === 0) {
     LOG_STYLES.INFO('[step9] 无矛盾候选，跳过LLM判断')
-    return { candidateCount: 0, conflictCount: 0 }
+    return { candidateCount: 0, conflictCount: 0, metrics: undefined }
   }
 
   LOG_STYLES.INFO(`[step9] 发现 ${candidates.length} 个矛盾候选，启动LLM判断`)
 
-  const conflicts = await llmJudgeConflicts(env, novelId, content, candidates)
+  const { conflicts, metrics } = await llmJudgeConflicts(env, novelId, content, candidates)
 
   let conflictCount = 0
   for (const conflict of conflicts) {
@@ -262,5 +271,5 @@ export async function detectEntityConflicts(
     conflictCount++
   }
 
-  return { candidateCount: candidates.length, conflictCount }
+  return { candidateCount: candidates.length, conflictCount, metrics }
 }

@@ -15,6 +15,7 @@ import {
   SUMMARY_SYSTEM_PROMPT,
   SETTING_SUMMARY_SYSTEM_PROMPT,
 } from './constants'
+import { logGeneration } from './logging'
 
 // ============================================================
 // 内部公共函数：统一调用 LLM 生成摘要文本
@@ -217,9 +218,32 @@ ${outline.content}
       .set({ summary: result.text, updatedAt: sql`(unixepoch())` })
       .where(eq(masterOutline.id, outline.id))
 
+    await logGeneration(env, {
+      novelId,
+      chapterId: null,
+      stage: 'master_outline_summary',
+      modelId: result.metrics.modelId || 'N/A',
+      promptTokens: result.metrics.usage.prompt_tokens,
+      completionTokens: result.metrics.usage.completion_tokens,
+      durationMs: result.metrics.durationMs || 0,
+      status: 'success',
+      contextSnapshot: JSON.stringify({ outlineId: outline.id }),
+    })
+
     return { ok: true, summary: result.text, metrics: result.metrics }
   } catch (error) {
     LOG_STYLES.WARN(`总纲摘要生成失败: ${error}`)
+
+    await logGeneration(env, {
+      novelId,
+      chapterId: null,
+      stage: 'master_outline_summary',
+      modelId: 'N/A',
+      durationMs: 0,
+      status: 'error',
+      errorMsg: (error as Error).message,
+    })
+
     return { ok: false, error: (error as Error).message }
   }
 }
@@ -294,9 +318,32 @@ ${eventLineSummary || '（无事件线）'}
       .set({ summary: result.text, updatedAt: sql`(unixepoch())` })
       .where(eq(volumes.id, volumeId))
 
+    await logGeneration(env, {
+      novelId,
+      chapterId: null,
+      stage: 'volume_summary',
+      modelId: result.metrics.modelId || 'N/A',
+      promptTokens: result.metrics.usage.prompt_tokens,
+      completionTokens: result.metrics.usage.completion_tokens,
+      durationMs: result.metrics.durationMs || 0,
+      status: 'success',
+      contextSnapshot: JSON.stringify({ volumeId }),
+    })
+
     return { ok: true, summary: result.text, metrics: result.metrics }
   } catch (error) {
     LOG_STYLES.WARN(`卷摘要生成失败: ${error}`)
+
+    await logGeneration(env, {
+      novelId,
+      chapterId: null,
+      stage: 'volume_summary',
+      modelId: 'N/A',
+      durationMs: 0,
+      status: 'error',
+      errorMsg: (error as Error).message,
+    })
+
     return { ok: false, error: (error as Error).message }
   }
 }
@@ -366,9 +413,33 @@ ${typeSpecificHint[row.type] || '保留核心概念和关键规则，省略描�
       .where(eq(novelSettings.id, settingId))
 
     LOG_STYLES.SUCCESS(`设定 ${row.name} 摘要已生成 (${result.text.length} 字符)`)
+
+    await logGeneration(env, {
+      novelId: row.novelId,
+      chapterId: null,
+      stage: 'setting_summary',
+      modelId: result.metrics.modelId || 'N/A',
+      promptTokens: result.metrics.usage.prompt_tokens,
+      completionTokens: result.metrics.usage.completion_tokens,
+      durationMs: result.metrics.durationMs || 0,
+      status: 'success',
+      contextSnapshot: JSON.stringify({ settingId, settingName: row.name, settingType: row.type }),
+    })
+
     return { ok: true, summary: result.text, metrics: result.metrics }
   } catch (error) {
     LOG_STYLES.ERROR(`[generateSettingSummary] 失败: ${error}`)
+
+    await logGeneration(env, {
+      novelId: row?.novelId,
+      chapterId: null,
+      stage: 'setting_summary',
+      modelId: 'N/A',
+      durationMs: 0,
+      status: 'error',
+      errorMsg: (error as Error).message,
+    })
+
     return { ok: false, error: (error as Error).message }
   }
 }

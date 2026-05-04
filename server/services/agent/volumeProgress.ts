@@ -6,7 +6,8 @@ import { drizzle } from 'drizzle-orm/d1'
 import { chapters, novels, volumes as volumesTable } from '../../db/schema'
 import { eq, sql, and, asc } from 'drizzle-orm'
 import type { Env } from '../../lib/types'
-import { resolveConfig, generate, streamGenerate } from '../llm'
+import { resolveConfig, generateWithMetrics, streamGenerate } from '../llm'
+import type { LLMCallResult } from '../llm'
 import { ERROR_MESSAGES, JSON_OUTPUT_PROMPT } from './constants'
 
 export interface WordCountIssue {
@@ -45,6 +46,7 @@ export interface VolumeProgressResult {
   diagnosis: string
   suggestion: string
   raw?: string
+  metrics?: LLMCallResult
 }
 
 export async function checkVolumeProgress(
@@ -142,6 +144,7 @@ export async function checkVolumeProgress(
       score: 100,
       diagnosis: '无法进行AI评估（模型未配置）',
       suggestion: '请配置智能分析模型以获取卷进度诊断',
+      metrics: undefined,
     }
   }
 
@@ -198,6 +201,7 @@ export async function checkVolumeProgress(
   // 节奏风险判断（需要章节摘要 + 卷蓝图/事件线）
   // ============================================================
   const rhythmIssues: RhythmIssue[] = []
+  let rhythmMetrics: LLMCallResult | undefined
   const chaptersWithSummary = completedChapters.filter(ch => ch.summary && ch.summary.trim().length > 10)
   const hasBlueprint = volumeData.blueprint && volumeData.blueprint.trim().length > 10
   const hasEventLine = volumeData.eventLine && volumeData.eventLine.trim().length > 10
@@ -256,12 +260,12 @@ ${summariesText}
 }`
 
     try {
-      const { text } = await generate(overrideConfig, [
+      rhythmMetrics = await generateWithMetrics(overrideConfig, [
         { role: 'system', content: JSON_OUTPUT_PROMPT },
         { role: 'user', content: rhythmPrompt },
       ])
 
-      const aiResult = JSON.parse(text)
+      const aiResult = JSON.parse(rhythmMetrics.text)
       if (aiResult.issues && Array.isArray(aiResult.issues)) {
         for (const issue of aiResult.issues) {
           rhythmIssues.push({
@@ -340,6 +344,7 @@ ${summariesText}
     score: totalScore,
     diagnosis: diagnosisText,
     suggestion: suggestionText,
+    metrics: rhythmMetrics,
   }
 }
 

@@ -7,7 +7,8 @@ import { drizzle } from 'drizzle-orm/d1'
 import { qualityScores, chapters, characters, foreshadowing } from '../../db/schema'
 import { eq, and, sql, isNull } from 'drizzle-orm'
 import type { Env } from '../../lib/types'
-import { resolveConfig, generate } from '../llm'
+import { resolveConfig, generateWithMetrics } from '../llm'
+import type { LLMCallResult } from '../llm'
 
 export interface QualityScoreResult {
   totalScore: number
@@ -17,6 +18,7 @@ export interface QualityScoreResult {
   pacingScore: number
   fluencyScore: number
   details: Record<string, any>
+  metrics?: LLMCallResult
 }
 
 function genId(): string {
@@ -93,10 +95,12 @@ ${foreshadowList.map(f => `- ${f.title} [${f.status}]`).join('\n') || '无'}
     params: { ...(analysisConfig.params || {}), temperature: 0.3, max_tokens: 800 },
   }
 
-  const { text } = await generate(overrideConfig, [
+  const metrics = await generateWithMetrics(overrideConfig, [
     { role: 'system', content: '你是专业的小说质量评审。请严格按JSON格式输出，分数范围0-100，评价客观公正。' },
     { role: 'user', content: prompt },
   ])
+
+  const { text } = metrics
 
   let result: QualityScoreResult
   try {
@@ -109,9 +113,10 @@ ${foreshadowList.map(f => `- ${f.title} [${f.status}]`).join('\n') || '无'}
       pacingScore: Math.min(100, Math.max(0, Number(parsed.pacing_score ?? 60))),
       fluencyScore: Math.min(100, Math.max(0, Number(parsed.fluency_score ?? 60))),
       details: parsed.details || {},
+      metrics,
     }
   } catch {
-    result = createDefaultResult()
+    result = { ...createDefaultResult(), metrics }
   }
 
   const now = Math.floor(Date.now() / 1000)
@@ -157,5 +162,6 @@ function createDefaultResult(): QualityScoreResult {
     pacingScore: 60,
     fluencyScore: 60,
     details: {},
+    metrics: undefined,
   }
 }
