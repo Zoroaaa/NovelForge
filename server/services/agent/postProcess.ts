@@ -41,7 +41,7 @@ export interface PostProcessPayload {
   usage: { prompt_tokens: number; completion_tokens: number }
 }
 
-interface StepChainPayload {
+export interface StepChainPayload {
   chapterId: string
   novelId: string
   taskId?: string
@@ -144,21 +144,6 @@ export async function runStep7(env: Env, payload: StepChainPayload): Promise<voi
   })
 }
 
-export async function runStep8(env: Env, payload: StepChainPayload & {
-  characterGrowths: EntityExtractResult['characterGrowths']
-  knowledgeReveals: EntityExtractResult['knowledgeReveals']
-}): Promise<void> {
-  const { chapterId, novelId, characterGrowths, knowledgeReveals, taskId, volumeId } = payload
-  const syntheticResult: EntityExtractResult = {
-    entities: [],
-    stateChanges: [],
-    characterGrowths,
-    knowledgeReveals,
-  }
-  await step8CharacterGrowth(env, chapterId, novelId, syntheticResult)
-  await chainNext(env, 'post_process_step_9', { chapterId, novelId, taskId, volumeId })
-}
-
 export async function runStep9(env: Env, payload: StepChainPayload): Promise<void> {
   const { chapterId, novelId, taskId, volumeId } = payload
   await step9EntityConflictDetect(env, chapterId, novelId)
@@ -182,7 +167,7 @@ async function chainNext(
 /**
  * 后处理管线最终完成后的收尾工作：入队 quality_check 和 extract_plot_graph
  */
-async function finishPostProcess(
+export async function finishPostProcess(
   env: Env,
   chapterId: string,
   novelId: string,
@@ -483,7 +468,7 @@ async function step6VolumeProgress(env: Env, chapterId: string, novelId: string)
   }
 }
 
-async function step7EntityExtract(env: Env, chapterId: string, novelId: string): Promise<EntityExtractResult> {
+export async function step7EntityExtract(env: Env, chapterId: string, novelId: string): Promise<EntityExtractResult> {
   try {
     const extractResult = await extractEntitiesFromChapter(env, chapterId, novelId)
     const { entityCount, stateChangeCount } = await persistExtractedEntities(env, chapterId, novelId, extractResult)
@@ -528,7 +513,7 @@ async function step7EntityExtract(env: Env, chapterId: string, novelId: string):
   }
 }
 
-async function step8CharacterGrowth(
+export async function step8CharacterGrowth(
   env: Env,
   chapterId: string,
   novelId: string,
@@ -547,7 +532,7 @@ async function step8CharacterGrowth(
   }
 }
 
-async function step9EntityConflictDetect(env: Env, chapterId: string, novelId: string): Promise<void> {
+export async function step9EntityConflictDetect(env: Env, chapterId: string, novelId: string): Promise<void> {
   try {
     const { candidateCount, conflictCount, metrics } = await detectEntityConflicts(env, chapterId, novelId)
     console.log(`⚔️ [PostProcess] 实体碰撞检测完成: ${candidateCount} 个候选, ${conflictCount} 个确认矛盾`)

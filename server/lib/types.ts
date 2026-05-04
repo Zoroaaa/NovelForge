@@ -12,6 +12,7 @@ export type Env = {
   VECTORIZE?: VectorizeIndex
   TASK_QUEUE: Queue
   ASSETS: Fetcher
+  POST_PROCESS_DO: DurableObjectNamespace<PostProcessDo>
   VOLCENGINE_API_KEY: string
   ANTHROPIC_API_KEY: string
   OPENAI_API_KEY: string
@@ -20,6 +21,8 @@ export type Env = {
   CLOUDFLARE_API_TOKEN?: string
   CLOUDFLARE_ACCOUNT_ID?: string
 }
+
+export interface PostProcessDo extends DurableObject {}
 
 export type UserPayload = {
   userId: string

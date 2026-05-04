@@ -2,7 +2,7 @@ import type { Env } from './lib/types'
 import type { QueueMessage } from './lib/queue'
 import { indexContent, deindexContent, deleteVector } from './services/embedding'
 import { rebuildEntityIndex } from './services/entity-index'
-import { dispatchPostProcess, runPostProcess, runStep1, runStep1b, runStep2, runStep3, runStep4, runStep5, runStep6, runStep7, runStep8, runStep9 } from './services/agent/postProcess'
+import { dispatchPostProcess, runPostProcess, runStep1, runStep1b, runStep2, runStep3, runStep4, runStep5, runStep6, runStep7 } from './services/agent/postProcess'
 import { extractForeshadowingFromChapter } from './services/foreshadowing'
 import { logGeneration } from './services/agent/logging'
 import { commitWorkshopSessionCore } from './services/workshop'
@@ -295,27 +295,21 @@ async function handleMessage(env: Env, msg: QueueMessage): Promise<void> {
 
     case 'post_process_step_7': {
       try {
-        await runStep7(env, msg.payload)
+        const doId = env.POST_PROCESS_DO.idFromName(`pp-${msg.payload.chapterId}`)
+        const stub = env.POST_PROCESS_DO.get(doId)
+        const res = await stub.fetch('https://internal/post-process', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(msg.payload),
+        })
+        if (!res.ok) {
+          const err = await res.text()
+          throw new Error(`DO execution failed: ${err}`)
+        }
+        const result = await res.json() as { ok: boolean; wallTimeMs: number }
+        console.log(`[PostProcess Step7-9 DO] 完成，耗时 ${result.wallTimeMs}ms`)
       } catch (e) {
-        console.error(`[PostProcess Step7] 异常: ${(e as Error).message}`)
-      }
-      break
-    }
-
-    case 'post_process_step_8': {
-      try {
-        await runStep8(env, msg.payload)
-      } catch (e) {
-        console.error(`[PostProcess Step8] 异常: ${(e as Error).message}`)
-      }
-      break
-    }
-
-    case 'post_process_step_9': {
-      try {
-        await runStep9(env, msg.payload)
-      } catch (e) {
-        console.error(`[PostProcess Step9] 异常: ${(e as Error).message}`)
+        console.error(`[PostProcess Step7-9 DO] 异常: ${(e as Error).message}`)
       }
       break
     }

@@ -92,7 +92,8 @@ const PROVIDER_BASES: Record<string, string> = {
 }
 
 /**
- * 解析模型配置/**
+ * 解析模型配置
+/**
  * @description 清理错误消息中的敏感信息
  * @param {string} errorText - 原始错误消息
  * @returns {string} 清理后的安全错误消息

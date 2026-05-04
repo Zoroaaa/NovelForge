@@ -45,6 +45,14 @@ max_batch_timeout = 10
 max_retries = 3
 max_concurrency = 1
 
+[[durable_objects.bindings]]
+name = "POST_PROCESS_DO"
+class_name = "PostProcessDo"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["PostProcessDo"]
+
 # # ========== 第一步：删除现有索引 ==========
 # npx wrangler vectorize delete novelforge-index
 
