@@ -4,14 +4,14 @@
  * @version 3.0.0
  * @modified 2026-04-27 - 组件拆分重构
  */
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { MainLayout } from '@/components/layout/MainLayout'
 import { WorkshopSidebar } from '@/components/workshop/WorkshopSidebar'
-import { ImportDataDialog, type FormattedImportData } from '@/components/workshop/ImportDataDialog'
+import { ImportDataDialog } from '@/components/workshop/ImportDataDialog'
 import { WelcomeView } from '@/components/workshop/WelcomeView'
 import { ChatMessageList } from '@/components/workshop/ChatMessageList'
 import { ChatInput } from '@/components/workshop/ChatInput'
@@ -22,7 +22,6 @@ import type { WorkshopMessage, ExtractedData, SessionListItem } from '@/componen
 import { STAGES } from '@/components/workshop/types'
 
 export default function WorkshopPage() {
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -39,8 +38,6 @@ export default function WorkshopPage() {
   const [showSidebar, setShowSidebar] = useState(() => window.innerWidth >= 1024)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
-
-  const inputRef = useRef<HTMLInputElement>(null)
 
   const { data: sessions = [] } = useQuery({
     queryKey: ['workshop-sessions'],

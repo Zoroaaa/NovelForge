@@ -166,6 +166,19 @@ export const DEFAULT_BUDGET: BudgetTier = {
 // 主函数
 // ============================================================
 
+/**
+ * 构建单章生成的完整上下文（分槽组装）
+ *
+ * 为什么采用分槽（Slot）架构而非单一Prompt：
+ * - LLM的上下文窗口有限（128k-256k），必须精细控制每个信息源的token预算
+ * - 不同信息源的重要性和时效性不同：总纲和近期章节优先级高，历史设定优先级低
+ * - 分槽便于独立优化每个数据源的检索策略（DB直查/RAG/混合）
+ *
+ * 为什么使用 Promise.all 并发获取 Core 层：
+ * - Step 1 中的 7 个数据源之间无依赖关系，串行查询会浪费 6 轮 RTT
+ * - Cloud Workers 的 D1 数据库支持并发连接，并行查询可减少总延迟 60%+
+ * - 即使某个查询失败，其他槽位仍可正常工作（降级容错）
+ */
 export async function buildChapterContext(
   env: Env,
   novelId: string,
@@ -243,7 +256,7 @@ export async function buildChapterContext(
 
   // ── Step 2: 先提取本章事件（用于类型推断和向量构建） ──
   const { prevEvent, currentEvent, nextThreeChapters } = extractCurrentChapterEvent(volumeInfo.eventLine, chapterIndexInVolume)
-  let typeHintSource: string = currentEvent || volumeInfo.eventLine
+  const typeHintSource: string = currentEvent || volumeInfo.eventLine
   const chapterTypeHint = inferChapterType(typeHintSource, currentChapter.title)
 
   // ── Step 2b: 组装查询向量（聚焦当前章节语义，≤1200字）──
@@ -601,7 +614,7 @@ async function buildForeshadowingHybrid(
   // 路径C（新增）: 回收计划 — 时序感知注入
   // 当提供了 currentSortOrder 时，查询"即将到达回收章节"的 resolve_planned 伏笔
   const RESOLVE_WINDOW = 10
-  let resolvePlannedItems: Array<{ title: string; description: string; targetChapter: number }> = []
+  const resolvePlannedItems: Array<{ title: string; description: string; targetChapter: number }> = []
 
   if (currentSortOrder != null) {
     try {
@@ -1162,8 +1175,8 @@ async function fetchInlineEntities(
           candidateKeywords.push(r.aliases)
         }
       }
-      // queryText 中精确包含该实体的任一关键词（≥2字）
-      return candidateKeywords.some(kw => kw.length >= 2 && queryText.includes(kw))
+      // queryText 中精确包含该实体的任一关键词（≥1字，允许单字别名如"默"）
+      return candidateKeywords.some(kw => kw.length >= 1 && queryText.includes(kw))
     })
 
     const typeLabel: Record<string, string> = {

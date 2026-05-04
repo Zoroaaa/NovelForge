@@ -1,3 +1,8 @@
+/**
+ * @file QualityScoreCard.tsx
+ * @description 质量总分卡片 - 展示当前章节的综合质量评分和维度得分
+ * @date 2026-05-04
+ */
 import { Card, CardContent } from '@/components/ui/card'
 import type { QualitySummary } from './types'
 import { Link2, Users, Target, Award } from 'lucide-react'

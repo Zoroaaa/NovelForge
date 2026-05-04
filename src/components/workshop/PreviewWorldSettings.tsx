@@ -1,3 +1,8 @@
+/**
+ * @file PreviewWorldSettings.tsx
+ * @description 预览面板 - 世界设定列表预览（名称/类型/内容）
+ * @date 2026-05-04
+ */
 import React from 'react'
 import { Globe, Sword, ShieldAlert, MapPin, Zap, Lightbulb } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'

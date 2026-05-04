@@ -1,3 +1,8 @@
+/**
+ * @file CostBreakdownTable.tsx
+ * @description 成本明细表 - 按章节/模型/操作类型展示Token消耗和费用明细
+ * @date 2026-05-04
+ */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'

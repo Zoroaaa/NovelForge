@@ -1,3 +1,8 @@
+/**
+ * @file power-level.ts
+ * @description 境界/成长体系路由模块，提供境界突破检测和角色成长数据查询API
+ * @date 2026-05-04
+ */
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'

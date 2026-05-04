@@ -1,3 +1,8 @@
+/**
+ * @file ChatMessageList.tsx
+ * @description 对话消息列表 - 展示AI对话历史，支持Markdown渲染和代码高亮
+ * @date 2026-05-04
+ */
 import { useRef, useEffect } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Loader2 } from 'lucide-react'
@@ -10,10 +15,11 @@ interface ChatMessageListProps {
 
 export function ChatMessageList({ messages, isGenerating }: ChatMessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesLength = messages.length
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messagesLength, isGenerating])
 
   return (
     <ScrollArea className="flex-1 p-6">

@@ -1,3 +1,8 @@
+/**
+ * @file serviceWorker.ts
+ * @description Service Worker注册与更新管理工具函数
+ * @date 2026-05-04
+ */
 const SW_REGISTERED = 'novelforge-sw-registered';
 const SW_UPDATE = 'novelforge-sw-update';
 

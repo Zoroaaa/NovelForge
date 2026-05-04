@@ -1,3 +1,8 @@
+/**
+ * @file pwa-install-prompt.tsx
+ * @description PWA安装提示组件 - 检测到可安装时显示引导用户安装应用的横幅
+ * @date 2026-05-04
+ */
 import { useState, useEffect } from 'react';
 import { usePWA } from '@/hooks/usePWA';
 import { Button } from '@/components/ui/button';
@@ -17,14 +22,18 @@ export function PWAInstallPrompt() {
 
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
   const [showOfflineBanner, setShowOfflineBanner] = useState(!isOnline);
-  const [showUpdateBanner, setShowUpdateBanner] = useState(hasUpdate);
+  const [showUpdateBanner, setShowUpdateBanner] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowOfflineBanner(!isOnline);
   }, [isOnline]);
 
   useEffect(() => {
-    setShowUpdateBanner(hasUpdate);
+    if (hasUpdate) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setShowUpdateBanner(true);
+    }
   }, [hasUpdate]);
 
   useEffect(() => {
@@ -41,10 +50,6 @@ export function PWAInstallPrompt() {
     if (result === 'accepted') {
       setShowInstallPrompt(false);
     }
-  };
-
-  const handleUpdate = async () => {
-    await checkUpdate();
   };
 
   return (

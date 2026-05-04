@@ -107,54 +107,6 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete, onRepairCom
     enabled: !!novelId,
   })
 
-  const handleCheck = async () => {
-    if (!chapterId) return
-    setChecking(true)
-    setInternalResult(null)
-    setRepairOutput('')
-    setRepairError(null)
-    setRepairStatus('idle')
-
-    try {
-      const data = await api.generate.combinedCheck({ chapterId, novelId })
-      const typedResult: CombinedCheckResult = {
-        ...data,
-        characterCheck: {
-          ...data.characterCheck,
-          score: data.characterCheck.score,
-          conflicts: data.characterCheck.conflicts || [],
-          warnings: data.characterCheck.warnings || [],
-        },
-        coherenceCheck: {
-          ...data.coherenceCheck,
-          issues: (data.coherenceCheck.issues || []).map((i: any) => ({
-            ...i,
-            severity: i.severity as 'error' | 'warning'
-          }))
-        },
-        volumeProgressCheck: data.volumeProgressCheck,
-      }
-      setInternalResult(typedResult)
-      onCheckComplete?.(typedResult)
-    } catch (error) {
-      console.error('综合检查失败:', error)
-      setInternalResult({
-        score: 0,
-        characterCheck: { score: 0, conflicts: [], warnings: [`检查失败: ${(error as Error).message}`] },
-        coherenceCheck: { score: 0, issues: [] },
-        volumeProgressCheck: {
-          volumeId: '', currentChapter: 0, targetChapter: null, currentWordCount: 0,
-          targetWordCount: null, chapterProgress: 0, wordProgress: 0,
-          perChapterEstimate: null, wordCountIssues: [], rhythmIssues: [],
-          wordCountScore: 0, rhythmScore: 0, diagnosis: '检查失败', suggestion: '', score: 0,
-        },
-        hasIssues: true,
-      })
-    } finally {
-      setChecking(false)
-    }
-  }
-
   const handleRepair = async (type: 'coherence' | 'character' | 'volume') => {
     if (!chapterId || !result) return
     setRepairType(type)
@@ -163,7 +115,7 @@ export function CombinedCheck({ novelId, chapterId, onCheckComplete, onRepairCom
     setRepairError(null)
 
     try {
-      let body: Parameters<typeof api.generate.repairChapter>[0] = {
+      const body: Parameters<typeof api.generate.repairChapter>[0] = {
         chapterId, novelId, repairType: type,
       }
 

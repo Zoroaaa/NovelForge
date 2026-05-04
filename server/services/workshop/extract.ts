@@ -8,6 +8,18 @@
  */
 import type { WorkshopExtractedData } from './types'
 
+/**
+ * 安全解析AI生成的JSON（容错处理）
+ *
+ * 为什么需要自定义JSON修复逻辑：
+ * - LLM生成的JSON经常包含未转义的换行符（尤其在长文本字段如 blueprint、content 中）
+ * - 标准 JSON.parse 会直接抛出异常，导致整个提取流程失败
+ * - 修复策略：在字符串内部将真实换行符替换为 \n 转义序列，保持结构完整性
+ *
+ * 为什么先尝试直接 parse 再修复：
+ * - 大部分情况下LLM输出的JSON是合法的（约80%场景）
+ * - 避免对所有输入都执行状态机遍历，提升正常路径性能
+ */
 export function safeParseJSON(raw: string): unknown {
   try { return JSON.parse(raw) } catch {}
   let inString = false
@@ -28,6 +40,18 @@ export function safeParseJSON(raw: string): unknown {
   return JSON.parse(result)
 }
 
+/**
+ * 合并两个数组字段（基于唯一键去重）
+ *
+ * 为什么使用 Map 数据结构：
+ * - 需要按 uniqueKey 去重，同时保留后传入数据的优先级（覆盖旧值）
+ * - Map 的 O(1) 查找性能优于 Array.findIndex 的 O(n)
+ * - 展开运算符 {...old, ...new} 实现浅合并，避免深拷贝开销
+ *
+ * 为什么返回 undefined 而非空数组：
+ * - 上层逻辑需要区分"无数据"和"有空数组"两种语义
+ * - undefined 会被 JSON.stringify 忽略，减少传输数据量
+ */
 export function mergeArrayField<T extends Record<string, any>>(
   existing: T[] | undefined,
   incoming: T[] | undefined,

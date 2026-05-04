@@ -135,18 +135,18 @@ export default function ReaderPage() {
 
   const readerClasses = `reader-${theme} min-h-screen transition-colors duration-200 ${readerSettings.isFullscreen ? 'fixed inset-0 z-50 overflow-y-auto' : ''}`
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && readerSettings.isFullscreen) {
-        setReaderSettings(prev => ({ ...prev, isFullscreen: false }))
-      }
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape' && readerSettings.isFullscreen) {
+      setReaderSettings(prev => ({ ...prev, isFullscreen: false }))
     }
+  }, [readerSettings.isFullscreen])
 
+  useEffect(() => {
     if (readerSettings.isFullscreen) {
       document.addEventListener('keydown', handleKeyDown)
       return () => document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [readerSettings.isFullscreen])
+  }, [readerSettings.isFullscreen, handleKeyDown])
 
   return (
     <div className={readerClasses} style={{

@@ -1,3 +1,8 @@
+/**
+ * @file PreviewChapters.tsx
+ * @description 预览面板 - 章节列表预览（标题/摘要/排序）
+ * @date 2026-05-04
+ */
 import { FileText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import type { Chapter } from './types'

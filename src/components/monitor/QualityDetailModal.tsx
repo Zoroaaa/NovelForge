@@ -1,3 +1,8 @@
+/**
+ * @file QualityDetailModal.tsx
+ * @description 质量详情弹窗 - 展示单个章节的多维度质量评分详情（连贯性/一致性/内容完整性）
+ * @date 2026-05-04
+ */
 import { X, AlertTriangle, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'

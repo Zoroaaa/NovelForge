@@ -760,6 +760,7 @@ export const api = {
         id: string; entityName: string; entityType: string; conflictType: string
         description: string; severity: string; resolution: string | null
         detectedChapterOrder: number; createdAt: number
+        currentChapterExcerpt?: string; historicalRecord?: string; historicalChapterOrder?: number
       }>>(`/api/cross-chapter/entity-conflicts?${qs}`)
     },
     resolveConflict: (id: string, resolution: string) =>

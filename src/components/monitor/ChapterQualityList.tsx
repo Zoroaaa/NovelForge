@@ -1,3 +1,8 @@
+/**
+ * @file ChapterQualityList.tsx
+ * @description 章节质量列表 - 按质量评分排序展示所有章节，支持快速定位问题章节
+ * @date 2026-05-04
+ */
 import { ChevronRight, AlertTriangle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import type { QualityChapterData } from './types'

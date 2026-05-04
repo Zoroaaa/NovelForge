@@ -5,7 +5,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { api, getToken } from '@/lib/api'
+import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -186,7 +186,7 @@ const MODULE_FIELD_HINTS: Record<ImportTargetModule, string> = {
 }`,
 }
 
-export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: ImportDataDialogProps) {
+export function ImportDataDialog({ open, onOpenChange }: ImportDataDialogProps) {
   const [activeTab, setActiveTab] = useState<'paste' | 'file'>('paste')
   const [pastedContent, setPastedContent] = useState('')
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
@@ -195,6 +195,16 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
   const [selectedNovelId, setSelectedNovelId] = useState<string>('')
   const [importMode, setImportMode] = useState<'create' | 'update' | 'upsert'>('upsert')
   const [selectedUpdateIds, setSelectedUpdateIds] = useState<Record<number, string>>({})
+
+  const handleClose = useCallback(() => {
+    setPastedContent('')
+    setSelectedFiles([])
+    setFormattedPreview([])
+    setSelectedUpdateIds({})
+    setActiveTab('paste')
+    setSelectedNovelId('')
+    onOpenChange(false)
+  }, [onOpenChange])
 
   const { data: novels = [] } = useQuery({
     queryKey: ['novels-for-import'],
@@ -207,6 +217,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
 
   useEffect(() => {
     if (novels.length > 0 && !selectedNovelId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedNovelId(novels[0].id)
     }
   }, [novels, selectedNovelId])
@@ -376,7 +387,7 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
       })
     } else {
       Promise.all(
-        flatData.map((item, idx) => {
+        flatData.map((item) => {
           const data = importMode === 'update' && selectedUpdateIds[item.idx]
             ? { ...item.data, id: selectedUpdateIds[item.idx] }
             : item.data
@@ -395,16 +406,6 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
       })
     }
   }, [formattedPreview, selectedNovelId, importMode, importMutation, selectedUpdateIds])
-
-  const handleClose = () => {
-    setPastedContent('')
-    setSelectedFiles([])
-    setFormattedPreview([])
-    setSelectedUpdateIds({})
-    setActiveTab('paste')
-    setSelectedNovelId('')
-    onOpenChange(false)
-  }
 
   const getParseStatusIcon = (status: string) => {
     switch (status) {
@@ -673,11 +674,14 @@ export function ImportDataDialog({ open, onOpenChange, onImportSuccess }: Import
                               <SelectValue placeholder="选择要更新的记录" />
                             </SelectTrigger>
                             <SelectContent>
-                              {existingItems.map((item: any) => (
-                                <SelectItem key={item.id} value={item.id}>
-                                  {item.name || item.title || `ID: ${item.id.slice(0, 8)}`}
-                                </SelectItem>
-                              ))}
+                              {existingItems.map((item) => {
+                                const typedItem = item as { id: string; name?: string; title?: string }
+                                return (
+                                  <SelectItem key={typedItem.id} value={typedItem.id}>
+                                    {typedItem.name || typedItem.title || `ID: ${typedItem.id.slice(0, 8)}`}
+                                  </SelectItem>
+                                )
+                              })}
                             </SelectContent>
                           </Select>
                         )}

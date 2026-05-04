@@ -1,3 +1,8 @@
+/**
+ * @file PreviewWritingRules.tsx
+ * @description 预览面板 - 创作规则列表预览（标题/类别/优先级/内容）
+ * @date 2026-05-04
+ */
 import React from 'react'
 import { ShieldAlert, BookOpen, Zap, Users, Target, Globe, Lightbulb } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'

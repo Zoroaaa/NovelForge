@@ -1,3 +1,8 @@
+/**
+ * @file WorkshopHeaderActions.tsx
+ * @description 创作工坊顶部操作栏 - 提交/导出/删除/设置等快捷操作按钮组
+ * @date 2026-05-04
+ */
 import { PanelLeftClose, PanelLeft, CheckCircle2, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {

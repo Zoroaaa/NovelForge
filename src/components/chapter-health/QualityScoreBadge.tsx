@@ -1,3 +1,8 @@
+/**
+ * @file QualityScoreBadge.tsx
+ * @description 质量评分徽章 - 用颜色编码展示章节质量等级（优秀/良好/一般/差）
+ * @date 2026-05-04
+ */
 import { useState, useEffect } from 'react'
 import { api } from '../../lib/api'
 import type { QualityScore } from '../../lib/types'
@@ -13,7 +18,7 @@ export function QualityScoreBadge({ chapterId, novelId }: QualityScoreBadgeProps
 
   useEffect(() => {
     api.quality.getChapterScore(chapterId).then(s => { setScore(s); setLoading(false) }).catch(() => setLoading(false))
-  }, [chapterId])
+  }, [chapterId, novelId])
 
   if (loading) return <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] rounded bg-gray-100 dark:bg-gray-800 text-gray-400">--</span>
   if (!score?.totalScore) return null

@@ -1,3 +1,8 @@
+/**
+ * @file PreviewCharacters.tsx
+ * @description 预览面板 - 角色列表预览（姓名/定位/描述/属性）
+ * @date 2026-05-04
+ */
 import React from 'react'
 import { Users, Heart, MessageCircle, Eye, BookOpen, Target, ShieldAlert, Link2, Sword } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'

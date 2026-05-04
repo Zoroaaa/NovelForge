@@ -1,3 +1,8 @@
+/**
+ * @file QualityDashboard.tsx
+ * @description 质量监控仪表盘 - 整合质量图表/列表/详情的统一入口面板
+ * @date 2026-05-04
+ */
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'

@@ -47,30 +47,6 @@ export function ChapterCoherenceCheck({ novelId, chapterId, onCheckComplete, onR
   const [repairStatus, setRepairStatus] = useState<'idle' | 'repairing' | 'done' | 'error'>('idle')
   const [repairError, setRepairError] = useState<string | null>(null)
 
-  const handleCheck = async () => {
-    if (!chapterId) return
-    setChecking(true)
-    setResult(null)
-    setRepairOutput('')
-    setRepairError(null)
-    setRepairStatus('idle')
-
-    try {
-      const data = await api.generate.checkCoherence({ chapterId, novelId })
-      const checkResult: CoherenceCheckResult = {
-        score: data.score ?? 100,
-        issues: data.issues ?? [],
-      }
-      setResult(checkResult)
-      onCheckComplete?.(checkResult)
-    } catch (error) {
-      console.error('连贯性检查失败:', error)
-      setResult({ score: 0, issues: [{ severity: 'error', message: `检查失败: ${(error as Error).message}` }] })
-    } finally {
-      setChecking(false)
-    }
-  }
-
   const handleRepair = async () => {
     if (!chapterId || !result || result.issues.length === 0) return
     setRepairStatus('repairing')

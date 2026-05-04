@@ -1,3 +1,8 @@
+/**
+ * @file batch.ts
+ * @description 批量生成路由模块，提供批量章节任务的创建、暂停、恢复、取消和状态查询API
+ * @date 2026-05-04
+ */
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'

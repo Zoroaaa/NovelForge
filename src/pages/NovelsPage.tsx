@@ -143,7 +143,7 @@ export default function NovelsPage() {
 
   const handleStatusChange = (id: string, newStatus: string) => {
     api
-      .novels.update(id, { status: newStatus as any })
+      .novels.update(id, { status: newStatus as 'draft' | 'writing' | 'completed' | 'archived' })
       .then(() => {
         queryClient.invalidateQueries({ queryKey: ['novels'] })
         const statusLabels: Record<string, string> = {

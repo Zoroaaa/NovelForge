@@ -1,3 +1,8 @@
+/**
+ * @file CommitDialog.tsx
+ * @description 创作工坊 - 提交确认对话框（异步提交进度展示）
+ * @date 2026-05-04
+ */
 import {
   Dialog,
   DialogContent,

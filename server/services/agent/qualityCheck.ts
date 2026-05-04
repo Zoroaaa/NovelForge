@@ -1,3 +1,8 @@
+/**
+ * @file qualityCheck.ts
+ * @description Agent章节质量评分服务 - 多维度评估章节质量（内容完整性/连贯性/一致性）
+ * @date 2026-05-04
+ */
 import { drizzle } from 'drizzle-orm/d1'
 import { qualityScores, chapters, characters, foreshadowing } from '../../db/schema'
 import { eq, and, sql, isNull } from 'drizzle-orm'

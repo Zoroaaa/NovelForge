@@ -1,3 +1,8 @@
+/**
+ * @file EditNovelDialog.tsx
+ * @description 编辑小说对话框 - 修改小说标题、描述、封面等基本信息
+ * @date 2026-05-04
+ */
 import { useState } from 'react'
 import {
   Dialog,

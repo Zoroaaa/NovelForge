@@ -1,3 +1,8 @@
+/**
+ * @file volumeCompletion.ts
+ * @description Agent卷完成检测服务 - 检测卷是否达到目标字数/章节数并自动标记完成状态
+ * @date 2026-05-04
+ */
 import { drizzle } from 'drizzle-orm/d1'
 import { volumes, chapters } from '../../db/schema'
 import { eq, and, sql, isNull } from 'drizzle-orm'

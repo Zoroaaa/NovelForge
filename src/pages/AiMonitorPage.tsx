@@ -64,6 +64,38 @@ interface SearchResult {
   preview: string
 }
 
+interface ContextResult {
+  summary?: {
+    totalLayers?: number
+    coreLayerCount?: number
+    dynamicLayerCount?: number
+    ragResultCount?: number
+  }
+  buildTimeMs?: number
+  contextBundle?: {
+    dynamic?: {
+      inlineEntities?: string[]
+      characterRelationships?: string[]
+    }
+    debug?: {
+      slotBreakdown?: Record<string, unknown>
+    }
+  }
+  finalPrompt?: string
+  [key: string]: unknown
+}
+
+interface NovelItem {
+  id: string
+  title: string
+}
+
+interface ChapterItem {
+  id: string
+  title: string
+  order?: number
+}
+
 export default function AiMonitorPage() {
   const queryClient = useQueryClient()
   const [selectedNovelId, setSelectedNovelId] = useState<string>('')
@@ -73,7 +105,7 @@ export default function AiMonitorPage() {
   const [isReindexing, setIsReindexing] = useState(false)
   const [isIndexingMissing, setIsIndexingMissing] = useState(false)
   const [contextChapterId, setContextChapterId] = useState<string>('')
-  const [contextResult, setContextResult] = useState<any>(null)
+  const [contextResult, setContextResult] = useState<ContextResult | null>(null)
   const [isLoadingContext, setIsLoadingContext] = useState(false)
 
   const { data: novelsData } = useQuery({
@@ -157,11 +189,12 @@ export default function AiMonitorPage() {
 
         setTimeout(pollStats, POLL_INTERVAL)
       }
-    } catch (e: any) {
-      const isQueueUnavailable = e?.code === 'QUEUE_UNAVAILABLE'
+    } catch (e: unknown) {
+      const error = e as { code?: string; message?: string }
+      const isQueueUnavailable = error?.code === 'QUEUE_UNAVAILABLE'
       const errorMessage = isQueueUnavailable
         ? '任务队列不可用，请确认 Cloudflare Queue 绑定已配置'
-        : `索引重建任务提交失败：${e.message || '未知错误'}`
+        : `索引重建任务提交失败：${error?.message || '未知错误'}`
       toast.error(errorMessage, { duration: 8000 })
       console.error('Reindex failed:', e)
     } finally {
@@ -189,8 +222,9 @@ export default function AiMonitorPage() {
         toast.success(result.message, { duration: 5000 })
         setTimeout(() => refetchVectorStats(), 2000)
       }
-    } catch (e: any) {
-      toast.error(`增量索引失败：${e.message || '未知错误'}`, { duration: 8000 })
+    } catch (e: unknown) {
+      const error = e as { message?: string }
+      toast.error(`增量索引失败：${error?.message || '未知错误'}`, { duration: 8000 })
     } finally {
       setTimeout(() => setIsIndexingMissing(false), 5000)
     }
@@ -216,7 +250,7 @@ export default function AiMonitorPage() {
               <SelectValue placeholder="请选择小说" />
             </SelectTrigger>
             <SelectContent>
-              {novels?.map((novel: any) => (
+              {novels?.map((novel: NovelItem) => (
                 <SelectItem key={novel.id} value={novel.id}>
                   {novel.title}
                 </SelectItem>
@@ -432,7 +466,7 @@ export default function AiMonitorPage() {
                 <CardContent>
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label>当前小说：{novels?.find((n: any) => n.id === selectedNovelId)?.title || selectedNovelId}</Label>
+                      <Label>当前小说：{novels?.find((n: NovelItem) => n.id === selectedNovelId)?.title || selectedNovelId}</Label>
                       <div className="text-xs text-muted-foreground mb-3">选择章节查看生成时会注入的上下文信息</div>
 
                       <Label>选择章节</Label>
@@ -441,7 +475,7 @@ export default function AiMonitorPage() {
                           <SelectValue placeholder="请选择章节" />
                         </SelectTrigger>
                         <SelectContent>
-                          {chapters?.map((chapter: any) => (
+                          {chapters?.map((chapter: ChapterItem) => (
                             <SelectItem key={chapter.id} value={chapter.id}>
                               {chapter.title || '未命名章节'}
                             </SelectItem>
@@ -518,30 +552,30 @@ export default function AiMonitorPage() {
                           </div>
                         </div>
 
-                        {contextResult.contextBundle?.dynamic?.inlineEntities?.length > 0 && (
+                        {contextResult.contextBundle?.dynamic?.inlineEntities && contextResult.contextBundle.dynamic.inlineEntities.length > 0 && (
                           <div className="bg-cyan-50 dark:bg-cyan-950 border border-cyan-200 dark:border-cyan-800 rounded-lg p-4">
                             <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
                               <Database className="w-4 h-4" />
                               跨章一致性 · 关键词匹配实体（Slot-10）
-                              <Badge variant="outline" className="text-[10px]">×{contextResult.contextBundle.dynamic.inlineEntities.length}</Badge>
+                              <Badge variant="outline" className="text-[10px]">×{contextResult.contextBundle!.dynamic!.inlineEntities.length}</Badge>
                             </h4>
                             <div className="space-y-1 max-h-32 overflow-y-auto">
-                              {contextResult.contextBundle.dynamic.inlineEntities.map((e: string, i: number) => (
+                              {contextResult.contextBundle!.dynamic!.inlineEntities.map((e: string, i: number) => (
                                 <p key={i} className="text-xs text-cyan-700 dark:text-cyan-300 truncate">{e.slice(0, 120)}</p>
                               ))}
                             </div>
                           </div>
                         )}
 
-                        {contextResult.contextBundle?.dynamic?.characterRelationships?.length > 0 && (
+                        {contextResult.contextBundle?.dynamic?.characterRelationships && contextResult.contextBundle.dynamic.characterRelationships.length > 0 && (
                           <div className="bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 rounded-lg p-4">
                             <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
                               <Network className="w-4 h-4" />
                               跨章一致性 · 角色关系网络（Slot-11）
-                              <Badge variant="outline" className="text-[10px]">×{contextResult.contextBundle.dynamic.characterRelationships.length}</Badge>
+                              <Badge variant="outline" className="text-[10px]">×{contextResult.contextBundle!.dynamic!.characterRelationships.length}</Badge>
                             </h4>
                             <div className="space-y-1 max-h-24 overflow-y-auto">
-                              {contextResult.contextBundle.dynamic.characterRelationships.map((r: string, i: number) => (
+                              {contextResult.contextBundle!.dynamic!.characterRelationships.map((r: string, i: number) => (
                                 <p key={i} className="text-xs text-emerald-700 dark:text-emerald-300 truncate">{r.slice(0, 100)}</p>
                               ))}
                             </div>

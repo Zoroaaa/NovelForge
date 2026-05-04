@@ -1,3 +1,8 @@
+/**
+ * @file PreviewBasicInfo.tsx
+ * @description 预览面板 - 小说基本信息（标题/类型/简介/目标字数）
+ * @date 2026-05-04
+ */
 import { Sparkles, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import type { ExtractedData } from './types'

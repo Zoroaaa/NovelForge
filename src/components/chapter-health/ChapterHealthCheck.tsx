@@ -26,24 +26,6 @@ interface ChapterHealthCheckProps {
   chapterId: string | null
 }
 
-function formatTimeAgo(timestamp: number): string {
-  const now = Date.now()
-  let ts = timestamp
-  if (ts < 10000000000) {
-    ts = ts * 1000
-  }
-  const diff = now - ts
-  const seconds = Math.floor(diff / 1000)
-  const minutes = Math.floor(seconds / 60)
-  const hours = Math.floor(minutes / 60)
-  const days = Math.floor(hours / 24)
-
-  if (days > 0) return `${days}天前`
-  if (hours > 0) return `${hours}小时前`
-  if (minutes > 0) return `${minutes}分钟前`
-  return '刚刚'
-}
-
 export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckProps) {
   const queryClient = useQueryClient()
   const [latestCheckLog, setLatestCheckLog] = useState<CheckLog | null>(null)
@@ -389,7 +371,7 @@ export function ChapterHealthCheck({ novelId, chapterId }: ChapterHealthCheckPro
     setApplyRepairSuccess(false)
 
     try {
-      let body: Parameters<typeof api.generate.repairChapter>[0] = { chapterId, novelId, repairType: type }
+      const body: Parameters<typeof api.generate.repairChapter>[0] = { chapterId, novelId, repairType: type }
 
       if (type === 'coherence') {
         body.coherenceIssues = report.issues?.map((i: any) => ({

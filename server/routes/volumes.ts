@@ -111,7 +111,53 @@ router.delete('/:id', async (c) => {
   const volume = await db.select({ novelId: t.novelId }).from(t).where(eq(t.id, id)).get()
   if (!volume) return c.json({ error: 'Volume not found' }, 404)
 
-  await c.env.DB.prepare(`DELETE FROM chapters WHERE volume_id = ?`).bind(id).run()
+  const chapterRows = await c.env.DB.prepare(
+    `SELECT id FROM chapters WHERE volume_id = ?`
+  ).bind(id).all()
+  const chapterIds = (chapterRows.results as { id: string }[] | undefined)?.map(r => r.id) ?? []
+
+  if (chapterIds.length > 0) {
+    const placeholders = chapterIds.map(() => '?').join(',')
+    await c.env.DB.prepare(
+      `DELETE FROM foreshadowing WHERE chapter_id IN (${placeholders}) OR resolved_chapter_id IN (${placeholders})`
+    ).bind(...[...chapterIds, ...chapterIds]).run()
+    await c.env.DB.prepare(
+      `DELETE FROM generation_logs WHERE chapter_id IN (${placeholders})`
+    ).bind(...chapterIds).run()
+    await c.env.DB.prepare(
+      `DELETE FROM check_logs WHERE chapter_id IN (${placeholders})`
+    ).bind(...chapterIds).run()
+    await c.env.DB.prepare(
+      `DELETE FROM quality_scores WHERE chapter_id IN (${placeholders})`
+    ).bind(...chapterIds).run()
+    await c.env.DB.prepare(
+      `DELETE FROM foreshadowing_progress WHERE chapter_id IN (${placeholders})`
+    ).bind(...chapterIds).run()
+    await c.env.DB.prepare(
+      `DELETE FROM vector_index WHERE source_type = 'chapter' AND source_id IN (${placeholders})`
+    ).bind(...chapterIds).run()
+    await c.env.DB.prepare(
+      `DELETE FROM entity_index WHERE entity_type = 'chapter' AND entity_id IN (${placeholders})`
+    ).bind(...chapterIds).run()
+    await c.env.DB.prepare(
+      `DELETE FROM plot_nodes WHERE chapter_id IN (${placeholders})`
+    ).bind(...chapterIds).run()
+    await c.env.DB.prepare(
+      `DELETE FROM chapter_structured_data WHERE chapter_id IN (${placeholders})`
+    ).bind(...chapterIds).run()
+    await c.env.DB.prepare(
+      `DELETE FROM entity_state_log WHERE chapter_id IN (${placeholders})`
+    ).bind(...chapterIds).run()
+    await c.env.DB.prepare(
+      `DELETE FROM character_growth_log WHERE chapter_id IN (${placeholders})`
+    ).bind(...chapterIds).run()
+    await c.env.DB.prepare(
+      `DELETE FROM entity_conflict_log WHERE detected_chapter_id IN (${placeholders})`
+    ).bind(...chapterIds).run()
+
+    await c.env.DB.prepare(`DELETE FROM chapters WHERE volume_id = ?`).bind(id).run()
+  }
+
   await c.env.DB.prepare(`DELETE FROM foreshadowing WHERE volume_id = ?`).bind(id).run()
   await c.env.DB.prepare(`DELETE FROM batch_generation_tasks WHERE volume_id = ?`).bind(id).run()
   await c.env.DB.prepare(`DELETE FROM entity_index WHERE entity_type = 'volume' AND entity_id = ?`).bind(id).run()

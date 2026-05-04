@@ -1,3 +1,8 @@
+/**
+ * @file CostAnalysis.tsx
+ * @description 成本分析面板 - 整合成本趋势/明细/汇总的完整分析界面
+ * @date 2026-05-04
+ */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'

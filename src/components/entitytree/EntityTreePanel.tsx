@@ -1,3 +1,8 @@
+/**
+ * @file EntityTreePanel.tsx
+ * @description 实体树面板 - 以树形结构展示小说中的角色/道具/地点/势力等实体关系
+ * @date 2026-05-04
+ */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { toast } from 'sonner'

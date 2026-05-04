@@ -70,6 +70,8 @@ router.delete('/inline-entities/:id', async (c) => {
   const id = c.req.param('id')
   const db = drizzle(c.env.DB)
 
+  await c.env.DB.prepare(`DELETE FROM entity_state_log WHERE source_type = 'inline_entity' AND source_id = ?`).bind(id).run()
+
   await db.update(novelInlineEntities)
     .set({ deletedAt: Math.floor(Date.now() / 1000) })
     .where(eq(novelInlineEntities.id, id))

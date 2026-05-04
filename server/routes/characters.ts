@@ -136,6 +136,10 @@ router.delete('/:id', async (c) => {
   await deindexContent(c.env, 'character', id)
 
   await c.env.DB.prepare(`DELETE FROM entity_index WHERE entity_type = 'character' AND entity_id = ?`).bind(id).run()
+  await c.env.DB.prepare(`DELETE FROM character_growth_log WHERE character_id = ?`).bind(id).run()
+  await c.env.DB.prepare(`DELETE FROM character_relationships WHERE character_id_a = ? OR character_id_b = ?`).bind(id, id).run()
+  await c.env.DB.prepare(`DELETE FROM entity_state_log WHERE source_type = 'character' AND source_id = ?`).bind(id).run()
+  await c.env.DB.prepare(`DELETE FROM entity_conflict_log WHERE source_type = 'character' AND source_id = ?`).bind(id).run()
 
   await db.update(t)
     .set({ deletedAt: Math.floor(Date.now() / 1000) })

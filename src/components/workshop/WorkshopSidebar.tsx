@@ -72,7 +72,7 @@ export function WorkshopSidebar({
       renameRef.current?.focus();
       renameRef.current?.select();
     }
-  }, [renamingId]);
+  }, [renamingId, renameRef]);
 
   return (
     <>

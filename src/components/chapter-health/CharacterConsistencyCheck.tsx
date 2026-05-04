@@ -46,29 +46,6 @@ export function CharacterConsistencyCheck({ novelId, chapterId, onRepairComplete
     enabled: !!novelId,
   })
 
-  const handleCheck = async () => {
-    if (!chapterId) return
-    setChecking(true)
-    setResult(null)
-    setRepairOutput('')
-    setRepairError(null)
-    setRepairStatus('idle')
-
-    try {
-      const data = await api.generate.checkCharacterConsistency({
-        chapterId,
-        novelId,
-        characterIds: characters?.map(c => c.id) || [],
-      })
-      setResult(data)
-    } catch (error) {
-      console.error('角色一致性检查失败:', error)
-      setResult({ score: 0, conflicts: [], warnings: [`检查失败: ${(error as Error).message}`] })
-    } finally {
-      setChecking(false)
-    }
-  }
-
   const handleRepair = async () => {
     if (!chapterId || !result || result.conflicts.length === 0) return
     setRepairStatus('repairing')

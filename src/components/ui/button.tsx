@@ -1,3 +1,10 @@
+/**
+ * @file button.tsx
+ * @description UI基础组件 - 按钮组件（基于Radix UI + CVA变体系统）
+ *   提供多种视觉变体(default/destructive/outline/secondary/ghost/link)和尺寸(sm/default/lg/icon)
+ *   支持asChild属性将样式透传给子组件
+ * @date 2026-05-04
+ */
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"

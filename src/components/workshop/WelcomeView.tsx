@@ -1,3 +1,8 @@
+/**
+ * @file WelcomeView.tsx
+ * @description 创作工坊欢迎页 - 引导用户开始新的创作会话（选择模板/输入初始需求）
+ * @date 2026-05-04
+ */
 import { MessageSquare, Plus, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { STAGES, type Stage } from './types'

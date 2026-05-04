@@ -55,11 +55,13 @@ export default function WorkspacePage() {
 
   useEffect(() => {
     if (activeChapter?.content) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditorContent(activeChapter.content)
     } else {
+       
       setEditorContent('')
     }
-  }, [activeChapter?.id, activeChapter?.content])
+  }, [activeChapter?.id])
 
   if (novelLoading || chaptersLoading) {
     return (

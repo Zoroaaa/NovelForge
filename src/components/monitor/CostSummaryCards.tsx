@@ -1,3 +1,8 @@
+/**
+ * @file CostSummaryCards.tsx
+ * @description 成本汇总卡片 - 展示总花费、日均成本、调用量等关键指标
+ * @date 2026-05-04
+ */
 import { Card, CardContent } from '@/components/ui/card'
 import type { CostSummary, PeriodType } from './types'
 import { DollarSign, Coins, FileText, TrendingUp, AlertTriangle } from 'lucide-react'

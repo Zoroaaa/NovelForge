@@ -188,6 +188,10 @@ router.delete('/:id', async (c) => {
   await c.env.DB.prepare(`DELETE FROM vector_index WHERE source_type = 'chapter' AND source_id = ?`).bind(id).run()
   await c.env.DB.prepare(`DELETE FROM entity_index WHERE entity_type = 'chapter' AND entity_id = ?`).bind(id).run()
   await c.env.DB.prepare(`DELETE FROM plot_nodes WHERE chapter_id = ?`).bind(id).run()
+  await c.env.DB.prepare(`DELETE FROM chapter_structured_data WHERE chapter_id = ?`).bind(id).run()
+  await c.env.DB.prepare(`DELETE FROM entity_state_log WHERE chapter_id = ?`).bind(id).run()
+  await c.env.DB.prepare(`DELETE FROM entity_conflict_log WHERE detected_chapter_id = ?`).bind(id).run()
+  await c.env.DB.prepare(`DELETE FROM character_growth_log WHERE chapter_id = ?`).bind(id).run()
 
   await db.update(t).set({ deletedAt: Math.floor(Date.now() / 1000) }).where(eq(t.id, id))
 

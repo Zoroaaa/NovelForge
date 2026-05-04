@@ -1,3 +1,9 @@
+/**
+ * @file ChatInput.tsx
+ * @description Workshop创作工作台 - AI对话输入框
+ *   支持Enter发送、Shift+Enter换行、自动调整高度、生成状态禁用
+ * @date 2026-05-04
+ */
 import { useRef, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Send, Loader2 } from 'lucide-react'

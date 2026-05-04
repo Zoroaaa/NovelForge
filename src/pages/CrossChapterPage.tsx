@@ -272,8 +272,16 @@ export default function CrossChapterPage() {
                         )}
                       </div>
                       <p className="text-sm">{conflict.description}</p>
+                      <div className="text-sm bg-muted/50 rounded p-2 mt-1 space-y-1">
+                        {conflict.currentChapterExcerpt && (
+                          <p><span className="font-medium">第{conflict.detectedChapterOrder}章原文：</span><span className="text-muted-foreground">{conflict.currentChapterExcerpt}</span></p>
+                        )}
+                        {conflict.historicalRecord && (
+                          <p><span className="font-medium">第{conflict.historicalChapterOrder ?? '?'}章记录：</span><span className="text-muted-foreground">{conflict.historicalRecord}</span></p>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground">
-                        检测于第{conflict.detectedChapterOrder}章 · 类型：{conflict.conflictType}
+                        第{conflict.detectedChapterOrder}章 ↔ 第{conflict.historicalChapterOrder ?? '?'}章 · 类型：{conflict.conflictType}
                       </p>
                     </div>
                   ))}

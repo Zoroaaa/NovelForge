@@ -1,3 +1,8 @@
+/**
+ * @file PreviewVolumes.tsx
+ * @description 预览面板 - 卷结构预览（卷名/章节数/目标字数/蓝图概要）
+ * @date 2026-05-04
+ */
 import React from 'react'
 import { Layers, BookOpen, MapPin, Lightbulb, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'

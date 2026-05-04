@@ -1,3 +1,8 @@
+/**
+ * @file usePWA.ts
+ * @description PWA功能管理Hook，整合Service Worker注册、更新提示和安装提示功能
+ * @date 2026-05-04
+ */
 import { useState, useEffect, useCallback } from 'react';
 import {
   registerServiceWorker,

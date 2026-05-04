@@ -1,3 +1,10 @@
+/**
+ * @file PreviewPanel.tsx
+ * @description Workshop创作工作台 - 实时数据预览面板
+ *   展示AI提取的结构化小说数据（基本信息/写作规则/世界设定/角色/卷纲/章节）
+ *   支持重新提取功能以修复不完整的数据
+ * @date 2026-05-04
+ */
 import { useState } from 'react'
 import { BookOpen, FileText, AlertTriangle, RefreshCw } from 'lucide-react'
 import { api } from '../../lib/api'

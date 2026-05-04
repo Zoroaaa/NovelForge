@@ -1,3 +1,8 @@
+/**
+ * @file QualityChart.tsx
+ * @description 质量评分趋势图 - 用折线图展示各章节质量分数变化趋势
+ * @date 2026-05-04
+ */
 import type { QualityChapterData } from './types'
 
 interface QualityChartProps {

@@ -4,7 +4,6 @@ import {
   Globe,
   Users,
   Layers,
-  FileText,
 } from 'lucide-react'
 
 export interface WorkshopMessage {

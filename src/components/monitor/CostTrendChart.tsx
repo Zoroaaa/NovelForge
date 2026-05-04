@@ -1,3 +1,8 @@
+/**
+ * @file CostTrendChart.tsx
+ * @description 成本趋势图 - 用面积图展示每日/每周/每月的API调用成本变化
+ * @date 2026-05-04
+ */
 import type { CostSummary, PeriodType } from './types'
 
 interface CostTrendChartProps {

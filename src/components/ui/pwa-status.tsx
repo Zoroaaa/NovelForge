@@ -1,3 +1,8 @@
+/**
+ * @file pwa-status.tsx
+ * @description PWA状态指示器 - 显示应用运行模式（浏览器/PWA）和网络状态
+ * @date 2026-05-04
+ */
 import { usePWA } from '@/hooks/usePWA';
 import { Button } from '@/components/ui/button';
 import { Wifi, WifiOff, RefreshCw, Smartphone } from 'lucide-react';

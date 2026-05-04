@@ -1,3 +1,8 @@
+/**
+ * @file pwaInstall.ts
+ * @description PWA安装提示Hook，检测应用是否可安装并管理安装状态
+ * @date 2026-05-04
+ */
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;

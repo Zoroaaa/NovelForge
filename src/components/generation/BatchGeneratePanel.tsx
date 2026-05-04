@@ -1,3 +1,8 @@
+/**
+ * @file BatchGeneratePanel.tsx
+ * @description 批量生成面板 - 提供批量章节创建、进度监控、暂停/恢复/取消功能
+ * @date 2026-05-04
+ */
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '../../lib/api'
 import type { BatchTaskStatus } from '../../lib/types'
@@ -24,6 +29,7 @@ export function BatchGeneratePanel({
   const [task, setTask] = useState<BatchTaskStatus | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const taskStatus = task?.status
 
   const fetchActive = useCallback(async () => {
     try {
@@ -36,15 +42,15 @@ export function BatchGeneratePanel({
 
   useEffect(() => {
     fetchActive()
-    const interval = setInterval(fetchActive, task?.status === 'running' ? 3000 : 10000)
+    const interval = setInterval(fetchActive, taskStatus === 'running' ? 3000 : 10000)
     return () => clearInterval(interval)
-  }, [fetchActive, task?.status])
+  }, [fetchActive, taskStatus])
 
   useEffect(() => {
-    if (task?.status === 'done' || task?.status === 'failed' || task?.status === 'cancelled') {
+    if (taskStatus === 'done' || taskStatus === 'failed' || taskStatus === 'cancelled') {
       onGenerated?.()
     }
-  }, [task?.status, onGenerated])
+  }, [taskStatus, onGenerated])
 
   const handleStart = async () => {
     setLoading(true)

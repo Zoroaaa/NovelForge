@@ -555,6 +555,9 @@ router.delete('/:id/trash', async (c) => {
             `DELETE FROM foreshadowing WHERE volume_id IN (${placeholders})`
           ).bind(...volumeIdList).run()
           await c.env.DB.prepare(
+            `DELETE FROM batch_generation_tasks WHERE volume_id IN (${placeholders})`
+          ).bind(...volumeIdList).run()
+          await c.env.DB.prepare(
             `DELETE FROM entity_index WHERE entity_type = 'volume' AND entity_id IN (${placeholders})`
           ).bind(...volumeIdList).run()
         }

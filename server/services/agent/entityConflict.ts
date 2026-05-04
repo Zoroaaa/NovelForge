@@ -11,7 +11,6 @@ import {
   novelInlineEntities,
   entityStateLog,
   entityConflictLog,
-  characterGrowthLog,
 } from '../../db/schema'
 import type { Env } from '../../lib/types'
 import type { EntityExtractResult } from './entityExtract'
@@ -36,9 +35,7 @@ interface LLMJudgedConflict {
   severity: string
 }
 
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
+const TERMINAL_STATE_TYPES = ['死亡', '消失', '失效', '取走', '消耗', '覆灭', '损毁'] as const
 
 function findTextExcerpt(content: string, keyword: string, radius: number = 200): string {
   const index = content.indexOf(keyword)
@@ -63,6 +60,7 @@ async function exactMatchDetection(
       name: novelInlineEntities.name,
       entityType: novelInlineEntities.entityType,
       description: novelInlineEntities.description,
+      firstChapterOrder: novelInlineEntities.firstChapterOrder,
     })
     .from(novelInlineEntities)
     .where(and(
@@ -72,6 +70,9 @@ async function exactMatchDetection(
 
   for (const entity of entities) {
     if (!chapterContent.includes(entity.name)) continue
+
+    // 跳过本章首次出场的实体（无历史可比对，同章内"出场+死亡"是正常流程）
+    if (entity.firstChapterOrder === chapterOrder) continue
 
     const stateHistory = await db
       .select({
@@ -91,18 +92,23 @@ async function exactMatchDetection(
     if (stateHistory.length === 0) continue
 
     const latestState = stateHistory[0]
-    const keywordInContent = chapterContent.includes(latestState.currState)
 
-    if (!keywordInContent) {
+    // 只对"终止性状态"做确定性筛查：已死亡/已取走/已消耗/已失效/已覆灭的实体，
+    // 如果在后续章节中仍以"正常使用/存在"的方式出现，则是明确矛盾候选。
+    // 不再用 currState 字符串在正文里做精确匹配（误报率极高）。
+    const isTerminal = TERMINAL_STATE_TYPES.some(t => latestState.stateType?.includes(t))
+
+    if (isTerminal) {
+      // 终止性实体在后续章节出现 → 有矛盾嫌疑，交给LLM判断
       candidates.push({
         entityName: entity.name,
         entityType: entity.entityType,
         sourceType: 'inline_entity',
         sourceId: entity.id,
         currentExcerpt: findTextExcerpt(chapterContent, entity.name),
-        historicalRecord: `最近状态记录：${latestState.stateType}=${latestState.currState}（第${latestState.chapterOrder}章）`,
+        historicalRecord: `第${latestState.chapterOrder}章已记录：${latestState.stateType} — ${latestState.currState}`,
         historicalChapterOrder: latestState.chapterOrder,
-        conflictType: 'state_mismatch',
+        conflictType: 'terminal_state_reuse',
       })
     }
   }
@@ -146,6 +152,10 @@ async function llmJudgeConflicts(
 1. 上下文合理的变化不算矛盾（如角色升级、关系变化、物品进化等在正文中已解释）
 2. 上下文不合理的矛盾才算（如已摧毁的法宝再次完好出现、已死亡的角色无故复活等）
 3. 信息不全的情况标为 info 级别
+4. 群体性角色（喽啰、路人、小兵、守卫等）的"同名不同人"不算矛盾：
+   如果历史记录的实体是泛称型角色（如"某喽啰"），后续章节出现同类描述词
+   应视为同群体的不同成员，不构成复活矛盾。
+   只有具有专有名或独特标识（刀疤/独臂/特殊法宝）的角色，才做个体级死亡冲突检测
 
 输出JSON格式：
 {
@@ -168,7 +178,7 @@ async function llmJudgeConflicts(
     ],
   )
 
-  const jsonMatch = metrics.text.match(/\{[\s\S]*\}/)
+  const jsonMatch = metrics.text.match(/\{[\s\S]*?\}(?=\s*$)/)
   if (!jsonMatch) {
     LOG_STYLES.WARN('[step9] LLM判断返回无有效JSON，保守处理')
     return candidates.map(c => ({
