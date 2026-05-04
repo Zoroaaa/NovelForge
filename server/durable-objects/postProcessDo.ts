@@ -8,7 +8,13 @@ import {
 import type { EntityExtractResult } from '../services/agent/entityExtract'
 
 export class PostProcessDo {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  private env: Env
+
+  constructor(state: DurableObjectState, env: Env) {
+    this.env = env
+  }
+
+  async fetch(request: Request): Promise<Response> {
     if (request.method !== 'POST') {
       return new Response('Method not allowed', { status: 405 })
     }
@@ -34,7 +40,7 @@ export class PostProcessDo {
     let extractResult: EntityExtractResult
 
     try {
-      extractResult = await step7EntityExtract(env, chapterId, novelId)
+      extractResult = await step7EntityExtract(this.env, chapterId, novelId)
       console.log(`[DO PostProcess] ✅ step_7 完成 (${Date.now() - start}ms)`)
     } catch (e) {
       console.error(`[DO PostProcess] ❌ step_7 失败: ${(e as Error).message}`)
@@ -42,21 +48,21 @@ export class PostProcessDo {
     }
 
     try {
-      await step8CharacterGrowth(env, chapterId, novelId, extractResult)
+      await step8CharacterGrowth(this.env, chapterId, novelId, extractResult)
       console.log(`[DO PostProcess] ✅ step_8 完成 (${Date.now() - start}ms)`)
     } catch (e) {
       console.error(`[DO PostProcess] ❌ step_8 失败: ${(e as Error).message}`)
     }
 
     try {
-      await step9EntityConflictDetect(env, chapterId, novelId)
+      await step9EntityConflictDetect(this.env, chapterId, novelId)
       console.log(`[DO PostProcess] ✅ step_9 完成 (${Date.now() - start}ms)`)
     } catch (e) {
       console.error(`[DO PostProcess] ❌ step_9 失败: ${(e as Error).message}`)
     }
 
     try {
-      await finishPostProcess(env, chapterId, novelId, taskId, volumeId)
+      await finishPostProcess(this.env, chapterId, novelId, taskId, volumeId)
       console.log(`[DO PostProcess] ✅ finishPostProcess 完成 (${Date.now() - start}ms)`)
     } catch (e) {
       console.error(`[DO PostProcess] ❌ finishPostProcess 失败: ${(e as Error).message}`)
