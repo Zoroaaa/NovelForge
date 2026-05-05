@@ -294,18 +294,12 @@ export default function GraphPage() {
         },
       },
       layout: {
-        type: 'force',
-        preventOverlap: true,
-        nodeSize: 80,
-        linkDistance: 220,
-        nodeStrength: -1200,
-        edgeStrength: 0.3,
-        coulombDisScale: 0.015,
-        damping: 0.6,
-        maxSpeed: 150,
-        alpha: 1,
-        alphaDecay: 0.03,
-        alphaMin: 0.001,
+        type: 'fruchterman',
+        gravity: 1,
+        speed: 5,
+        clustering: false,
+        maxIteration: 1000,
+        workerEnabled: false,
       },
       behaviors: ['drag-canvas', 'zoom-canvas', 'drag-element', 'click-select'],
       plugins: [
@@ -341,6 +335,11 @@ export default function GraphPage() {
 
     graph.setData(g6Data)
     graph.render()
+
+    graph.on('afterrender', () => {
+      if (!graphRef.current) return
+      graphRef.current.fitView({ padding: [60, 60, 60, 60] })
+    })
 
     graphRef.current = graph
 
