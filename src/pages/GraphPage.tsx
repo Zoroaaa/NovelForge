@@ -296,13 +296,16 @@ export default function GraphPage() {
       layout: {
         type: 'force',
         preventOverlap: true,
-        nodeSize: 48,
-        linkDistance: 140,
-        nodeStrength: -300,
-        edgeStrength: 0.1,
-        coulombDisScale: 0.005,
-        damping: 0.9,
-        maxSpeed: 1000,
+        nodeSize: 80,
+        linkDistance: 220,
+        nodeStrength: -1200,
+        edgeStrength: 0.3,
+        coulombDisScale: 0.015,
+        damping: 0.6,
+        maxSpeed: 150,
+        alpha: 1,
+        alphaDecay: 0.03,
+        alphaMin: 0.001,
       },
       behaviors: ['drag-canvas', 'zoom-canvas', 'drag-element', 'click-select'],
       plugins: [
@@ -341,21 +344,35 @@ export default function GraphPage() {
 
     graphRef.current = graph
 
+    let resizeTimer: ReturnType<typeof setTimeout>
     const resizeObserver = new ResizeObserver(() => {
-      if (graphRef.current && container) {
-        graphRef.current.resize(container.offsetWidth, container.offsetHeight)
-      }
+      clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(() => {
+        if (graphRef.current && container) {
+          graphRef.current.resize(container.offsetWidth, container.offsetHeight)
+        }
+      }, 150)
     })
     resizeObserver.observe(container)
 
     return () => {
       resizeObserver.disconnect()
+      clearTimeout(resizeTimer)
       if (graphRef.current) {
         graphRef.current.destroy()
         graphRef.current = null
       }
     }
-  }, [graphData, filterTypes, buildG6Data])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graphData])
+
+  // Effect 2: filterTypes 变化时只更新数据，不重建 graph（避免重新触发物理仿真）
+  useEffect(() => {
+    if (!graphRef.current || !graphData?.graph) return
+    const g6Data = buildG6Data(graphData.graph)
+    graphRef.current.setData(g6Data)
+    graphRef.current.render()
+  }, [filterTypes, graphData, buildG6Data])
 
   const handleZoomIn = () => {
     if (graphRef.current) {
